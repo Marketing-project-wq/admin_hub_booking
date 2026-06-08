@@ -21,7 +21,7 @@ const units = [
     title: 'Clinic',
     icon: '🏥',
     desc: 'Physiotherapy & sports medicine',
-    disabled: true,
+    disabled: false,
   },
 ]
 

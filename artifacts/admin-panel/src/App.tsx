@@ -19,7 +19,9 @@ import ArenaAddons from './pages/arena/master/ArenaAddons'
 import ArenaBlockedSlots from './pages/arena/master/ArenaBlockedSlots'
 import ArenaUserManagement from './pages/arena/ArenaUserManagement'
 import GymDashboard from './pages/gym/GymDashboard'
-import ClinicComingSoon from './pages/clinic/ClinicComingSoon'
+import ClinicDashboard from './pages/clinic/ClinicDashboard'
+import ClinicBookings from './pages/clinic/ClinicBookings'
+import ClinicSlots from './pages/clinic/ClinicSlots'
 
 export default function App() {
   return (
@@ -28,7 +30,18 @@ export default function App() {
         <Routes>
           <Route path="/" element={<LandingPage />} />
           <Route path="/login/:unit" element={<LoginPage />} />
-          <Route path="/clinic" element={<ClinicComingSoon />} />
+          <Route
+            path="/clinic"
+            element={
+              <ProtectedRoute unit="clinic">
+                <Layout currentUnit="clinic" />
+              </ProtectedRoute>
+            }
+          >
+            <Route index element={<ClinicDashboard />} />
+            <Route path="bookings" element={<ClinicBookings />} />
+            <Route path="slots" element={<ClinicSlots />} />
+          </Route>
 
           <Route
             path="/arena"

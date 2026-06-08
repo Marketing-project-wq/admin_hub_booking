@@ -3,7 +3,7 @@ import { NavLink, Link, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 
 interface SidebarProps {
-  currentUnit: 'arena' | 'gym'
+  currentUnit: 'arena' | 'gym' | 'clinic'
   open?: boolean
   onClose?: () => void
 }
@@ -35,6 +35,11 @@ const UNIT_MENUS: Record<string, MenuItem[]> = {
   gym: [
     { label: 'Dashboard', path: '/gym', icon: '◻' },
   ],
+  clinic: [
+    { label: 'Dashboard', path: '/clinic',          icon: '◻' },
+    { label: 'Bookings',  path: '/clinic/bookings',  icon: '◻' },
+    { label: 'Slots',     path: '/clinic/slots',     icon: '◻' },
+  ],
 }
 
 export default function Sidebar({ currentUnit, open, onClose }: SidebarProps) {
@@ -50,7 +55,7 @@ export default function Sidebar({ currentUnit, open, onClose }: SidebarProps) {
   }
 
   const isActive = (path: string) => {
-    if (path === '/arena' || path === '/gym') {
+    if (path === '/arena' || path === '/gym' || path === '/clinic') {
       return location.pathname === path
     }
     return location.pathname.startsWith(path)
@@ -75,7 +80,7 @@ export default function Sidebar({ currentUnit, open, onClose }: SidebarProps) {
             <NavLink
               key={m.path!}
               to={m.path!}
-              end={m.path === '/arena' || m.path === '/gym'}
+              end={m.path === '/arena' || m.path === '/gym' || m.path === '/clinic'}
               className={() => `menu-item${isActive(m.path!) ? ' active' : ''}`}
               onClick={() => onClose?.()}
             >
@@ -102,6 +107,13 @@ export default function Sidebar({ currentUnit, open, onClose }: SidebarProps) {
               onClick={() => onClose?.()}
             >
               Gym
+            </Link>
+            <Link
+              to="/clinic"
+              className={`switcher-item${currentUnit === 'clinic' ? ' active' : ''}`}
+              onClick={() => onClose?.()}
+            >
+              Clinic
             </Link>
           </div>
         )}

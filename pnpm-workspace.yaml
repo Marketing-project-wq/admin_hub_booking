@@ -26,3 +26,6 @@ catalog:
   zod: ^3.25.76
 
 autoInstallPeers: false
+
+allowBuilds:
+  esbuild: true

@@ -2,7 +2,7 @@ import React, { useState, FormEvent } from 'react'
 import { useNavigate, useParams, Link, Navigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 
-const UNIT_LABELS: Record<string, string> = { arena: 'Arena', gym: 'Gym' }
+const UNIT_LABELS: Record<string, string> = { arena: 'Arena', gym: 'Gym', clinic: 'Clinic' }
 
 export default function LoginPage() {
   const { unit } = useParams<{ unit: string }>()
