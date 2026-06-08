@@ -1,0 +1,249 @@
+# REPLIT — Group Booking Fix
+## 2 prompt terpisah: Customer App + Admin Panel
+
+---
+
+# PROMPT A — Customer Booking App
+
+**File:** `src/pages/BookingPage.tsx` (atau file utama booking)
+
+**Tujuan:** Fix harga per-pax untuk multi-ticket class booking + tambah `group_id` untuk link semua tiket dalam 1 transaksi.
+
+## PERUBAHAN DI `handleSubmit`
+
+Cari bagian class booking multi-ticket (di dalam `if (arenaType === "class" && cart.length > 0)`).
+
+### Sebelum loop `for (const item of cart)`, tambahkan:
+
+```typescript
+// Generate group_id untuk semua tiket dalam 1 transaksi
+// Hanya dibuat kalau total tiket > 1
+const groupId = totalItems > 1 ? crypto.randomUUID() : null
+
+// Hitung harga per pax
+// currentBase = total harga semua tiket (misal 600.000 untuk 2 tiket)
+// pricePerPax = 300.000 per tiket
+const pricePerPax = Math.round(currentBase / totalItems)
+const priceBeforeDiscPerPax = Math.round((currentBase + currentAddonTotal) / totalItems)
+const discountPerPax = Math.round(currentVoucherDiscount / totalItems)
+```
+
+### Di dalam loop, update `createClassBooking` call:
+
+```typescript
+// SEBELUM (salah — semua tiket dapat harga total):
+const { data, error } = await createClassBooking({
+  schedule_id: item.schedule_id,
+  booker_type: "guest", customer_type: "individual",
+  full_name: p.full_name, email: p.email, phone: p.phone,
+  notes: finalNotes,
+  price: currentTotal,                          // ← SALAH: total semua tiket
+  price_before_disc: currentBase + currentAddonTotal,
+  discount: currentVoucherDiscount,
+  status: "pending_payment",
+})
+
+// SESUDAH (benar — harga per pax + group_id):
+const { data, error } = await createClassBooking({
+  schedule_id: item.schedule_id,
+  booker_type: "guest", customer_type: "individual",
+  full_name: p.full_name, email: p.email, phone: p.phone,
+  notes: finalNotes,
+  price: pricePerPax,                           // ← per pax
+  price_before_disc: priceBeforeDiscPerPax,     // ← per pax
+  discount: discountPerPax,                     // ← per pax
+  group_id: groupId,                            // ← link semua tiket
+  status: "pending_payment",
+})
+```
+
+### Untuk Mayar payment amount — TETAP pakai total:
+
+```typescript
+// Amount yang dikirim ke Mayar = total keseluruhan (bukan per pax)
+// Ini sudah benar, jangan diubah:
+const mayarResult = await createMayarPayment({
+  booking_code: bookingCode,  // booking code tiket pertama
+  name: firstContact.full_name,
+  email: firstContact.email ?? "",
+  phone: firstContact.phone ?? "",
+  amount: currentTotal,       // ← total semua tiket, benar
+  description: description.substring(0, 100),
+})
+```
+
+## UPDATE `createClassBooking` di `lib/supabase.ts`
+
+Cari fungsi `createClassBooking` — tambah `group_id` ke parameter dan INSERT:
+
+```typescript
+// Tambah group_id ke interface/parameter
+export async function createClassBooking(params: {
+  schedule_id: string
+  booker_type: string
+  customer_type: string
+  full_name: string
+  email: string
+  phone: string
+  notes?: string | null
+  price: number
+  price_before_disc: number
+  discount: number
+  group_id?: string | null    // ← TAMBAH INI
+  status: string
+}) {
+  return supabase
+    .from('arena_class_bookings')
+    .insert({
+      ...params,
+      group_id: params.group_id ?? null,  // ← TAMBAH INI
+    })
+    .select('id, booking_code')
+    .single()
+}
+```
+
+---
+
+# PROMPT B — Admin Panel
+
+**File:** `src/pages/arena/ArenaClassBookings.jsx`
+
+**Tujuan:** Tampilkan informasi group booking di tabel — badge "GROUP" + link antar tiket.
+
+## 1. Update fetch query — tambah `group_id`
+
+```javascript
+let query = supabase
+  .from('arena_class_bookings')
+  .select(`
+    id, booking_code, schedule_id, booker_type, customer_type,
+    full_name, email, phone, notes, price, discount, price_before_disc,
+    status, payment_method, payment_ref, paid_at, created_at, updated_at,
+    group_id,    // ← TAMBAH INI
+    schedule:arena_class_schedules(
+      schedule_date, start_time, end_time, instructor,
+      class_type:arena_class_types(name, color)
+    )
+  `, { count: 'exact' })
+```
+
+## 2. Tambah kolom "Group" di tabel — setelah kolom Booking Code
+
+```jsx
+<thead>
+  <tr>
+    <th>Booking Code</th>
+    <th>Grp</th>   {/* ← TAMBAH header */}
+    <th>Kelas</th>
+    <th>Jadwal</th>
+    <th>Nama</th>
+    <th>Telp</th>
+    <th>Amount</th>
+    <th>Status</th>
+    <th>Payment</th>
+    <th>Tgl Konfirmasi</th>
+    <th>Aksi</th>
+  </tr>
+</thead>
+```
+
+## 3. Cell group_id di row
+
+```jsx
+<td style={{ textAlign: 'center' }}>
+  {row.group_id ? (
+    <span
+      title={`Group ID: ${row.group_id}`}
+      style={{
+        display: 'inline-block',
+        width: 8, height: 8,
+        borderRadius: '50%',
+        background: '#7C3AED',
+        cursor: 'help',
+      }}
+    />
+  ) : null}
+</td>
+```
+
+Dot ungu kecil → hover tampil Group ID. Semua tiket dengan dot yang sama = 1 pembayaran.
+
+## 4. Detail Modal — tampilkan info group
+
+Di `BookingDetailModal` atau detail view, tambahkan section jika `group_id` ada:
+
+```jsx
+{booking.group_id && (
+  <div className="modal-section">
+    <div className="detail-row">
+      <span className="detail-label">Group Booking</span>
+      <span className="detail-value" style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'monospace' }}>
+        {booking.group_id}
+      </span>
+    </div>
+    <GroupMembersInline groupId={booking.group_id} currentId={booking.id} />
+  </div>
+)}
+```
+
+### Komponen `GroupMembersInline`
+
+```jsx
+function GroupMembersInline({ groupId, currentId }) {
+  const [members, setMembers] = useState([])
+
+  useEffect(() => {
+    supabase
+      .from('arena_class_bookings')
+      .select('id, booking_code, full_name, price, status')
+      .eq('group_id', groupId)
+      .neq('id', currentId)
+      .then(({ data }) => setMembers(data || []))
+  }, [groupId])
+
+  if (members.length === 0) return null
+
+  return (
+    <div style={{ marginTop: 8 }}>
+      <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
+        Tiket lain dalam grup ini:
+      </div>
+      {members.map(m => (
+        <div key={m.id} style={{
+          display: 'flex', justifyContent: 'space-between',
+          padding: '6px 0', borderTop: '1px solid var(--border)',
+          fontSize: 13,
+        }}>
+          <span style={{ fontFamily: 'monospace', fontSize: 11 }}>{m.booking_code}</span>
+          <span>{m.full_name}</span>
+          <span style={{ color: 'var(--text-muted)' }}>{fmtRp(m.price)}</span>
+          <span className={`badge badge-${m.status === 'confirmed' ? 'confirmed' : m.status === 'cancelled' ? 'cancelled' : 'pending'}`}>
+            {m.status}
+          </span>
+        </div>
+      ))}
+    </div>
+  )
+}
+```
+
+---
+
+## TESTING CHECKLIST
+
+### Customer App
+1. ✅ Beli 1 tiket → `group_id = null`, `price = 300.000`
+2. ✅ Beli 2 tiket → kedua booking punya `group_id` yang sama
+3. ✅ Beli 2 tiket → masing-masing `price = 300.000` (bukan 600.000)
+4. ✅ Beli 3 tiket → masing-masing `price = 200.000` (kalau harga sama)
+5. ✅ Amount ke Mayar tetap total (600.000 untuk 2 tiket)
+6. ✅ Voucher 50% → discount dibagi rata per tiket
+
+### Admin Panel
+7. ✅ Tiket dengan group → dot ungu muncul di kolom Grp
+8. ✅ Tiket tanpa group → kolom Grp kosong
+9. ✅ Hover dot → tooltip tampil Group ID
+10. ✅ Buka Detail tiket dengan group → muncul section "Tiket lain dalam grup ini"
+11. ✅ Section group tampil nama + booking code + harga tiket lain dalam grup
+12. ✅ Tidak ada console error

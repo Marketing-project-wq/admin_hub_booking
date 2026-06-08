@@ -1,0 +1,381 @@
+# REPLIT AGENT — Arena Dashboard: Enhanced Revenue KPIs + Growth Chart
+
+> **File:** `src/pages/arena/ArenaDashboard.jsx`
+> **Tujuan:** Update dashboard dengan revenue breakdown 3 sumber + growth indicators.
+> **JANGAN ubah:** routing, sidebar, auth, komponen lain.
+
+---
+
+## LAYOUT BARU
+
+```
+[Period Pills: Hari Ini | Minggu Ini | Bulan Ini | Bulan Lalu]
+
+ROW 1 — Revenue Breakdown (4 card)
+[Total Revenue] [Class Revenue] [Slot Revenue] [Venue Revenue]
+
+ROW 2 — Volume & Conversion (4 card)
+[Total Booking] [Pending Payment] [Cancelled] [Avg per Booking]
+
+ROW 3 — Charts (2 kolom)
+[Bar Chart 6 Bulan — 3 bar per bulan] [Status Summary + Top Komunitas]
+
+ROW 4 — Booking Terbaru (paid_at DESC)
+```
+
+---
+
+## DATA FETCHING
+
+### Fetch semua data sekaligus
+
+```javascript
+const fetchDashboard = async (period) => {
+  const { start, end } = getPeriodRange(period)
+
+  const [classRes, slotIndRes, slotCorpRes] = await Promise.all([
+    // Class bookings
+    supabase
+      .from('arena_class_bookings')
+      .select('price, paid_at, status')
+      .eq('status', 'confirmed')
+      .gte('paid_at', start)
+      .lte('paid_at', end),
+
+    // Slot booking — individual only
+    supabase
+      .from('arena_bookings')
+      .select('price, paid_at, status, customer_type')
+      .eq('status', 'confirmed')
+      .eq('customer_type', 'individual')
+      .gte('paid_at', start)
+      .lte('paid_at', end),
+
+    // Venue rental — corporation only
+    supabase
+      .from('arena_bookings')
+      .select('price, paid_at, status, customer_type, full_name')
+      .eq('status', 'confirmed')
+      .eq('customer_type', 'corporation')
+      .gte('paid_at', start)
+      .lte('paid_at', end),
+  ])
+
+  const sum = (rows) => (rows || []).reduce((s, r) => s + (Number(r.price) || 0), 0)
+
+  const classRevenue = sum(classRes.data)
+  const slotRevenue  = sum(slotIndRes.data)
+  const venueRevenue = sum(slotCorpRes.data)
+  const totalRevenue = classRevenue + slotRevenue + venueRevenue
+
+  const totalCount = (classRes.data?.length || 0) + (slotIndRes.data?.length || 0) + (slotCorpRes.data?.length || 0)
+  const avgPerBooking = totalCount > 0 ? Math.round(totalRevenue / totalCount) : 0
+
+  setRevenue({ total: totalRevenue, class: classRevenue, slot: slotRevenue, venue: venueRevenue })
+  setBookingCount(totalCount)
+  setAvgPerBooking(avgPerBooking)
+
+  // Top komunitas by venue revenue
+  const venueByOrg = {}
+  ;(slotCorpRes.data || []).forEach(r => {
+    venueByOrg[r.full_name] = (venueByOrg[r.full_name] || 0) + Number(r.price)
+  })
+  const topKomunitas = Object.entries(venueByOrg)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([name, amount]) => ({ name, amount }))
+  setTopKomunitas(topKomunitas)
+}
+
+// Pending & Cancelled — tidak terikat period filter
+const fetchStatusCounts = async () => {
+  const [pendingClass, pendingSlot, cancelClass, cancelSlot] = await Promise.all([
+    supabase.from('arena_class_bookings').select('id', { count: 'exact', head: true }).eq('status', 'pending_payment'),
+    supabase.from('arena_bookings').select('id', { count: 'exact', head: true }).eq('status', 'pending_payment'),
+    supabase.from('arena_class_bookings').select('id', { count: 'exact', head: true }).eq('status', 'cancelled'),
+    supabase.from('arena_bookings').select('id', { count: 'exact', head: true }).eq('status', 'cancelled'),
+  ])
+  setPendingCount((pendingClass.count || 0) + (pendingSlot.count || 0))
+  setCancelledCount((cancelClass.count || 0) + (cancelSlot.count || 0))
+}
+```
+
+---
+
+## ROW 1 — Revenue Breakdown
+
+```jsx
+<div className="kpi-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
+
+  {/* Total Revenue */}
+  <div className="kpi-card" style={{ borderTop: '3px solid var(--text-primary)' }}>
+    <div className="kpi-label">Total Revenue</div>
+    <div className="kpi-value">{fmtRp(revenue.total)}</div>
+    <div className="kpi-sub">{bookingCount} booking confirmed</div>
+  </div>
+
+  {/* Class Revenue */}
+  <div className="kpi-card" style={{ borderTop: '3px solid #2563EB' }}>
+    <div className="kpi-label">Class Revenue</div>
+    <div className="kpi-value" style={{ color: '#2563EB' }}>{fmtRp(revenue.class)}</div>
+    <div className="kpi-sub">Foundation & Complete</div>
+  </div>
+
+  {/* Slot Revenue */}
+  <div className="kpi-card" style={{ borderTop: '3px solid #059669' }}>
+    <div className="kpi-label">Slot Revenue</div>
+    <div className="kpi-value" style={{ color: '#059669' }}>{fmtRp(revenue.slot)}</div>
+    <div className="kpi-sub">Individual booking</div>
+  </div>
+
+  {/* Venue Revenue */}
+  <div className="kpi-card" style={{ borderTop: '3px solid var(--red)' }}>
+    <div className="kpi-label">Venue Revenue</div>
+    <div className="kpi-value" style={{ color: 'var(--red)' }}>{fmtRp(revenue.venue)}</div>
+    <div className="kpi-sub">Korporasi & komunitas</div>
+  </div>
+
+</div>
+```
+
+---
+
+## ROW 2 — Volume & Conversion
+
+```jsx
+<div className="kpi-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)', marginTop: 16 }}>
+
+  {/* Total Booking */}
+  <div className="kpi-card">
+    <div className="kpi-label">Total Booking</div>
+    <div className="kpi-value">{bookingCount}</div>
+    <div className="kpi-sub">Confirmed dalam periode</div>
+  </div>
+
+  {/* Pending */}
+  <div className="kpi-card" style={{ borderTop: '3px solid #D97706' }}>
+    <div className="kpi-label">Pending Payment</div>
+    <div className="kpi-value" style={{ color: '#D97706' }}>{pendingCount}</div>
+    <div className="kpi-sub">Perlu follow-up</div>
+  </div>
+
+  {/* Cancelled */}
+  <div className="kpi-card" style={{ borderTop: '3px solid #DC2626' }}>
+    <div className="kpi-label">Cancelled</div>
+    <div className="kpi-value" style={{ color: '#DC2626' }}>{cancelledCount}</div>
+    <div className="kpi-sub">All time</div>
+  </div>
+
+  {/* Avg per Booking */}
+  <div className="kpi-card">
+    <div className="kpi-label">Avg / Booking</div>
+    <div className="kpi-value">{fmtRp(avgPerBooking)}</div>
+    <div className="kpi-sub">Revenue rata-rata</div>
+  </div>
+
+</div>
+```
+
+---
+
+## ROW 3 — Charts
+
+### Bar Chart 6 Bulan (3 bar per bulan)
+
+Fetch data 6 bulan terakhir, aggregate per bulan per sumber:
+
+```javascript
+const fetchChartData = async () => {
+  const months = Array.from({ length: 6 }, (_, i) => {
+    const d = new Date()
+    d.setMonth(d.getMonth() - (5 - i))
+    return {
+      label: d.toLocaleDateString('id-ID', { month: 'short' }),
+      year: d.getFullYear(),
+      month: d.getMonth() + 1,
+      start: new Date(d.getFullYear(), d.getMonth(), 1).toISOString(),
+      end: new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59).toISOString(),
+    }
+  })
+
+  const chartData = await Promise.all(months.map(async (m) => {
+    const [cls, slot, venue] = await Promise.all([
+      supabase.from('arena_class_bookings').select('price').eq('status', 'confirmed').gte('paid_at', m.start).lte('paid_at', m.end),
+      supabase.from('arena_bookings').select('price').eq('status', 'confirmed').eq('customer_type', 'individual').gte('paid_at', m.start).lte('paid_at', m.end),
+      supabase.from('arena_bookings').select('price').eq('status', 'confirmed').eq('customer_type', 'corporation').gte('paid_at', m.start).lte('paid_at', m.end),
+    ])
+    const sum = (d) => (d.data || []).reduce((s, r) => s + Number(r.price), 0)
+    return { label: m.label, class: sum(cls), slot: sum(slot), venue: sum(venue) }
+  }))
+
+  setChartData(chartData)
+}
+```
+
+**Render bar chart (3 bar per bulan, native SVG/div):**
+
+```jsx
+<div className="chart-card">
+  <div className="chart-title">Revenue 6 Bulan Terakhir</div>
+
+  {/* Legend */}
+  <div style={{ display: 'flex', gap: 16, marginBottom: 16, fontSize: 12 }}>
+    <span><span style={{ display: 'inline-block', width: 10, height: 10, background: '#2563EB', borderRadius: 2, marginRight: 4 }} />Class</span>
+    <span><span style={{ display: 'inline-block', width: 10, height: 10, background: '#059669', borderRadius: 2, marginRight: 4 }} />Slot</span>
+    <span><span style={{ display: 'inline-block', width: 10, height: 10, background: 'var(--red)', borderRadius: 2, marginRight: 4 }} />Venue</span>
+  </div>
+
+  <div className="bar-chart">
+    {chartData.map((m, i) => {
+      const maxVal = Math.max(...chartData.flatMap(d => [d.class, d.slot, d.venue]), 1)
+      return (
+        <div key={i} className="bar-group">
+          <div className="bar-wrap">
+            {[
+              { val: m.class, color: '#2563EB' },
+              { val: m.slot,  color: '#059669' },
+              { val: m.venue, color: 'var(--red)' },
+            ].map((b, j) => (
+              <div
+                key={j}
+                title={fmtRp(b.val)}
+                style={{
+                  flex: 1,
+                  height: `${Math.max((b.val / maxVal) * 100, b.val > 0 ? 2 : 0)}%`,
+                  background: b.color,
+                  borderRadius: '2px 2px 0 0',
+                  minHeight: b.val > 0 ? 2 : 0,
+                  alignSelf: 'flex-end',
+                  transition: 'height 0.3s ease',
+                }}
+              />
+            ))}
+          </div>
+          <div className="bar-label">{m.label}</div>
+        </div>
+      )
+    })}
+  </div>
+</div>
+```
+
+### Top Komunitas (samping chart)
+
+```jsx
+<div className="card" style={{ flex: '0 0 300px' }}>
+  <div className="chart-title">Top Komunitas (Venue)</div>
+  {topKomunitas.length === 0 ? (
+    <p style={{ color: 'var(--text-faint)', fontSize: 13 }}>Tidak ada data</p>
+  ) : topKomunitas.map((k, i) => (
+    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--border)', fontSize: 13 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ width: 20, height: 20, borderRadius: '50%', background: 'var(--red)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, flexShrink: 0 }}>
+          {i + 1}
+        </span>
+        <span style={{ fontWeight: 500 }}>{k.name}</span>
+      </div>
+      <span style={{ fontWeight: 700, color: 'var(--red)' }}>{fmtRp(k.amount)}</span>
+    </div>
+  ))}
+</div>
+```
+
+---
+
+## ROW 4 — Booking Terbaru (paid_at DESC)
+
+```javascript
+const fetchRecentBookings = async () => {
+  const [classRes, slotRes] = await Promise.all([
+    supabase
+      .from('arena_class_bookings')
+      .select(`booking_code, full_name, price, status, paid_at,
+        schedule:arena_class_schedules(schedule_date, class_type:arena_class_types(name))`)
+      .eq('status', 'confirmed')
+      .not('paid_at', 'is', null)
+      .order('paid_at', { ascending: false })
+      .limit(5),
+    supabase
+      .from('arena_bookings')
+      .select('booking_code, full_name, price, status, paid_at, booking_date, customer_type')
+      .eq('status', 'confirmed')
+      .not('paid_at', 'is', null)
+      .order('paid_at', { ascending: false })
+      .limit(5),
+  ])
+
+  const all = [
+    ...(classRes.data || []).map(r => ({ ...r, type: 'Class' })),
+    ...(slotRes.data || []).map(r => ({
+      ...r,
+      type: r.customer_type === 'corporation' ? 'Venue' : 'Slot'
+    })),
+  ].sort((a, b) => new Date(b.paid_at).getTime() - new Date(a.paid_at).getTime())
+   .slice(0, 8)
+
+  setRecentBookings(all)
+}
+```
+
+**Tabel Booking Terbaru:**
+```jsx
+<table className="data-table">
+  <thead>
+    <tr>
+      <th>Booking Code</th>
+      <th>Nama</th>
+      <th>Tipe</th>
+      <th>Amount</th>
+      <th>Tgl Bayar</th>
+    </tr>
+  </thead>
+  <tbody>
+    {recentBookings.map(r => (
+      <tr key={r.booking_code}>
+        <td style={{ fontFamily: 'monospace', fontSize: 11 }}>{r.booking_code}</td>
+        <td>{r.full_name}</td>
+        <td>
+          <span style={{
+            padding: '2px 8px', borderRadius: 3, fontSize: 11, fontWeight: 600,
+            background: r.type === 'Class' ? '#EFF6FF' : r.type === 'Venue' ? '#FEF3F2' : '#F0FFF4',
+            color: r.type === 'Class' ? '#2563EB' : r.type === 'Venue' ? 'var(--red)' : '#059669',
+          }}>
+            {r.type}
+          </span>
+        </td>
+        <td style={{ fontWeight: 600 }}>{fmtRp(r.price)}</td>
+        <td style={{ fontSize: 12, color: 'var(--text-muted)' }}>{fmtDateTime(r.paid_at)}</td>
+      </tr>
+    ))}
+  </tbody>
+</table>
+```
+
+---
+
+## STATE BARU
+
+```javascript
+const [revenue, setRevenue]           = useState({ total: 0, class: 0, slot: 0, venue: 0 })
+const [bookingCount, setBookingCount] = useState(0)
+const [pendingCount, setPendingCount] = useState(0)
+const [cancelledCount, setCancelledCount] = useState(0)
+const [avgPerBooking, setAvgPerBooking]   = useState(0)
+const [chartData, setChartData]       = useState([])
+const [topKomunitas, setTopKomunitas] = useState([])
+const [recentBookings, setRecentBookings] = useState([])
+const [period, setPeriod]             = useState('month')
+```
+
+---
+
+## TESTING CHECKLIST
+
+1. ✅ 4 KPI revenue muncul: Total, Class, Slot, Venue — warna berbeda
+2. ✅ 4 KPI volume: Total Booking, Pending, Cancelled, Avg/Booking
+3. ✅ Period filter berfungsi — semua KPI update kecuali Cancelled (all time)
+4. ✅ Bar chart 3 warna per bulan — hover tooltip tampil nominal
+5. ✅ Top Komunitas 5 teratas by venue revenue
+6. ✅ Booking Terbaru sort by paid_at DESC — 8 booking terbaru
+7. ✅ Badge tipe: Class (biru), Slot (hijau), Venue (merah)
+8. ✅ Tidak ada console error

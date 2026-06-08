@@ -1,0 +1,1046 @@
+# REPLIT AGENT — 20FIT Admin Panel: ARENA FULL MODULE
+## Batch 2: Semua fitur Arena
+
+> **Prereq:** Batch 1 v2 sudah jalan. Auth, routing, sidebar, layout sudah ada.
+>
+> **Tujuan:** Replace placeholder `ArenaDashboard.jsx` dengan full Arena module — semua menu aktif, semua fitur lengkap.
+>
+> **JANGAN ubah:** Auth, routing top-level, Layout, Sidebar structure, global CSS variables, font.
+
+---
+
+## SCHEMA REFERENCE (WAJIB DIBACA SEBELUM CODING)
+
+### Field kritis — jangan salah nama:
+| Tabel | Nominal | Customer | Status values | Date paid |
+|---|---|---|---|---|
+| `arena_bookings` | `price` | `full_name`, `email`, `phone` | `pending_payment`, `confirmed`, `cancelled` | `paid_at` |
+| `arena_class_bookings` | `price` | `full_name`, `email`, `phone` | `pending_payment`, `confirmed`, `cancelled` | `paid_at` |
+| `arena_package_orders` | `price` | `full_name`, `email`, `phone` | `pending_payment`, `confirmed`, `cancelled` | `paid_at` |
+
+### Kolom lengkap per tabel:
+**arena_bookings (BK-):**
+id, booking_code, unit_id, booking_date, start_time, end_time, booker_type, customer_type, full_name, email, phone, notes, price, discount, price_before_disc, status, payment_method, payment_ref, paid_at, voucher_code, created_at, updated_at
+
+**arena_class_bookings (CL-):**
+id, booking_code, schedule_id, booker_type, customer_type, full_name, email, phone, notes, price, discount, price_before_disc, status, payment_method, payment_ref, paid_at, created_at, updated_at
+
+**arena_class_schedules:**
+id, unit_id, class_type_id, instructor, schedule_date, start_time, end_time, quota, is_cancelled, created_at
+
+**arena_class_types:**
+id, name, description, price_guest, duration_minutes, color, is_active, unit_id
+
+**arena_booking_units:**
+id, name, unit_type, description, capacity, slot_duration, price_member, price_guest, is_active, image_url, created_at, updated_at
+
+**arena_vouchers:**
+id, code, description, discount_type, discount_value, min_booking_amount, max_discount_amount, quota, used_count, valid_from, valid_until, is_active, corporation_only, created_by, created_at, updated_at
+
+**arena_package_orders (PKG-):**
+id, order_code, package_id, package_name, sessions, price, full_name, email, phone, notes, status, payment_method, payment_ref, paid_at, created_at, updated_at
+
+**arena_package_vouchers:**
+id, voucher_code, order_id, total_sessions, used_sessions, is_active, created_at, updated_at
+
+**arena_coaches:**
+id, name, photo_url, speciality, bio, is_active, created_at
+
+**arena_addons:**
+id, name, description, price, image_url, is_active, sort_order, created_at
+
+**arena_blocked_slots:**
+id, unit_id, blocked_date, start_time, end_time, reason, created_at
+
+### RPC functions tersedia:
+- `generate_booking_code()` → TEXT (BK-)
+- `generate_class_booking_code()` → TEXT (CL-)
+
+---
+
+## FILE STRUCTURE ARENA MODULE
+
+```
+src/pages/arena/
+├── ArenaDashboard.jsx        # Dashboard utama
+├── ArenaSlotBookings.jsx     # List slot bookings (BK-)
+├── ArenaClassBookings.jsx    # List class bookings (CL-)
+├── ArenaVouchers.jsx         # CRUD vouchers
+├── ArenaPackageOrders.jsx    # List package orders (PKG-)
+└── master/
+    ├── ArenaUnits.jsx        # CRUD arena_booking_units
+    ├── ArenaClassTypes.jsx   # CRUD arena_class_types
+    ├── ArenaSchedules.jsx    # CRUD arena_class_schedules
+    ├── ArenaCoaches.jsx      # CRUD arena_coaches
+    ├── ArenaAddons.jsx       # CRUD arena_addons
+    └── ArenaBlockedSlots.jsx # CRUD arena_blocked_slots
+
+src/components/arena/
+├── BookingDetailModal.jsx    # Modal detail + action booking
+├── ManualBookingModal.jsx    # Modal create walk-in booking
+├── ConfirmModal.jsx          # Modal konfirmasi aksi (cancel, dll)
+└── ExportButton.jsx          # Reusable export ke CSV
+```
+
+---
+
+## UPDATE SIDEBAR MENU (Arena)
+
+Update `UNIT_MENUS.arena` di `Sidebar.jsx`:
+
+```javascript
+arena: [
+  { label: 'Dashboard',       path: '/arena',                  icon: '◻' },
+  { label: 'Slot Bookings',   path: '/arena/slot-bookings',    icon: '◻' },
+  { label: 'Class Bookings',  path: '/arena/class-bookings',   icon: '◻' },
+  { label: 'Package Orders',  path: '/arena/packages',         icon: '◻' },
+  { label: 'Vouchers',        path: '/arena/vouchers',         icon: '◻' },
+  { label: '— Master Data',   path: null,                      divider: true },
+  { label: 'Units',           path: '/arena/master/units',     icon: '◻' },
+  { label: 'Class Types',     path: '/arena/master/class-types', icon: '◻' },
+  { label: 'Schedules',       path: '/arena/master/schedules', icon: '◻' },
+  { label: 'Coaches',         path: '/arena/master/coaches',   icon: '◻' },
+  { label: 'Add-ons',         path: '/arena/master/addons',    icon: '◻' },
+  { label: 'Blocked Slots',   path: '/arena/master/blocked',   icon: '◻' },
+]
+```
+
+Divider items: `pointer-events: none; font-size: 10px; color: var(--text-faint); padding: 16px 20px 4px; letter-spacing: 0.1em; text-transform: uppercase;`
+
+Active state: match `location.pathname` dengan `startsWith(item.path)`.
+
+---
+
+## UPDATE ROUTING (App.jsx)
+
+Tambah nested routes di dalam Route path="/arena":
+
+```jsx
+<Route path="/arena" element={<ProtectedRoute unit="arena"><Layout currentUnit="arena" /></ProtectedRoute>}>
+  <Route index element={<ArenaDashboard />} />
+  <Route path="slot-bookings" element={<ArenaSlotBookings />} />
+  <Route path="class-bookings" element={<ArenaClassBookings />} />
+  <Route path="packages" element={<ArenaPackageOrders />} />
+  <Route path="vouchers" element={<ArenaVouchers />} />
+  <Route path="master/units" element={<ArenaUnits />} />
+  <Route path="master/class-types" element={<ArenaClassTypes />} />
+  <Route path="master/schedules" element={<ArenaSchedules />} />
+  <Route path="master/coaches" element={<ArenaCoaches />} />
+  <Route path="master/addons" element={<ArenaAddons />} />
+  <Route path="master/blocked" element={<ArenaBlockedSlots />} />
+</Route>
+```
+
+---
+
+## SHARED UTILITIES
+
+### `src/lib/format.js`
+```javascript
+export const fmtRp = (n) => 'Rp ' + (Number(n) || 0).toLocaleString('id-ID')
+
+export const fmtDate = (iso) => {
+  if (!iso) return '-'
+  return new Date(iso).toLocaleDateString('id-ID', {
+    day: '2-digit', month: 'short', year: 'numeric'
+  })
+}
+
+export const fmtDateTime = (iso) => {
+  if (!iso) return '-'
+  return new Date(iso).toLocaleString('id-ID', {
+    day: '2-digit', month: 'short', year: 'numeric',
+    hour: '2-digit', minute: '2-digit'
+  })
+}
+
+export const fmtTime = (timeStr) => {
+  if (!timeStr) return '-'
+  return timeStr.substring(0, 5) // "08:00:00" → "08:00"
+}
+
+export const STATUS_LABEL = {
+  confirmed:       { label: 'Confirmed',  css: 'badge-confirmed' },
+  pending_payment: { label: 'Pending',    css: 'badge-pending' },
+  cancelled:       { label: 'Cancelled', css: 'badge-cancelled' },
+}
+
+// Export array of objects ke CSV dan trigger download
+export const exportToCSV = (data, filename) => {
+  if (!data || data.length === 0) return
+  const headers = Object.keys(data[0])
+  const rows = data.map(row =>
+    headers.map(h => {
+      const val = row[h] ?? ''
+      return `"${String(val).replace(/"/g, '""')}"`
+    }).join(',')
+  )
+  const csv = [headers.join(','), ...rows].join('\n')
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `${filename}_${new Date().toISOString().slice(0,10)}.csv`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+```
+
+### `src/components/arena/ConfirmModal.jsx`
+```jsx
+export default function ConfirmModal({ title, message, onConfirm, onCancel, danger }) {
+  return (
+    <div className="modal-overlay">
+      <div className="modal-box" style={{ maxWidth: 400 }}>
+        <h3 className="modal-title">{title}</h3>
+        <p style={{ color: 'var(--text-muted)', margin: '8px 0 24px' }}>{message}</p>
+        <div className="modal-footer">
+          <button className="btn-secondary" onClick={onCancel}>Batal</button>
+          <button
+            className={danger ? 'btn-danger' : 'btn-primary'}
+            onClick={onConfirm}
+          >
+            Konfirmasi
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+```
+
+---
+
+## 1. ArenaDashboard.jsx
+
+### KPIs (row 4 card)
+Semua aggregate dari 2 tabel (`arena_bookings` + `arena_class_bookings`), status `confirmed`, period dari filter yang dipilih:
+
+1. **Total Revenue** — sum `price` gabungan 2 tabel
+2. **Total Booking** — count gabungan 2 tabel
+3. **Slot Revenue** — sum dari `arena_bookings` saja
+4. **Class Revenue** — sum dari `arena_class_bookings` saja
+
+Period selector: **Hari Ini / Minggu Ini / Bulan Ini / Bulan Lalu** (pill buttons, state default: Bulan Ini)
+
+```javascript
+const getPeriodRange = (period) => {
+  const now = new Date()
+  const start = new Date(now)
+  const end = new Date(now)
+  end.setHours(23, 59, 59, 999)
+
+  if (period === 'today') {
+    start.setHours(0, 0, 0, 0)
+  } else if (period === 'week') {
+    const day = now.getDay()
+    start.setDate(now.getDate() - day)
+    start.setHours(0, 0, 0, 0)
+  } else if (period === 'month') {
+    start.setDate(1)
+    start.setHours(0, 0, 0, 0)
+  } else if (period === 'last_month') {
+    start.setMonth(start.getMonth() - 1, 1)
+    start.setHours(0, 0, 0, 0)
+    end.setDate(0) // last day of prev month
+    end.setHours(23, 59, 59, 999)
+  }
+  return { start: start.toISOString(), end: end.toISOString() }
+}
+```
+
+### Chart: Revenue 6 Bulan Terakhir
+- Bar chart sederhana (native SVG atau div-based, NO library baru)
+- X-axis: nama bulan (Jan, Feb, ...)
+- Y-axis: total revenue per bulan
+- Dua bar per bulan: Slot (hitam) + Class (merah)
+- Data: aggregate `price` per bulan dari kedua tabel
+
+### Recent Bookings (5 terbaru)
+Mini tabel gabungan slot + class booking terbaru (order by `created_at` DESC, limit 5 per tabel, merge & sort di frontend):
+Kolom: Booking Code | Nama | Tipe | Amount | Status | Waktu
+
+### Status Summary
+3 pill dengan count:
+- ✓ Confirmed: X
+- ⏳ Pending: X
+- ✗ Cancelled: X
+
+---
+
+## 2. ArenaSlotBookings.jsx (BK-)
+
+### Layout
+- Header: "Slot Bookings" + tombol **+ Manual Booking** (kanan) + **Export CSV**
+- Filter bar: search (full_name / booking_code) | status dropdown | date range (from-to) | unit dropdown
+- Tabel hasil
+
+### Tabel kolom:
+Booking Code | Unit | Tanggal | Waktu | Nama | Telp | Amount | Status | Payment | Aksi
+
+**Aksi per row:**
+- **Detail** → buka `BookingDetailModal`
+- **Confirm** (hanya jika status `pending_payment`) → update status ke `confirmed`, set `payment_method = 'cash'`, `paid_at = NOW()`
+- **Cancel** (jika status bukan `cancelled`) → buka `ConfirmModal` → update status `cancelled`
+
+### BookingDetailModal — Slot Booking
+```
+Booking Code: BK-XXXXXXXX-XXXX
+Unit: [nama unit]
+Tanggal: DD Mon YYYY
+Waktu: HH:MM – HH:MM
+Customer: [full_name]
+Email: [email]
+Telp: [phone]
+Type: [customer_type] / [booker_type]
+Notes: [notes]
+Voucher: [voucher_code atau '-']
+──────────────────────
+Harga Normal: Rp X
+Diskon: Rp X
+Harga Final: Rp X
+──────────────────────
+Status: [badge]
+Payment: [payment_method atau '-']
+Payment Ref: [payment_ref atau '-']
+Paid At: [fmtDateTime atau '-']
+Dibuat: [fmtDateTime(created_at)]
+──────────────────────
+[Tombol Confirm (jika pending)] [Tombol Cancel (jika bukan cancelled)]
+```
+
+### ManualBookingModal — Slot Booking
+Form create walk-in booking baru:
+```
+Unit: [dropdown dari arena_booking_units yang is_active=true]
+Tanggal: [date picker]
+Jam Mulai: [time input]
+Jam Selesai: [time input, auto-calculate dari slot_duration unit]
+Customer Type: [Member / Guest — radio]
+Nama Lengkap: [text]
+Email: [email]
+Telp: [text]
+Notes: [textarea, optional]
+Voucher Code: [text, optional]
+──────────────────────
+Harga: [auto-fill dari unit price sesuai customer_type, editable]
+Diskon: [auto-fill 0, editable]
+Harga Final: [calculated]
+──────────────────────
+Payment Method: [Cash / Transfer / Voucher — dropdown]
+[Submit → INSERT ke arena_bookings, status='confirmed', paid_at=NOW()]
+```
+
+Booking code: call RPC `generate_booking_code()` saat submit.
+
+### Pagination
+Tampilkan 20 rows per page. Tombol prev/next. Tampilkan "X–Y dari Z hasil".
+
+### Export CSV
+Kolom: booking_code, unit_name (join), booking_date, start_time, end_time, full_name, email, phone, customer_type, price_before_disc, discount, price, status, payment_method, paid_at, created_at
+
+---
+
+## 3. ArenaClassBookings.jsx (CL-)
+
+Struktur identik dengan Slot Bookings, tapi sumber dari `arena_class_bookings`.
+
+### Perbedaan tabel:
+Booking Code | Kelas | Jadwal | Nama | Telp | Amount | Status | Payment | Aksi
+
+(Kelas dan Jadwal: join dengan `arena_class_schedules` dan `arena_class_types` via `schedule_id`)
+
+### BookingDetailModal — Class Booking
+```
+Booking Code: CL-XXXXXXXX-XXXX
+Kelas: [class_type.name]
+Jadwal: [schedule_date] [start_time]–[end_time]
+Instructor: [schedule.instructor]
+Customer: [full_name]
+Email: [email]
+Telp: [phone]
+──────────────────────
+Harga Normal: Rp X
+Diskon: Rp X
+Harga Final: Rp X
+──────────────────────
+Status: [badge]
+Payment: [payment_method] / [payment_ref]
+Paid At: [fmtDateTime]
+──────────────────────
+[Tombol Confirm] [Tombol Cancel]
+```
+
+### ManualBookingModal — Class Booking
+```
+Kelas: [dropdown arena_class_types yang is_active=true]
+Jadwal: [dropdown arena_class_schedules filter by class_type_id, tampil tanggal+waktu+instructor+sisa_quota]
+Customer Type: [Member / Guest]
+Nama Lengkap / Email / Telp
+Notes (optional)
+──────────────────────
+Harga: [auto-fill dari class_type.price_guest, editable]
+Diskon: [0, editable]
+Harga Final: [calculated]
+Payment Method: [Cash / Transfer / Voucher]
+[Submit → INSERT arena_class_bookings, status='confirmed', paid_at=NOW()]
+```
+
+Booking code: call RPC `generate_class_booking_code()`.
+
+**Validasi quota:** Sebelum submit, cek `arena_class_schedules.quota` vs count booking confirmed untuk schedule tersebut. Kalau penuh → tampil error "Jadwal ini sudah penuh".
+
+---
+
+## 4. ArenaPackageOrders.jsx (PKG-)
+
+### Layout
+Header "Package Orders" + Export CSV (no manual create — package beli via customer app)
+
+### Tabel kolom:
+Order Code | Package | Sessions | Nama | Telp | Amount | Status | Payment | Voucher Code | Dibuat | Aksi
+
+**Detail modal:**
+```
+Order Code: PKG-XXXXXXXX-XXXX
+Package: [package_name]
+Sessions: [sessions]
+──────────────────────
+Customer: [full_name] / [email] / [phone]
+Notes: [notes]
+──────────────────────
+Harga: Rp [price]
+Status: [badge]
+Payment: [payment_method] / [payment_ref]
+Paid At: [fmtDateTime]
+──────────────────────
+Package Voucher:
+  Code: [voucher_code dari arena_package_vouchers]
+  Total Sessions: [total_sessions]
+  Used Sessions: [used_sessions]
+  Sisa: [total - used]
+  Active: [Ya / Tidak]
+```
+
+Join `arena_package_vouchers` on `order_id` untuk tampil voucher info.
+
+---
+
+## 5. ArenaVouchers.jsx
+
+### Layout
+Header "Vouchers" + tombol **+ Tambah Voucher**
+
+### Tabel kolom:
+Code | Deskripsi | Tipe Diskon | Nilai | Quota | Used | Valid Until | Status | Corp Only | Aksi
+
+Aksi: Edit | Toggle Active (on/off)
+
+### Form tambah/edit voucher (modal):
+```
+Code: [text, uppercase, required]
+Deskripsi: [text]
+Tipe Diskon: [percentage / fixed — radio]
+Nilai Diskon: [number]
+  - Jika percentage: tampil "%" suffix, max 100
+  - Jika fixed: tampil "Rp" prefix
+Min Booking Amount: [number, Rp]
+Max Diskon (untuk percentage): [number, Rp, optional]
+Quota: [number]
+Valid From: [date]
+Valid Until: [date]
+Corporation Only: [checkbox]
+[Save]
+```
+
+Validasi:
+- Code unik (cek sebelum insert)
+- Valid Until harus setelah Valid From
+- Nilai diskon > 0
+
+---
+
+## 6. MASTER DATA
+
+Semua master data pages punya pola yang sama:
+- Header: "[Nama]" + tombol "+ Tambah"
+- Tabel list dengan kolom relevan + aksi (Edit, Toggle Active)
+- Modal form tambah/edit
+
+### 6a. ArenaUnits.jsx
+Tabel: Name | Type | Capacity | Slot Duration | Harga Member | Harga Guest | Status | Aksi
+Form: name, unit_type, description, capacity, slot_duration (minutes), price_member (Rp), price_guest (Rp), is_active
+
+### 6b. ArenaClassTypes.jsx
+Tabel: Name | Durasi | Harga Guest | Unit | Status | Aksi
+Form: name, description, price_guest (Rp), duration_minutes, color (color picker atau text #hex), is_active, unit_id (dropdown dari arena_booking_units)
+
+### 6c. ArenaSchedules.jsx
+
+**Tambahan filter:** Tanggal (date picker, default hari ini) + Class Type dropdown + tampil quota vs booked
+
+Tabel: Tanggal | Kelas | Instruktur | Waktu | Quota | Booked | Sisa | Status | Aksi
+
+"Booked" = count dari `arena_class_bookings` dimana `schedule_id = this.id` AND `status = 'confirmed'`
+"Sisa" = quota - booked
+
+Aksi: Edit | Cancel (toggle `is_cancelled`) | Delete (hanya kalau booked = 0)
+
+Form tambah/edit:
+```
+Unit: [dropdown]
+Class Type: [dropdown filter by unit_id]
+Instruktur: [dropdown dari arena_coaches yang is_active=true]
+Tanggal: [date]
+Jam Mulai: [time]
+Jam Selesai: [time — auto dari class_type.duration_minutes, editable]
+Quota: [number]
+```
+
+**Fitur bulk create jadwal:**
+Tombol "Buat Jadwal Berulang" → form:
+- Class Type, Instruktur, Jam Mulai, Quota
+- Pilih hari (checkbox: Sen, Sel, Rab, Kam, Jum, Sab, Min)
+- Range tanggal (dari - sampai)
+- Preview list tanggal yang akan dibuat
+- Submit → INSERT multiple rows sekaligus
+
+### 6d. ArenaCoaches.jsx
+Tabel: Nama | Spesialisasi | Status | Aksi
+Form: name, speciality, bio, is_active
+(photo_url: text input untuk URL, optional)
+
+### 6e. ArenaAddons.jsx
+Tabel: Nama | Harga | Sort Order | Status | Aksi
+Form: name, description, price (Rp), sort_order, is_active
+(image_url: text input, optional)
+
+### 6f. ArenaBlockedSlots.jsx
+Tabel: Unit | Tanggal | Waktu | Alasan | Aksi (Delete)
+Filter: Unit dropdown | Date range
+
+Form tambah:
+```
+Unit: [dropdown]
+Tanggal: [date]
+Jam Mulai: [time]
+Jam Selesai: [time]
+Alasan: [text]
+```
+
+---
+
+## CSS TAMBAHAN (append ke global.css)
+
+```css
+/* Page header pattern */
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.page-title {
+  font-size: 24px;
+  font-weight: 700;
+  margin: 0;
+}
+
+/* Filter bar */
+.filter-bar {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+  padding: 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.filter-bar input,
+.filter-bar select {
+  padding: 8px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 13px;
+  background: var(--bg-page);
+  color: var(--text-primary);
+}
+
+.filter-bar input:focus,
+.filter-bar select:focus {
+  outline: none;
+  border-color: var(--red);
+}
+
+/* Period pills */
+.period-pills {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 20px;
+}
+
+.period-pill {
+  padding: 6px 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: 20px;
+  background: transparent;
+  font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  color: var(--text-muted);
+  transition: all .15s;
+}
+
+.period-pill.active {
+  background: var(--text-primary);
+  color: #FFFFFF;
+  border-color: var(--text-primary);
+}
+
+/* KPI grid */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+@media (max-width: 1100px) { .kpi-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 600px)  { .kpi-grid { grid-template-columns: 1fr; } }
+
+.kpi-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: var(--shadow-card);
+}
+
+.kpi-label {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.kpi-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.kpi-sub {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+/* Chart container */
+.chart-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 24px;
+  margin-bottom: 24px;
+}
+
+.chart-title {
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  margin: 0 0 20px;
+}
+
+/* Simple bar chart */
+.bar-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  height: 160px;
+}
+
+.bar-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+  gap: 2px;
+}
+
+.bar-wrap {
+  display: flex;
+  gap: 2px;
+  align-items: flex-end;
+  width: 100%;
+  height: 120px;
+}
+
+.bar {
+  flex: 1;
+  min-height: 2px;
+  border-radius: 2px 2px 0 0;
+  transition: opacity .15s;
+}
+
+.bar:hover { opacity: 0.8; }
+.bar-slot  { background: var(--text-primary); }
+.bar-class { background: var(--red); }
+
+.bar-label {
+  font-size: 10px;
+  color: var(--text-faint);
+  text-align: center;
+  margin-top: 4px;
+}
+
+/* Modal */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  display: grid;
+  place-items: center;
+  z-index: 1000;
+  padding: 24px;
+}
+
+.modal-box {
+  background: var(--bg-card);
+  border-radius: 8px;
+  width: 100%;
+  max-width: 560px;
+  max-height: 90vh;
+  overflow-y: auto;
+  padding: 32px;
+}
+
+.modal-title {
+  font-size: 18px;
+  font-weight: 700;
+  margin: 0 0 20px;
+}
+
+.modal-section {
+  border-top: 1px solid var(--border);
+  margin-top: 16px;
+  padding-top: 16px;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.detail-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 0;
+  font-size: 14px;
+}
+
+.detail-label { color: var(--text-muted); }
+.detail-value { font-weight: 500; color: var(--text-primary); text-align: right; }
+
+/* Form inside modal */
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.form-group label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+.form-group input,
+.form-group select,
+.form-group textarea {
+  padding: 10px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 14px;
+  background: var(--bg-page);
+  color: var(--text-primary);
+}
+
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus {
+  outline: none;
+  border-color: var(--red);
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.form-error {
+  color: var(--red);
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+/* Table */
+.table-wrap {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+table.data-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+table.data-table thead th {
+  background: #F5F5F0;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding: 12px 16px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+table.data-table tbody td {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+  vertical-align: middle;
+}
+
+table.data-table tbody tr:hover { background: var(--bg-page); }
+table.data-table tbody tr:last-child td { border-bottom: none; }
+
+/* Action buttons in table */
+.action-btn {
+  padding: 4px 10px;
+  border-radius: 3px;
+  font-size: 11px;
+  font-family: inherit;
+  cursor: pointer;
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  margin-right: 4px;
+  transition: all .1s;
+}
+
+.action-btn:hover { background: var(--bg-page); }
+.action-btn.confirm { border-color: #16a34a; color: #16a34a; }
+.action-btn.confirm:hover { background: #dcfce7; }
+.action-btn.cancel { border-color: #dc2626; color: #dc2626; }
+.action-btn.cancel:hover { background: #fee2e2; }
+.action-btn.detail { border-color: var(--border-strong); }
+
+/* Danger button */
+.btn-danger {
+  background: #dc2626;
+  color: #FFFFFF;
+  border: none;
+  border-radius: 4px;
+  padding: 10px 20px;
+  font-family: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+.btn-danger:hover { background: #b91c1c; }
+
+/* Pagination */
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.pagination-btns { display: flex; gap: 8px; }
+.pagination-btns button {
+  padding: 6px 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  background: transparent;
+  font-family: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.pagination-btns button:disabled { opacity: 0.4; cursor: not-allowed; }
+.pagination-btns button:not(:disabled):hover { background: var(--bg-page); }
+
+/* Status badges */
+.badge { display: inline-block; padding: 3px 8px; border-radius: 3px; font-size: 10px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; }
+.badge-confirmed { background: #dcfce7; color: #166534; }
+.badge-pending   { background: #fef3c7; color: #92400e; }
+.badge-cancelled { background: #fee2e2; color: #991b1b; }
+
+/* Toggle active */
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.toggle-track {
+  width: 32px; height: 18px;
+  background: var(--border-strong);
+  border-radius: 9px;
+  position: relative;
+  transition: background .15s;
+}
+
+.toggle-track.on { background: #16a34a; }
+
+.toggle-thumb {
+  position: absolute;
+  top: 2px; left: 2px;
+  width: 14px; height: 14px;
+  background: white;
+  border-radius: 50%;
+  transition: transform .15s;
+}
+
+.toggle-track.on .toggle-thumb { transform: translateX(14px); }
+
+/* Empty state */
+.empty-state {
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--text-faint);
+}
+
+.empty-state p { margin: 8px 0 0; font-size: 14px; }
+
+/* Loading state */
+.loading-row td {
+  text-align: center;
+  padding: 40px;
+  color: var(--text-faint);
+}
+
+/* Sidebar divider */
+.menu-divider {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-faint);
+  padding: 16px 20px 4px;
+  pointer-events: none;
+}
+```
+
+---
+
+## POLA UMUM IMPLEMENTASI
+
+Setiap page mengikuti pola ini (pseudocode):
+
+```javascript
+const [data, setData] = useState([])
+const [loading, setLoading] = useState(true)
+const [search, setSearch] = useState('')
+const [statusFilter, setStatusFilter] = useState('all')
+const [page, setPage] = useState(0)
+const PAGE_SIZE = 20
+
+// Fetch dengan filter
+const fetchData = async () => {
+  setLoading(true)
+  let query = supabase.from('arena_bookings').select('*, unit:arena_booking_units(name)', { count: 'exact' })
+  if (statusFilter !== 'all') query = query.eq('status', statusFilter)
+  if (search) query = query.or(`full_name.ilike.%${search}%,booking_code.ilike.%${search}%`)
+  query = query.order('created_at', { ascending: false }).range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)
+  const { data, count, error } = await query
+  if (!error) { setData(data); setTotal(count) }
+  setLoading(false)
+}
+
+// Re-fetch saat filter / page berubah
+useEffect(() => { fetchData() }, [statusFilter, search, page])
+
+// Debounce search input (300ms) supaya tidak flood request
+```
+
+**CATATAN PENTING:**
+- Semua angka Rupiah: `fmtRp()` dari `format.js`
+- Semua tanggal: `fmtDate()` atau `fmtDateTime()`
+- Semua waktu (HH:MM:SS): `fmtTime()`
+- Status badge: `STATUS_LABEL[status]`
+- Update status selalu tambah `updated_at: new Date().toISOString()`
+- Setelah mutasi (insert/update/delete): refetch data
+- Error dari Supabase: tampil toast/banner merah di atas halaman
+
+---
+
+## TESTING CHECKLIST
+
+### Dashboard
+- [ ] 4 KPI card muncul dengan angka (bukan Rp 0)
+- [ ] Period pills berfungsi, angka berubah
+- [ ] Chart 6 bulan muncul, ada 2 bar (slot + class) per bulan
+- [ ] Recent bookings 5 baris terbaru muncul
+
+### Slot Bookings
+- [ ] List muncul, pagination berfungsi
+- [ ] Search by nama / booking code berfungsi
+- [ ] Filter status berfungsi
+- [ ] Filter tanggal berfungsi
+- [ ] Klik Detail → modal muncul dengan info lengkap
+- [ ] Confirm pending booking → status berubah jadi confirmed
+- [ ] Cancel booking → ConfirmModal muncul → status berubah
+- [ ] Manual booking walk-in → booking tersimpan, muncul di list dengan status confirmed
+- [ ] Export CSV → file terdownload
+
+### Class Bookings
+- [ ] Sama dengan slot, plus:
+- [ ] Manual booking class: dropdown jadwal filter by class type
+- [ ] Validasi quota penuh tampil error
+
+### Package Orders
+- [ ] List PKG- muncul
+- [ ] Detail modal tampil info + voucher code dari arena_package_vouchers
+
+### Vouchers
+- [ ] List vouchers muncul
+- [ ] Tambah voucher baru → muncul di list
+- [ ] Edit voucher → data ter-update
+- [ ] Toggle active on/off berfungsi
+
+### Master Data
+- [ ] Semua 6 halaman load tanpa error
+- [ ] CRUD berfungsi di semua (create, edit, toggle active)
+- [ ] Schedules: count booked akurat
+- [ ] Schedules: bulk create berulang berfungsi
+
+---
+
+## YANG TIDAK DIKERJAKAN DI BATCH INI
+- Gym module (Batch 3)
+- User management / permissions UI
+- WhatsApp notification
+- Print / PDF export

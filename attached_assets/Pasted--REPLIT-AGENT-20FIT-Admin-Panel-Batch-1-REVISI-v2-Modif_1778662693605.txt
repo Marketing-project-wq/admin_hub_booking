@@ -1,0 +1,599 @@
+# REPLIT AGENT — 20FIT Admin Panel Batch 1 REVISI (v2)
+## Modifikasi existing app: flow baru (pick unit → login → dashboard)
+
+> **Prereq:** Batch 1 v1 sudah dijalanin. SQL migration v2 (`01b_supabase_admin_migration_v2.sql`) sudah jalan di Supabase. App sudah bisa login dengan admin@20fit.id.
+>
+> **Tujuan revisi ini:** Ubah flow jadi public landing page dulu (pick business unit), baru login per unit. Hapus konsep "select unit setelah login".
+
+---
+
+## RINGKASAN PERUBAHAN FLOW
+
+**Sebelum (v1):**
+```
+/login → /select (pilih unit) → /arena | /gym | /clinic
+```
+
+**Sesudah (v2):**
+```
+/ (landing publik, pick unit) → /login/:unit → /arena | /gym | /clinic
+```
+
+---
+
+## PERUBAHAN FILE
+
+### 1) HAPUS file: `src/context/UnitContext.jsx`
+
+Konsep "selected unit" sekarang ditangani dari URL param + `user.unit` dari session, bukan dari context terpisah. Hapus file ini sepenuhnya dan bersihkan import-nya di `App.jsx`.
+
+### 2) RENAME: `src/pages/SelectUnitPage.jsx` → `src/pages/LandingPage.jsx`
+
+Ubah perilaku:
+- **Sekarang public** (tidak butuh login)
+- Hapus top bar dengan user info / logout
+- Header sederhana: cuma branding "20FIT Admin Panel"
+- 3 card unit (Arena, Gym, Clinic-disabled)
+- Klik Arena → navigate `/login/arena`
+- Klik Gym → navigate `/login/gym`
+- Clinic tetap disabled (Coming Soon, tidak clickable)
+
+```jsx
+// src/pages/LandingPage.jsx
+import { useNavigate } from 'react-router-dom'
+
+export default function LandingPage() {
+  const navigate = useNavigate()
+
+  const units = [
+    {
+      key: 'arena',
+      title: 'Arena',
+      desc: 'Slot booking, kelas, voucher, add-ons',
+      disabled: false,
+    },
+    {
+      key: 'gym',
+      title: 'Gym',
+      desc: 'Kelas yoga, HYROX, EMS, dan lainnya',
+      disabled: false,
+    },
+    {
+      key: 'clinic',
+      title: 'Clinic',
+      desc: 'Physiotherapy & sports medicine',
+      disabled: true,
+    },
+  ]
+
+  return (
+    <div className="landing-page">
+      <header className="landing-header">
+        <h1 className="brand">20FIT</h1>
+        <p className="brand-sub">Admin Panel</p>
+      </header>
+
+      <main className="landing-main">
+        <h2 className="landing-heading">Pilih Business Unit</h2>
+        <p className="landing-subtitle">
+          Login sesuai unit bisnis yang Anda kelola.
+        </p>
+
+        <div className="unit-grid">
+          {units.map((u) => (
+            <button
+              key={u.key}
+              className={`unit-card ${u.disabled ? 'disabled' : ''}`}
+              disabled={u.disabled}
+              onClick={() => !u.disabled && navigate(`/login/${u.key}`)}
+            >
+              <h3>{u.title}</h3>
+              <p>{u.desc}</p>
+              {u.disabled && <span className="coming-soon">Coming Soon</span>}
+            </button>
+          ))}
+        </div>
+      </main>
+
+      <footer className="landing-footer">
+        <small>© 2026 20FIT. All rights reserved.</small>
+      </footer>
+    </div>
+  )
+}
+```
+
+### 3) UPDATE: `src/pages/LoginPage.jsx`
+
+- Sekarang dapat URL param `:unit` (lewat `useParams`)
+- Tampilkan label unit di atas form ("Arena Login", "Gym Login")
+- Validasi unit di URL: kalau bukan 'arena'/'gym', redirect ke `/`
+- `login()` sekarang pass 3 arg: email, password, **unit**
+- Setelah login sukses → navigate ke `/{unit}` (bukan `/select` lagi)
+- Tombol "Kembali" di atas form → navigate `/`
+
+```jsx
+import { useState } from 'react'
+import { useNavigate, useParams, Link } from 'react-router-dom'
+import { useAuth } from '../context/AuthContext'
+
+const UNIT_LABELS = { arena: 'Arena', gym: 'Gym' }
+
+export default function LoginPage() {
+  const { unit } = useParams()
+  const navigate = useNavigate()
+  const { login } = useAuth()
+
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+
+  // Guard: unit harus valid
+  if (!UNIT_LABELS[unit]) {
+    navigate('/', { replace: true })
+    return null
+  }
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    setError('')
+    setSubmitting(true)
+    try {
+      await login(email, password, unit)
+      navigate(`/${unit}`, { replace: true })
+    } catch (err) {
+      setError(err.message || 'Login gagal')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <div className="login-page">
+      <div className="login-card">
+        <Link to="/" className="back-link">← Kembali</Link>
+        <h1 className="brand">20FIT</h1>
+        <p className="subtitle">{UNIT_LABELS[unit]} Admin</p>
+
+        <form onSubmit={handleSubmit}>
+          <label>Email</label>
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            autoComplete="email"
+          />
+
+          <label>Password</label>
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            autoComplete="current-password"
+          />
+
+          {error && <p className="error">{error}</p>}
+
+          <button type="submit" className="btn-primary" disabled={submitting}>
+            {submitting ? 'Memproses...' : 'Masuk'}
+          </button>
+        </form>
+      </div>
+    </div>
+  )
+}
+```
+
+### 4) UPDATE: `src/context/AuthContext.jsx`
+
+- `login(email, password, unit)` — accept 3 arg
+- RPC call pakai signature baru: `validate_admin_login` dengan param `p_email`, `p_password`, **`p_unit`**
+- Response sekarang include `unit` dan `permissions` — simpan semua di user object & localStorage
+
+```javascript
+const login = async (email, password, unit) => {
+  const { data, error } = await supabase.rpc('validate_admin_login', {
+    p_email: email,
+    p_password: password,
+    p_unit: unit,
+  })
+  if (error) throw error
+  if (!data || data.length === 0) {
+    throw new Error('Email atau password salah, atau Anda tidak memiliki akses ke unit ini')
+  }
+  const profile = data[0]
+  // profile: { id, email, full_name, role, unit, permissions }
+  localStorage.setItem('admin_user', JSON.stringify(profile))
+  setUser(profile)
+  return profile
+}
+```
+
+Tambah helper di context yang akan dipakai komponen lain:
+
+```javascript
+// Cek apakah user bisa akses unit tertentu
+const canAccessUnit = (targetUnit) => {
+  if (!user) return false
+  if (user.role === 'super_admin') return true
+  return user.unit === targetUnit
+}
+
+// Cek permission key (untuk batch nanti, tapi siapkan sekarang)
+const hasPermission = (key) => {
+  if (!user) return false
+  if (user.role === 'super_admin' || user.role === 'admin') return true
+  return Boolean(user.permissions?.[key])
+}
+
+// Expose lewat provider value:
+return (
+  <AuthContext.Provider value={{ user, loading, login, logout, canAccessUnit, hasPermission }}>
+    {children}
+  </AuthContext.Provider>
+)
+```
+
+### 5) UPDATE: `src/components/ProtectedRoute.jsx`
+
+- Hapus `requireUnit` flag (sudah tidak relevan)
+- Tambah optional `unit` prop — komponen akan validate user punya akses ke unit itu
+
+```jsx
+import { Navigate, useLocation } from 'react-router-dom'
+import { useAuth } from '../context/AuthContext'
+
+const ProtectedRoute = ({ children, unit }) => {
+  const { user, loading, canAccessUnit } = useAuth()
+  const location = useLocation()
+
+  if (loading) return <div className="loading-screen">Loading...</div>
+
+  if (!user) {
+    // Kalau ada unit target, redirect ke login unit itu, else ke landing
+    return <Navigate to={unit ? `/login/${unit}` : '/'} replace />
+  }
+
+  if (unit && !canAccessUnit(unit)) {
+    // User punya session tapi unit nggak match → kick balik ke landing
+    return <Navigate to="/" replace />
+  }
+
+  return children
+}
+
+export default ProtectedRoute
+```
+
+### 6) UPDATE: `src/App.jsx` — routing baru
+
+```jsx
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { AuthProvider } from './context/AuthContext'
+import Layout from './components/Layout'
+import ProtectedRoute from './components/ProtectedRoute'
+import LandingPage from './pages/LandingPage'
+import LoginPage from './pages/LoginPage'
+import ArenaDashboard from './pages/arena/ArenaDashboard'
+import GymDashboard from './pages/gym/GymDashboard'
+import ClinicComingSoon from './pages/clinic/ClinicComingSoon'
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <AuthProvider>
+        <Routes>
+          <Route path="/" element={<LandingPage />} />
+          <Route path="/login/:unit" element={<LoginPage />} />
+
+          {/* Clinic public coming-soon */}
+          <Route path="/clinic" element={<ClinicComingSoon />} />
+
+          {/* Protected unit dashboards */}
+          <Route
+            path="/arena"
+            element={
+              <ProtectedRoute unit="arena">
+                <Layout currentUnit="arena" />
+              </ProtectedRoute>
+            }
+          >
+            <Route index element={<ArenaDashboard />} />
+          </Route>
+
+          <Route
+            path="/gym"
+            element={
+              <ProtectedRoute unit="gym">
+                <Layout currentUnit="gym" />
+              </ProtectedRoute>
+            }
+          >
+            <Route index element={<GymDashboard />} />
+          </Route>
+
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </AuthProvider>
+    </BrowserRouter>
+  )
+}
+```
+
+> Penting: `UnitProvider` & import `UnitContext` sudah TIDAK ADA. Hapus semuanya.
+
+### 7) UPDATE: `src/components/Layout.jsx`
+
+- Accept prop `currentUnit` (string: 'arena' | 'gym')
+- Pass `currentUnit` ke `<Sidebar currentUnit={currentUnit} />`
+- Outlet untuk nested child route
+
+```jsx
+import { Outlet } from 'react-router-dom'
+import Sidebar from './Sidebar'
+
+const Layout = ({ currentUnit }) => (
+  <div className="layout">
+    <Sidebar currentUnit={currentUnit} />
+    <main className="main-content">
+      <Outlet />
+    </main>
+  </div>
+)
+
+export default Layout
+```
+
+### 8) UPDATE: `src/components/Sidebar.jsx`
+
+- Accept prop `currentUnit`
+- Header tampil nama unit (uppercase)
+- Menu items per unit (Batch 1 cukup placeholder Dashboard)
+- **Untuk super_admin:** tambah section "Switch Unit" di footer dengan 2 link (Arena & Gym), highlight yang aktif
+- Tombol "Logout" tetap ada
+
+```jsx
+import { Link, useNavigate } from 'react-router-dom'
+import { useAuth } from '../context/AuthContext'
+
+const UNIT_MENUS = {
+  arena: [
+    { label: 'Dashboard', path: '/arena', active: true },
+    { label: 'Bookings', path: '/arena/bookings', disabled: true },
+    { label: 'Vouchers', path: '/arena/vouchers', disabled: true },
+    { label: 'Master Data', path: '/arena/master', disabled: true },
+  ],
+  gym: [
+    { label: 'Dashboard', path: '/gym', active: true },
+    { label: 'Bookings', path: '/gym/bookings', disabled: true },
+  ],
+}
+
+const Sidebar = ({ currentUnit }) => {
+  const { user, logout } = useAuth()
+  const navigate = useNavigate()
+  const menus = UNIT_MENUS[currentUnit] || []
+  const isSuperAdmin = user?.role === 'super_admin'
+
+  const handleLogout = () => {
+    logout()
+    navigate('/', { replace: true })
+  }
+
+  return (
+    <aside className="sidebar">
+      <div className="sidebar-header">
+        <h2 className="brand-small">20FIT</h2>
+        <p className="unit-label">{currentUnit?.toUpperCase()}</p>
+      </div>
+
+      <nav className="sidebar-menu">
+        {menus.map((m) => (
+          <Link
+            key={m.path}
+            to={m.path}
+            className={`menu-item ${m.active ? 'active' : ''} ${m.disabled ? 'disabled' : ''}`}
+            onClick={(e) => m.disabled && e.preventDefault()}
+          >
+            {m.label}
+          </Link>
+        ))}
+      </nav>
+
+      <div className="sidebar-footer">
+        {isSuperAdmin && (
+          <div className="unit-switcher">
+            <p className="switcher-label">Switch Unit</p>
+            <Link
+              to="/arena"
+              className={`switcher-item ${currentUnit === 'arena' ? 'active' : ''}`}
+            >
+              Arena
+            </Link>
+            <Link
+              to="/gym"
+              className={`switcher-item ${currentUnit === 'gym' ? 'active' : ''}`}
+            >
+              Gym
+            </Link>
+          </div>
+        )}
+
+        <div className="sidebar-user">
+          <div className="sidebar-user-name">{user?.full_name}</div>
+          <div className="sidebar-user-role">
+            {user?.role === 'super_admin' ? 'SUPER ADMIN' : user?.role?.toUpperCase()}
+          </div>
+        </div>
+        <button onClick={handleLogout}>Logout</button>
+      </div>
+    </aside>
+  )
+}
+
+export default Sidebar
+```
+
+### 9) UPDATE: `src/styles/global.css` — tambahan untuk landing & switcher
+
+Tambahkan di bawah CSS existing (jangan hapus yang lama):
+
+```css
+/* Landing public */
+.landing-page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-page);
+  background-image:
+    linear-gradient(to right, rgba(13,13,13,0.025) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(13,13,13,0.025) 1px, transparent 1px);
+  background-size: 64px 64px;
+}
+
+.landing-header {
+  text-align: center;
+  padding: 80px 24px 24px;
+}
+
+.landing-header .brand {
+  font-size: 48px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  margin: 0;
+}
+
+.landing-header .brand-sub {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  font-size: 12px;
+}
+
+.landing-main {
+  flex: 1;
+  max-width: 1000px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 48px 32px;
+  box-sizing: border-box;
+}
+
+.landing-heading {
+  font-size: 28px;
+  margin: 0 0 8px;
+  text-align: center;
+}
+
+.landing-subtitle {
+  text-align: center;
+  color: var(--text-muted);
+  margin: 0 0 40px;
+}
+
+.landing-footer {
+  text-align: center;
+  padding: 24px;
+  color: var(--text-faint);
+}
+
+/* Override unit-card supaya bisa diklik sebagai button */
+button.unit-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 32px 24px;
+  cursor: pointer;
+  transition: all .15s ease;
+  text-align: left;
+  font-family: inherit;
+  width: 100%;
+}
+
+button.unit-card:hover:not(.disabled):not(:disabled) {
+  transform: translateY(-2px);
+  border-color: var(--red);
+  box-shadow: 0 4px 12px rgba(185,74,62,0.12);
+}
+
+button.unit-card:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Back link di login */
+.back-link {
+  display: inline-block;
+  margin-bottom: 16px;
+  color: var(--text-muted);
+  text-decoration: none;
+  font-size: 13px;
+}
+.back-link:hover { color: var(--red); }
+
+/* Sidebar switcher untuk super_admin */
+.unit-switcher {
+  margin-bottom: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+
+.switcher-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-faint);
+  margin: 0 0 8px;
+}
+
+.switcher-item {
+  display: block;
+  padding: 6px 10px;
+  font-size: 13px;
+  color: var(--text-faint);
+  text-decoration: none;
+  border-radius: 3px;
+  margin-bottom: 2px;
+}
+
+.switcher-item:hover { background: rgba(255,255,255,0.04); color: #FFFFFF; }
+.switcher-item.active { background: var(--red); color: #FFFFFF; }
+```
+
+### 10) HAPUS file lama yang tidak terpakai
+
+- `src/pages/SelectUnitPage.jsx` (sudah di-rename jadi LandingPage di langkah 2 — kalau Replit Agent rename via copy, hapus yang asli)
+
+---
+
+## CHECKLIST VERIFIKASI BATCH 1 v2
+
+1. ✅ Akses `/` (tanpa login) → tampil landing page dengan 3 unit card
+2. ✅ Clinic card disabled, klik tidak ngapa-ngapain
+3. ✅ Klik Arena → navigate `/login/arena`, tampil form dengan label "Arena Admin"
+4. ✅ Login `arena@20fit.id` / `admin123` di Arena → sukses, masuk `/arena`
+5. ✅ Login `arena@20fit.id` di **Gym** login page → ditolak (error message tampil)
+6. ✅ Login `gym@20fit.id` di Gym → sukses, masuk `/gym`
+7. ✅ Login `admin@20fit.id` (super_admin) di Arena → sukses, sidebar tampil "Switch Unit" section
+8. ✅ Super_admin klik "Gym" di switcher → navigate ke `/gym` tanpa re-login, sidebar update
+9. ✅ Sidebar `sidebar-user-role` tampil "SUPER ADMIN" untuk admin@20fit.id, "ADMIN" untuk arena@20fit.id
+10. ✅ Logout → balik ke `/`, localStorage `admin_user` cleared
+11. ✅ Coba akses `/arena` (URL langsung) tanpa login → redirect ke `/login/arena`
+12. ✅ Refresh saat di `/arena` dengan session → tetap di `/arena`
+13. ✅ Refresh saat di `/login/arena` → tetap di form login Arena (URL param consistent)
+14. ✅ Tidak ada error di console
+15. ✅ Tidak ada import `UnitContext` di file mana pun (sudah dihapus)
+
+---
+
+## YANG TIDAK DIUBAH
+
+- Schema `admin_users` (migration sudah dijalanin sebelumnya di Supabase)
+- File `supabase.js`
+- Style sidebar dark + cream main area (sudah ada)
+- Placeholder pages `ArenaDashboard`, `GymDashboard`, `ClinicComingSoon`
+
+---
+
+**Setelah verify checklist ini, lanjut Batch 2 (Arena module: dashboard real + bookings + vouchers + manual booking + export).**

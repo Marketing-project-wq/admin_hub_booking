@@ -1,0 +1,463 @@
+# REPLIT AGENT — Arena Admin: Tambah Menu "Venue Booking"
+
+> **Context:** Admin Arena panel sudah jalan. Tambah 1 menu baru: **Venue Booking** — untuk admin input booking venue dari komunitas/event eksternal yang booking melalui team admin (bukan customer app).
+>
+> **JANGAN ubah:** menu lain, auth, routing lain, global CSS, font.
+
+---
+
+## SCOPE
+
+1. Tambah menu "Venue Booking" di sidebar Arena
+2. Buat halaman `ArenaVenueBooking.jsx` dengan:
+   - List semua venue bookings (BK-)
+   - Form create booking baru
+   - Detail + edit + cancel booking
+
+---
+
+## SCHEMA REFERENCE
+
+**Tabel:** `arena_bookings` (prefix BK-)
+
+**Kolom lengkap:**
+```
+id, booking_code, unit_id, booking_date, start_time, end_time,
+booker_type, customer_type, full_name, email, phone, notes,
+price, discount, price_before_disc, status, payment_method,
+payment_ref, paid_at, voucher_code, created_at, updated_at
+```
+
+**Constraint values:**
+- `booker_type`: `'member'` | `'guest'`
+- `customer_type`: `'individual'` | `'corporation'`
+- `status`: `'pending_payment'` | `'confirmed'` | `'completed'` | `'no_show'` | `'cancelled'`
+
+**NOT NULL columns:**
+`booking_code, unit_id, booking_date, start_time, end_time, booker_type, full_name, email, phone, price, status`
+
+**Unit ID (satu-satunya unit aktif):**
+```
+6e8f44a7-23d4-4602-90d4-980c63b3acc2 — Arena 20FIT
+```
+
+**RPC untuk generate booking code:**
+```javascript
+const { data } = await supabase.rpc('generate_booking_code')
+// Returns: "BK-20260515-0001"
+```
+
+---
+
+## 1. UPDATE SIDEBAR
+
+**File:** `src/components/Sidebar.jsx`
+
+Tambah menu item "Venue Booking" di `UNIT_MENUS.arena`, setelah "Slot Bookings":
+
+```javascript
+arena: [
+  { label: 'Dashboard',      path: '/arena' },
+  { label: 'Venue Booking',  path: '/arena/venue-booking' },  // ← TAMBAH INI
+  { label: 'Slot Bookings',  path: '/arena/slot-bookings' },
+  { label: 'Class Bookings', path: '/arena/class-bookings' },
+  { label: 'Package Orders', path: '/arena/packages' },
+  { label: 'Vouchers',       path: '/arena/vouchers' },
+  // ... master data items tetap
+]
+```
+
+---
+
+## 2. UPDATE ROUTING
+
+**File:** `src/App.jsx`
+
+Tambah route di dalam block Arena:
+
+```jsx
+import ArenaVenueBooking from './pages/arena/ArenaVenueBooking'
+
+// Di dalam <Route path="/arena" ...>
+<Route path="venue-booking" element={<ArenaVenueBooking />} />
+```
+
+---
+
+## 3. BUAT FILE: `src/pages/arena/ArenaVenueBooking.jsx`
+
+### Layout halaman
+
+```
+[Header: "Venue Booking"] [+ Buat Booking]
+[Filter bar: search | status | date range]
+[Tabel list]
+[Pagination]
+
+[Modal: Form Booking Baru]
+[Modal: Detail Booking]
+[Modal: Konfirmasi Cancel]
+```
+
+### State
+
+```javascript
+const [bookings, setBookings] = useState([])
+const [total, setTotal] = useState(0)
+const [loading, setLoading] = useState(true)
+const [page, setPage] = useState(0)
+const PAGE_SIZE = 20
+
+// Filters
+const [search, setSearch] = useState('')
+const [statusFilter, setStatusFilter] = useState('all')
+const [dateFrom, setDateFrom] = useState('')
+const [dateTo, setDateTo] = useState('')
+
+// Modals
+const [showCreateModal, setShowCreateModal] = useState(false)
+const [selectedBooking, setSelectedBooking] = useState(null) // for detail
+const [showCancelConfirm, setShowCancelConfirm] = useState(false)
+```
+
+### Fetch bookings
+
+```javascript
+const fetchBookings = async () => {
+  setLoading(true)
+  let query = supabase
+    .from('arena_bookings')
+    .select('*', { count: 'exact' })
+    .order('created_at', { ascending: false })
+    .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)
+
+  if (statusFilter !== 'all') query = query.eq('status', statusFilter)
+  if (search) query = query.or(`full_name.ilike.%${search}%,booking_code.ilike.%${search}%,phone.ilike.%${search}%`)
+  if (dateFrom) query = query.gte('booking_date', dateFrom)
+  if (dateTo) query = query.lte('booking_date', dateTo)
+
+  const { data, count, error } = await query
+  if (!error) { setBookings(data || []); setTotal(count || 0) }
+  setLoading(false)
+}
+
+useEffect(() => { fetchBookings() }, [statusFilter, search, dateFrom, dateTo, page])
+```
+
+### Tabel kolom
+
+| Booking Code | Nama / Organisasi | Telp | Tanggal | Waktu | Durasi | Harga | Status | Aksi |
+|---|---|---|---|---|---|---|---|---|
+
+```jsx
+<table className="data-table">
+  <thead>
+    <tr>
+      <th>Booking Code</th>
+      <th>Nama / Organisasi</th>
+      <th>Telp</th>
+      <th>Tanggal</th>
+      <th>Waktu</th>
+      <th>Durasi</th>
+      <th>Harga</th>
+      <th>Status</th>
+      <th>Aksi</th>
+    </tr>
+  </thead>
+  <tbody>
+    {bookings.map(b => {
+      // Hitung durasi
+      const [sh, sm] = b.start_time.split(':').map(Number)
+      const [eh, em] = b.end_time.split(':').map(Number)
+      const durMins = (eh * 60 + em) - (sh * 60 + sm)
+      const durStr = durMins >= 60
+        ? `${Math.floor(durMins/60)}j ${durMins%60 > 0 ? durMins%60+'m' : ''}`.trim()
+        : `${durMins}m`
+
+      return (
+        <tr key={b.id}>
+          <td><code style={{fontSize:11}}>{b.booking_code}</code></td>
+          <td>
+            <div style={{fontWeight:600}}>{b.full_name}</div>
+            {b.notes && <div style={{fontSize:11,color:'var(--text-muted)'}}>{b.notes.slice(0,40)}</div>}
+          </td>
+          <td>{b.phone}</td>
+          <td>{fmtDate(b.booking_date)}</td>
+          <td style={{whiteSpace:'nowrap'}}>{fmtTime(b.start_time)} – {fmtTime(b.end_time)}</td>
+          <td>{durStr}</td>
+          <td style={{fontWeight:600}}>{fmtRp(b.price)}</td>
+          <td><span className={`badge badge-${b.status === 'confirmed' ? 'confirmed' : b.status === 'cancelled' ? 'cancelled' : 'pending'}`}>{b.status}</span></td>
+          <td>
+            <button className="action-btn detail" onClick={() => setSelectedBooking(b)}>Detail</button>
+            {b.status !== 'cancelled' && (
+              <button className="action-btn cancel" onClick={() => { setSelectedBooking(b); setShowCancelConfirm(true) }}>Cancel</button>
+            )}
+          </td>
+        </tr>
+      )
+    })}
+  </tbody>
+</table>
+```
+
+---
+
+### Form Booking Baru (Modal)
+
+**Field-field:**
+
+```jsx
+// INFORMASI PELANGGAN
+Nama / Organisasi*  [text input]          → full_name (NOT NULL)
+Email*              [email input]         → email (NOT NULL, fallback 'noemail@20fit.id' jika kosong)
+No. Telepon*        [text input]          → phone (NOT NULL)
+Tipe Customer       [radio: Individu / Korporasi]  → customer_type: 'individual'/'corporation'
+
+// DETAIL VENUE
+Tanggal*            [date input, min=today]  → booking_date
+Jam Mulai*          [time input]             → start_time
+Jam Selesai*        [time input]             → end_time
+Catatan             [textarea, optional]      → notes
+
+// HARGA
+Harga Normal (Rp)*  [number input]           → price_before_disc
+Diskon (Rp)         [number input, default 0] → discount
+Harga Final (Rp)    [readonly, calculated]    → price = price_before_disc - discount
+
+// PEMBAYARAN
+Status Pembayaran   [radio: Belum Bayar / Sudah Bayar]
+                    → Belum Bayar: status='pending_payment', paid_at=null
+                    → Sudah Bayar: status='confirmed', paid_at=NOW()
+Referensi Transfer  [text, tampil hanya jika Sudah Bayar, optional] → payment_ref
+```
+
+**Submit handler:**
+
+```javascript
+const handleCreate = async () => {
+  // Validasi
+  if (!form.full_name || !form.booking_date || !form.start_time || !form.end_time || !form.price_before_disc) {
+    setFormError('Lengkapi semua field wajib')
+    return
+  }
+  if (form.start_time >= form.end_time) {
+    setFormError('Jam selesai harus lebih dari jam mulai')
+    return
+  }
+
+  setSubmitting(true)
+  try {
+    // Generate booking code
+    const { data: codeData } = await supabase.rpc('generate_booking_code')
+    const bookingCode = codeData
+
+    const priceBeforeDisc = Number(form.price_before_disc) || 0
+    const discount = Number(form.discount) || 0
+    const price = priceBeforeDisc - discount
+
+    const payload = {
+      booking_code:     bookingCode,
+      unit_id:          '6e8f44a7-23d4-4602-90d4-980c63b3acc2',
+      booking_date:     form.booking_date,
+      start_time:       form.start_time,
+      end_time:         form.end_time,
+      booker_type:      'guest',
+      customer_type:    form.customer_type || 'individual',
+      full_name:        form.full_name.trim(),
+      email:            form.email?.trim() || 'noemail@20fit.id',
+      phone:            form.phone?.trim() || '0',
+      notes:            form.notes?.trim() || null,
+      price_before_disc: priceBeforeDisc,
+      discount:         discount,
+      price:            price,
+      status:           form.paid ? 'confirmed' : 'pending_payment',
+      payment_method:   'transfer',
+      payment_ref:      form.payment_ref?.trim() || null,
+      paid_at:          form.paid ? new Date().toISOString() : null,
+    }
+
+    const { error } = await supabase.from('arena_bookings').insert(payload)
+    if (error) throw error
+
+    setShowCreateModal(false)
+    resetForm()
+    fetchBookings()
+  } catch (err) {
+    setFormError(err.message)
+  } finally {
+    setSubmitting(false)
+  }
+}
+```
+
+---
+
+### Detail Modal
+
+Tampilkan semua info booking + 2 tombol aksi:
+
+```
+┌─────────────────────────────────────────┐
+│ BK-20260515-0001                        │
+├─────────────────────────────────────────┤
+│ INFORMASI CUSTOMER                      │
+│ Nama    : Humble Hustle                 │
+│ Email   : contact@humble.id             │
+│ Telp    : 081234567890                  │
+│ Tipe    : Korporasi                     │
+├─────────────────────────────────────────┤
+│ DETAIL VENUE                            │
+│ Tanggal : 15 Mei 2026                  │
+│ Waktu   : 08:00 – 17:00 (9 jam)        │
+│ Catatan : Setup event + breakdown       │
+├─────────────────────────────────────────┤
+│ PEMBAYARAN                              │
+│ Harga Normal : Rp 20.000.000           │
+│ Diskon       : Rp 0                    │
+│ Harga Final  : Rp 20.000.000           │
+│ Status       : CONFIRMED ✓             │
+│ Metode       : Transfer                │
+│ Referensi    : TRF/20260514/001        │
+│ Dibayar      : 14 Mei 2026 09:30       │
+├─────────────────────────────────────────┤
+│ Dibuat : 14 Mei 2026 08:00             │
+├─────────────────────────────────────────┤
+│ [Tandai Lunas]    [Cancel Booking]      │
+└─────────────────────────────────────────┘
+```
+
+**Tombol "Tandai Lunas"** — tampil hanya jika `status === 'pending_payment'`:
+```javascript
+const handleConfirm = async (booking) => {
+  const { error } = await supabase
+    .from('arena_bookings')
+    .update({
+      status: 'confirmed',
+      payment_method: 'transfer',
+      paid_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', booking.id)
+
+  if (!error) {
+    setSelectedBooking(null)
+    fetchBookings()
+  }
+}
+```
+
+**Tombol "Cancel Booking"** — tampil jika status bukan `cancelled`:
+Buka ConfirmModal → konfirmasi → update status ke `cancelled`.
+
+---
+
+### Cancel handler
+
+```javascript
+const handleCancel = async () => {
+  const { error } = await supabase
+    .from('arena_bookings')
+    .update({
+      status: 'cancelled',
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', selectedBooking.id)
+
+  if (!error) {
+    setShowCancelConfirm(false)
+    setSelectedBooking(null)
+    fetchBookings()
+  }
+}
+```
+
+---
+
+### Filter bar UI
+
+```jsx
+<div className="filter-bar">
+  <input
+    type="text"
+    placeholder="Cari nama / kode / telp..."
+    value={search}
+    onChange={e => { setSearch(e.target.value); setPage(0) }}
+    style={{ minWidth: 220 }}
+  />
+  <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(0) }}>
+    <option value="all">Semua Status</option>
+    <option value="pending_payment">Pending</option>
+    <option value="confirmed">Confirmed</option>
+    <option value="cancelled">Cancelled</option>
+  </select>
+  <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} />
+  <span style={{color:'var(--text-muted)',fontSize:13}}>s/d</span>
+  <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} />
+  {(search || statusFilter !== 'all' || dateFrom || dateTo) && (
+    <button className="btn-secondary" style={{fontSize:12,padding:'6px 12px'}}
+      onClick={() => { setSearch(''); setStatusFilter('all'); setDateFrom(''); setDateTo(''); setPage(0) }}>
+      Reset
+    </button>
+  )}
+  <div style={{marginLeft:'auto',fontSize:13,color:'var(--text-muted)'}}>
+    {total} booking
+  </div>
+</div>
+```
+
+---
+
+### Export CSV
+
+Tombol Export di header (gunakan `exportToCSV` dari `src/lib/format.js`):
+
+```javascript
+const handleExport = async () => {
+  const { data } = await supabase
+    .from('arena_bookings')
+    .select('booking_code, full_name, email, phone, customer_type, booking_date, start_time, end_time, price_before_disc, discount, price, status, payment_method, payment_ref, paid_at, notes, created_at')
+    .order('booking_date', { ascending: false })
+
+  const rows = data.map(b => ({
+    ...b,
+    booking_date: fmtDate(b.booking_date),
+    start_time: fmtTime(b.start_time),
+    end_time: fmtTime(b.end_time),
+    paid_at: fmtDateTime(b.paid_at),
+    created_at: fmtDateTime(b.created_at),
+  }))
+
+  exportToCSV(rows, 'venue_bookings')
+}
+```
+
+Header tombol:
+```jsx
+<div className="page-header">
+  <h1 className="page-title">Venue Booking</h1>
+  <div style={{display:'flex', gap:8}}>
+    <button className="btn-secondary" onClick={handleExport}>Export CSV</button>
+    <button className="btn-primary" onClick={() => setShowCreateModal(true)}>+ Buat Booking</button>
+  </div>
+</div>
+```
+
+---
+
+## TESTING CHECKLIST
+
+1. ✅ Menu "Venue Booking" muncul di sidebar Arena, active saat di halaman ini
+2. ✅ List booking muncul (7 venue rentals dari inject Mei)
+3. ✅ Search by nama / booking code / telp berfungsi
+4. ✅ Filter status berfungsi
+5. ✅ Filter tanggal from-to berfungsi
+6. ✅ Klik "+ Buat Booking" → modal form terbuka
+7. ✅ Form validasi: field wajib kosong → error message tampil
+8. ✅ Jam selesai ≤ jam mulai → error "Jam selesai harus lebih dari jam mulai"
+9. ✅ Submit form "Belum Bayar" → booking baru muncul di list dengan status `pending_payment`
+10. ✅ Submit form "Sudah Bayar" → status langsung `confirmed`, paid_at ter-isi
+11. ✅ Klik Detail → modal tampil info lengkap
+12. ✅ Tombol "Tandai Lunas" di detail → status berubah confirmed, tombol hilang
+13. ✅ Tombol "Cancel" → ConfirmModal muncul → konfirmasi → status berubah cancelled
+14. ✅ Export CSV → file ter-download dengan data yang benar
+15. ✅ Tidak ada console error

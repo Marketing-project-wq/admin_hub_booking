@@ -1,0 +1,382 @@
+# REPLIT AGENT — Arena Admin: 3 Updates
+
+> **Scope:** Update 2 halaman yang sudah ada.
+> **JANGAN ubah:** halaman lain, auth, routing, CSS global variables.
+
+---
+
+## UPDATE 1 — VENUE BOOKING: Tambah Tombol Edit
+
+**File:** `src/pages/arena/ArenaVenueBooking.jsx`
+
+### Behavior
+Tombol "Edit" di setiap row — buka modal form untuk update data booking venue yang sudah ada.
+Field yang bisa diedit: Nama/Organisasi, Telp, Email, Tanggal, Jam Mulai, Jam Selesai, Harga Normal, Diskon, Catatan, Status Bayar, Referensi Transfer.
+
+### Tambah state
+```javascript
+const [editBooking, setEditBooking] = useState(null)
+```
+
+### Tambah tombol di tabel (sebelum tombol Cancel)
+```jsx
+<button
+  className="action-btn"
+  style={{ borderColor: '#2563EB', color: '#2563EB' }}
+  onClick={() => setEditBooking(row)}
+>
+  Edit
+</button>
+```
+
+### Edit Modal — sama persis dengan Create Modal tapi pre-filled
+
+```jsx
+{editBooking && (
+  <div className="modal-overlay">
+    <div className="modal-box" style={{ maxWidth: 560 }}>
+      <h3 className="modal-title">Edit Venue Booking</h3>
+      <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: -12, marginBottom: 20 }}>
+        {editBooking.booking_code}
+      </p>
+
+      {/* Form fields — sama dengan Create, pre-filled dari editBooking */}
+      <div className="form-group">
+        <label>Nama / Organisasi *</label>
+        <input type="text" defaultValue={editBooking.full_name} id="edit_full_name" />
+      </div>
+      <div className="form-row">
+        <div className="form-group">
+          <label>Email</label>
+          <input type="email" defaultValue={editBooking.email === 'noemail@20fit.id' ? '' : editBooking.email} id="edit_email" />
+        </div>
+        <div className="form-group">
+          <label>No. Telepon *</label>
+          <input type="text" defaultValue={editBooking.phone === '0' ? '' : editBooking.phone} id="edit_phone" />
+        </div>
+      </div>
+      <div className="form-row">
+        <div className="form-group">
+          <label>Tanggal *</label>
+          <input type="date" defaultValue={editBooking.booking_date} id="edit_date" />
+        </div>
+        <div className="form-group">
+          <label>Tipe Customer</label>
+          <select defaultValue={editBooking.customer_type} id="edit_customer_type">
+            <option value="individual">Individu</option>
+            <option value="corporation">Korporasi</option>
+          </select>
+        </div>
+      </div>
+      <div className="form-row">
+        <div className="form-group">
+          <label>Jam Mulai *</label>
+          <input type="time" defaultValue={editBooking.start_time?.slice(0,5)} id="edit_start" />
+        </div>
+        <div className="form-group">
+          <label>Jam Selesai *</label>
+          <input type="time" defaultValue={editBooking.end_time?.slice(0,5)} id="edit_end" />
+        </div>
+      </div>
+      <div className="form-row">
+        <div className="form-group">
+          <label>Harga Normal (Rp) *</label>
+          <input type="number" defaultValue={editBooking.price_before_disc} id="edit_price" />
+        </div>
+        <div className="form-group">
+          <label>Diskon (Rp)</label>
+          <input type="number" defaultValue={editBooking.discount || 0} id="edit_discount" />
+        </div>
+      </div>
+      <div className="form-group">
+        <label>Catatan</label>
+        <textarea defaultValue={editBooking.notes || ''} id="edit_notes" rows={2} />
+      </div>
+      <div className="form-row">
+        <div className="form-group">
+          <label>Status Bayar</label>
+          <select defaultValue={editBooking.status} id="edit_status">
+            <option value="confirmed">Sudah Bayar</option>
+            <option value="pending_payment">Belum Bayar</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
+        </div>
+        <div className="form-group">
+          <label>Referensi Transfer</label>
+          <input type="text" defaultValue={editBooking.payment_ref || ''} id="edit_ref" />
+        </div>
+      </div>
+
+      {editError && <p className="form-error">{editError}</p>}
+
+      <div className="modal-footer">
+        <button className="btn-secondary" onClick={() => setEditBooking(null)}>Batal</button>
+        <button className="btn-primary" onClick={handleEditSubmit} disabled={editSubmitting}>
+          {editSubmitting ? 'Menyimpan...' : 'Simpan'}
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+```
+
+### Handler submit edit
+
+```javascript
+const [editError, setEditError] = useState('')
+const [editSubmitting, setEditSubmitting] = useState(false)
+
+const handleEditSubmit = async () => {
+  setEditError('')
+  const fullName  = document.getElementById('edit_full_name')?.value?.trim()
+  const email     = document.getElementById('edit_email')?.value?.trim() || 'noemail@20fit.id'
+  const phone     = document.getElementById('edit_phone')?.value?.trim() || '0'
+  const date      = document.getElementById('edit_date')?.value
+  const startTime = document.getElementById('edit_start')?.value
+  const endTime   = document.getElementById('edit_end')?.value
+  const custType  = document.getElementById('edit_customer_type')?.value
+  const priceRaw  = Number(document.getElementById('edit_price')?.value) || 0
+  const discount  = Number(document.getElementById('edit_discount')?.value) || 0
+  const notes     = document.getElementById('edit_notes')?.value?.trim() || null
+  const status    = document.getElementById('edit_status')?.value
+  const payRef    = document.getElementById('edit_ref')?.value?.trim() || null
+
+  if (!fullName) { setEditError('Nama wajib diisi'); return }
+  if (!date)     { setEditError('Tanggal wajib diisi'); return }
+  if (!startTime || !endTime) { setEditError('Jam wajib diisi'); return }
+  if (startTime >= endTime)   { setEditError('Jam selesai harus lebih dari jam mulai'); return }
+
+  const price = priceRaw - discount
+
+  setEditSubmitting(true)
+  const { error } = await supabase
+    .from('arena_bookings')
+    .update({
+      full_name:       fullName,
+      email:           email,
+      phone:           phone,
+      booking_date:    date,
+      start_time:      startTime,
+      end_time:        endTime,
+      customer_type:   custType,
+      price_before_disc: priceRaw,
+      discount:        discount,
+      price:           price,
+      notes:           notes,
+      status:          status,
+      payment_ref:     payRef,
+      payment_method:  status === 'confirmed' ? 'transfer' : null,
+      paid_at:         status === 'confirmed' ? (editBooking.paid_at || new Date().toISOString()) : null,
+      updated_at:      new Date().toISOString(),
+    })
+    .eq('id', editBooking.id)
+
+  if (error) {
+    setEditError(error.message)
+  } else {
+    setEditBooking(null)
+    fetchBookings()
+  }
+  setEditSubmitting(false)
+}
+```
+
+---
+
+## UPDATE 2 — CLASS BOOKINGS: Kolom Paid At + Sort + Filter Range
+
+**File:** `src/pages/arena/ArenaClassBookings.jsx`
+
+### 2a. Tambah state filter baru
+
+```javascript
+// Date range filters
+const [filterType, setFilterType] = useState('paid_at')   // 'paid_at' | 'created_at' | 'schedule_date'
+const [dateFrom, setDateFrom]     = useState('')
+const [dateTo, setDateTo]         = useState('')
+```
+
+### 2b. Update fetch query
+
+```javascript
+const fetchData = useCallback(async () => {
+  setLoading(true)
+  let query = supabase
+    .from('arena_class_bookings')
+    .select(`
+      id, booking_code, schedule_id, booker_type, customer_type,
+      full_name, email, phone, notes, price, discount, price_before_disc,
+      status, payment_method, payment_ref, paid_at, created_at, updated_at,
+      schedule:arena_class_schedules(
+        schedule_date, start_time, end_time, instructor,
+        class_type:arena_class_types(name, color)
+      )
+    `, { count: 'exact' })
+
+  // Status filter
+  if (statusFilter !== 'all') query = query.eq('status', statusFilter)
+
+  // Search
+  if (search) query = query.or(`full_name.ilike.%${search}%,booking_code.ilike.%${search}%`)
+
+  // Date range filter
+  if (dateFrom) {
+    if (filterType === 'schedule_date') {
+      // schedule_date filter butuh join — filter client-side setelah fetch
+      // (Supabase tidak support filter pada nested select langsung)
+    } else {
+      query = query.gte(filterType, dateFrom + 'T00:00:00')
+    }
+  }
+  if (dateTo) {
+    if (filterType !== 'schedule_date') {
+      query = query.lte(filterType, dateTo + 'T23:59:59')
+    }
+  }
+
+  // Sort: default paid_at DESC (terbaru di atas), null paid_at di bawah
+  query = query
+    .order('paid_at',     { ascending: false, nullsFirst: false })
+    .order('created_at',  { ascending: false })
+    .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)
+
+  const { data: rows, count, error: err } = await query
+  if (err) setError(err.message)
+  else {
+    let filtered = rows || []
+
+    // Client-side filter untuk schedule_date
+    if (filterType === 'schedule_date' && (dateFrom || dateTo)) {
+      filtered = filtered.filter(r => {
+        const sd = r.schedule?.schedule_date
+        if (!sd) return false
+        if (dateFrom && sd < dateFrom) return false
+        if (dateTo   && sd > dateTo)   return false
+        return true
+      })
+    }
+
+    setData(filtered)
+    setTotal(filterType === 'schedule_date' ? filtered.length : (count || 0))
+  }
+  setLoading(false)
+}, [search, statusFilter, page, filterType, dateFrom, dateTo])
+```
+
+### 2c. Update filter bar UI
+
+```jsx
+<div className="filter-bar">
+  {/* Search (existing) */}
+  <input
+    type="text"
+    placeholder="Cari nama / booking code..."
+    value={searchInput}
+    onChange={e => handleSearchChange(e.target.value)}
+    style={{ minWidth: 200 }}
+  />
+
+  {/* Status filter (existing) */}
+  <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(0) }}>
+    <option value="all">Semua Status</option>
+    <option value="confirmed">Confirmed</option>
+    <option value="pending_payment">Pending</option>
+    <option value="cancelled">Cancelled</option>
+  </select>
+
+  {/* BARU: Filter type selector */}
+  <select
+    value={filterType}
+    onChange={e => { setFilterType(e.target.value); setDateFrom(''); setDateTo(''); setPage(0) }}
+    style={{ minWidth: 160 }}
+  >
+    <option value="paid_at">Filter by Tgl Bayar</option>
+    <option value="created_at">Filter by Tgl Daftar</option>
+    <option value="schedule_date">Filter by Tgl Kelas</option>
+  </select>
+
+  {/* BARU: Date range */}
+  <input
+    type="date"
+    value={dateFrom}
+    onChange={e => { setDateFrom(e.target.value); setPage(0) }}
+  />
+  <span style={{ color: 'var(--text-muted)', fontSize: 13 }}>s/d</span>
+  <input
+    type="date"
+    value={dateTo}
+    onChange={e => { setDateTo(e.target.value); setPage(0) }}
+  />
+
+  {/* Reset filter */}
+  {(search || statusFilter !== 'all' || dateFrom || dateTo) && (
+    <button
+      className="btn-secondary"
+      style={{ fontSize: 12, padding: '6px 12px' }}
+      onClick={() => {
+        setSearch(''); setSearchInput('')
+        setStatusFilter('all')
+        setDateFrom(''); setDateTo('')
+        setPage(0)
+      }}
+    >
+      Reset
+    </button>
+  )}
+</div>
+```
+
+### 2d. Tambah kolom "Tgl Bayar" di tabel
+
+Tambah header kolom setelah "Payment":
+
+```jsx
+<thead>
+  <tr>
+    <th>Booking Code</th>
+    <th>Kelas</th>
+    <th>Jadwal</th>
+    <th>Nama</th>
+    <th>Telp</th>
+    <th>Amount</th>
+    <th>Status</th>
+    <th>Payment</th>
+    <th>Tgl Bayar</th>   {/* ← TAMBAH INI */}
+    <th>Aksi</th>
+  </tr>
+</thead>
+```
+
+Tambah cell di row:
+
+```jsx
+{/* Setelah cell payment_method */}
+<td style={{ fontSize: 12, whiteSpace: 'nowrap', color: 'var(--text-muted)' }}>
+  {row.paid_at ? fmtDate(row.paid_at) : '-'}
+</td>
+```
+
+---
+
+## TESTING CHECKLIST
+
+### Venue Booking Edit
+1. ✅ Tombol "Edit" (biru) muncul di setiap row
+2. ✅ Klik Edit → modal terbuka dengan data pre-filled
+3. ✅ Email `noemail@20fit.id` tampil kosong di form
+4. ✅ Phone `0` tampil kosong di form
+5. ✅ Update nama, jam, harga → tersimpan, tabel refresh
+6. ✅ Status berubah ke Cancelled → status badge berubah
+7. ✅ Jam selesai ≤ jam mulai → error validasi
+
+### Class Bookings
+8. ✅ Kolom "Tgl Bayar" muncul di tabel
+9. ✅ Data confirmed → Tgl Bayar terisi tanggal
+10. ✅ Data pending/cancelled → Tgl Bayar tampil "-"
+11. ✅ Default sort: yang paling baru paid_at di atas
+12. ✅ Pending (paid_at null) muncul di bawah confirmed
+13. ✅ Filter "Tgl Bayar" + range → data filter sesuai
+14. ✅ Filter "Tgl Daftar" + range → data filter sesuai
+15. ✅ Filter "Tgl Kelas" + range → data filter sesuai
+16. ✅ Reset → semua filter bersih
+17. ✅ Tidak ada console error

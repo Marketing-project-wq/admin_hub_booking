@@ -1,0 +1,347 @@
+# REPLIT AGENT — Arena Schedules: Tambah Checkbox + Search + Date Range
+## Update `src/pages/arena/master/ArenaSchedules.jsx`
+
+> **Context:** Halaman Schedules sudah ada tapi belum punya checkbox bulk select, search, dan date range filter.
+> **JANGAN ubah:** logika fetch booked count, join class_type, tombol Edit/Cancel/Hapus per row yang sudah ada.
+
+---
+
+## PERUBAHAN YANG DIBUTUHKAN
+
+### 1. State baru — tambahkan ke existing state
+
+```javascript
+// Date range — default hari ini s/d 30 hari ke depan
+const today = new Date().toISOString().slice(0, 10)
+const next30 = new Date(Date.now() + 30*24*60*60*1000).toISOString().slice(0, 10)
+
+const [dateFrom, setDateFrom] = useState(today)
+const [dateTo, setDateTo] = useState(next30)
+const [search, setSearch] = useState('')
+const [searchInput, setSearchInput] = useState('')
+const [statusFilter, setStatusFilter] = useState('active') // 'active' | 'cancelled' | 'all'
+const [selected, setSelected] = useState(new Set())
+const [showBulkConfirm, setShowBulkConfirm] = useState(false)
+const [bulkLoading, setBulkLoading] = useState(false)
+const searchTimer = useRef(null)
+```
+
+### 2. Update fetch query — tambah filter baru
+
+```javascript
+const fetchData = useCallback(async () => {
+  setLoading(true)
+  let query = supabase
+    .from('arena_class_schedules')
+    .select(`
+      id, class_type_id, unit_id, schedule_date, start_time, end_time,
+      instructor, quota, notes, is_cancelled, cancelled_reason, created_at, updated_at,
+      class_type:arena_class_types(id, name, color, duration_min)
+    `, { count: 'exact' })
+    .order('schedule_date', { ascending: false })
+    .order('start_time', { ascending: true })
+
+  // Date range filter
+  if (dateFrom) query = query.gte('schedule_date', dateFrom)
+  if (dateTo)   query = query.lte('schedule_date', dateTo)
+
+  // Status filter
+  if (statusFilter === 'active')    query = query.eq('is_cancelled', false)
+  if (statusFilter === 'cancelled') query = query.eq('is_cancelled', true)
+
+  // Class type filter (existing)
+  if (classTypeFilter !== 'all') query = query.eq('class_type_id', classTypeFilter)
+
+  // Search by instructor name
+  if (search) query = query.ilike('instructor', `%${search}%`)
+
+  query = query.range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)
+
+  const { data: rows, count, error: err } = await query
+  // ... fetch booked counts (existing logic, keep as-is)
+}, [dateFrom, dateTo, search, statusFilter, classTypeFilter, page])
+```
+
+### 3. Search debounce handler
+
+```javascript
+const handleSearchChange = (val) => {
+  setSearchInput(val)
+  if (searchTimer.current) clearTimeout(searchTimer.current)
+  searchTimer.current = setTimeout(() => {
+    setSearch(val)
+    setPage(0)
+  }, 300)
+}
+```
+
+### 4. Reset selection saat filter berubah
+
+```javascript
+useEffect(() => {
+  setSelected(new Set())
+}, [dateFrom, dateTo, search, statusFilter, classTypeFilter, page])
+```
+
+### 5. Bulk cancel handler
+
+```javascript
+const handleBulkCancel = async () => {
+  setBulkLoading(true)
+  try {
+    const ids = Array.from(selected)
+    const { error } = await supabase
+      .from('arena_class_schedules')
+      .update({
+        is_cancelled: true,
+        cancelled_reason: 'Dibatalkan oleh admin',
+        updated_at: new Date().toISOString(),
+      })
+      .in('id', ids)
+
+    if (error) throw error
+    setSelected(new Set())
+    setShowBulkConfirm(false)
+    fetchData()
+  } catch (err) {
+    setError(err.message)
+  } finally {
+    setBulkLoading(false)
+  }
+}
+```
+
+---
+
+## UI — FILTER BAR (ganti filter bar yang lama)
+
+```jsx
+<div className="filter-bar">
+  {/* Search */}
+  <input
+    type="text"
+    placeholder="Cari instruktur..."
+    value={searchInput}
+    onChange={e => handleSearchChange(e.target.value)}
+    style={{ minWidth: 180 }}
+  />
+
+  {/* Date range */}
+  <input
+    type="date"
+    value={dateFrom}
+    onChange={e => { setDateFrom(e.target.value); setPage(0) }}
+  />
+  <span style={{ color: 'var(--text-muted)', fontSize: 13 }}>s/d</span>
+  <input
+    type="date"
+    value={dateTo}
+    onChange={e => { setDateTo(e.target.value); setPage(0) }}
+  />
+
+  {/* Class type filter */}
+  <select value={classTypeFilter} onChange={e => { setClassTypeFilter(e.target.value); setPage(0) }}>
+    <option value="all">Semua Kelas</option>
+    {classTypes.map(ct => (
+      <option key={ct.id} value={ct.id}>{ct.name}</option>
+    ))}
+  </select>
+
+  {/* Status filter */}
+  <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(0) }}>
+    <option value="active">Aktif</option>
+    <option value="cancelled">Dibatalkan</option>
+    <option value="all">Semua Status</option>
+  </select>
+
+  {/* Reset */}
+  <button
+    className="btn-secondary"
+    style={{ fontSize: 12, padding: '6px 12px' }}
+    onClick={() => {
+      setDateFrom(today)
+      setDateTo(next30)
+      setClassTypeFilter('all')
+      setStatusFilter('active')
+      setSearch('')
+      setSearchInput('')
+      setPage(0)
+    }}
+  >
+    Reset
+  </button>
+
+  <div style={{ marginLeft: 'auto', fontSize: 13, color: 'var(--text-muted)' }}>
+    {total} jadwal
+  </div>
+</div>
+```
+
+---
+
+## UI — TABEL (tambah checkbox column)
+
+### Header tabel — tambah kolom checkbox di paling kiri
+
+```jsx
+<thead>
+  <tr>
+    <th style={{ width: 40 }}>
+      <input
+        type="checkbox"
+        checked={
+          data.filter(r => !r.is_cancelled).length > 0 &&
+          data.filter(r => !r.is_cancelled).every(r => selected.has(r.id))
+        }
+        onChange={e => {
+          const activeIds = data.filter(r => !r.is_cancelled).map(r => r.id)
+          if (e.target.checked) {
+            setSelected(prev => new Set([...prev, ...activeIds]))
+          } else {
+            setSelected(prev => {
+              const next = new Set(prev)
+              activeIds.forEach(id => next.delete(id))
+              return next
+            })
+          }
+        }}
+      />
+    </th>
+    <th>Tanggal</th>
+    <th>Kelas</th>
+    <th>Instruktur</th>
+    <th>Waktu</th>
+    <th>Quota</th>
+    <th>Booked</th>
+    <th>Sisa</th>
+    <th>Status</th>
+    <th>Aksi</th>
+  </tr>
+</thead>
+```
+
+### Row tabel — tambah checkbox di paling kiri, tambah highlight
+
+```jsx
+<tr
+  key={row.id}
+  className={selected.has(row.id) ? 'row-selected' : ''}
+>
+  <td>
+    {!row.is_cancelled && (
+      <input
+        type="checkbox"
+        checked={selected.has(row.id)}
+        onChange={e => {
+          setSelected(prev => {
+            const next = new Set(prev)
+            e.target.checked ? next.add(row.id) : next.delete(row.id)
+            return next
+          })
+        }}
+      />
+    )}
+  </td>
+  {/* ... kolom lainnya tetap sama */}
+</tr>
+```
+
+---
+
+## UI — FLOATING ACTION BAR
+
+Tambahkan di luar tabel, setelah closing `</div>` tabel:
+
+```jsx
+{selected.size > 0 && (
+  <div style={{
+    position: 'fixed',
+    bottom: 32,
+    left: '50%',
+    transform: 'translateX(-50%)',
+    background: 'var(--text-primary)',
+    color: '#FFFFFF',
+    borderRadius: 8,
+    padding: '14px 24px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: 16,
+    boxShadow: '0 4px 20px rgba(0,0,0,0.25)',
+    zIndex: 100,
+    whiteSpace: 'nowrap',
+  }}>
+    <span style={{ fontSize: 14 }}>
+      <strong>{selected.size}</strong> jadwal dipilih
+    </span>
+    <button
+      className="btn-danger"
+      style={{ padding: '8px 16px', fontSize: 13 }}
+      disabled={bulkLoading}
+      onClick={() => setShowBulkConfirm(true)}
+    >
+      {bulkLoading ? 'Memproses...' : 'Cancel Semua'}
+    </button>
+    <button
+      onClick={() => setSelected(new Set())}
+      style={{
+        background: 'transparent',
+        border: '1px solid rgba(255,255,255,0.3)',
+        color: '#FFFFFF',
+        borderRadius: 4,
+        padding: '8px 16px',
+        fontSize: 13,
+        cursor: 'pointer',
+        fontFamily: 'inherit',
+      }}
+    >
+      Batal Pilih
+    </button>
+  </div>
+)}
+
+{showBulkConfirm && (
+  <ConfirmModal
+    title="Cancel Jadwal"
+    message={`Batalkan ${selected.size} jadwal yang dipilih? Jadwal yang sudah ada peserta tetap akan dibatalkan.`}
+    onConfirm={handleBulkCancel}
+    onCancel={() => setShowBulkConfirm(false)}
+    danger
+  />
+)}
+```
+
+---
+
+## CSS — tambah ke global.css
+
+```css
+tr.row-selected td {
+  background: #FEF3F2;
+}
+
+input[type="checkbox"] {
+  width: 15px;
+  height: 15px;
+  cursor: pointer;
+  accent-color: var(--red);
+}
+```
+
+---
+
+## TESTING CHECKLIST
+
+1. ✅ Search instruktur → tabel filter realtime (debounce 300ms)
+2. ✅ Date range dari/s/d → tabel filter sesuai range
+3. ✅ Filter status Aktif/Dibatalkan/Semua → benar
+4. ✅ Filter class type → benar
+5. ✅ Reset → semua filter kembali default
+6. ✅ Checkbox per row muncul (hanya untuk jadwal aktif)
+7. ✅ Klik checkbox → row highlight merah muda
+8. ✅ Checkbox header → select/deselect semua aktif di page
+9. ✅ Floating bar muncul saat ada yang dipilih
+10. ✅ "Batal Pilih" → deselect semua, bar hilang
+11. ✅ "Cancel Semua" → ConfirmModal muncul
+12. ✅ Konfirmasi → jadwal ter-cancel, tabel refresh, selection cleared
+13. ✅ Ganti filter → selection auto-cleared
+14. ✅ Jadwal cancelled tidak bisa di-select

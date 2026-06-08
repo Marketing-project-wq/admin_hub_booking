@@ -1,0 +1,311 @@
+# REPLIT AGENT — Class Bookings: Tambah Tombol Edit (Reschedule)
+
+> **Context:** Halaman Class Bookings (`/arena/class-bookings`).
+> **Tujuan:** Admin bisa pindahkan booking peserta ke jadwal lain apabila jadwal harus berubah.
+> **JANGAN ubah:** logika fetch, filter, pagination, tombol Confirm/Cancel yang sudah ada.
+
+---
+
+## SCHEMA REFERENCE
+
+**`arena_class_bookings`** — field yang diupdate saat reschedule:
+- `schedule_id` → UUID jadwal baru
+- `updated_at` → timestamp sekarang
+
+**`arena_class_schedules`** — fetch jadwal yang tersedia:
+```
+id, class_type_id, schedule_date, start_time, end_time, instructor, quota, is_cancelled,
+class_type:arena_class_types(id, name, color)
+```
+
+**Validasi sebelum reschedule:**
+1. Jadwal tujuan tidak di-cancel (`is_cancelled = false`)
+2. Jadwal tujuan masih ada sisa quota (quota > booked_count)
+3. Jadwal tujuan berbeda dari jadwal sekarang
+
+---
+
+## PERUBAHAN DI TABEL CLASS BOOKINGS
+
+Tambah tombol **"Edit"** di kolom Aksi, sebelum tombol Confirm:
+
+```jsx
+<td style={{ whiteSpace: 'nowrap' }}>
+  <button className="action-btn detail" onClick={() => setSelectedBooking(row)}>Detail</button>
+  {/* TAMBAH TOMBOL INI */}
+  <button className="action-btn" onClick={() => setRescheduleBooking(row)}
+    style={{ borderColor: '#2563EB', color: '#2563EB' }}>
+    Edit
+  </button>
+  {row.status === 'pending_payment' && (
+    <button className="action-btn confirm" onClick={() => setConfirmConfirm(row)}>Confirm</button>
+  )}
+  {row.status !== 'cancelled' && (
+    <button className="action-btn cancel" onClick={() => setConfirmCancel(row)}>Cancel</button>
+  )}
+</td>
+```
+
+---
+
+## STATE BARU
+
+```javascript
+const [rescheduleBooking, setRescheduleBooking] = useState(null)
+```
+
+---
+
+## KOMPONEN BARU: RescheduleModal
+
+Buat file `src/components/arena/RescheduleModal.jsx`:
+
+```jsx
+import { useState, useEffect } from 'react'
+import { supabase } from '../../lib/supabase'
+import { fmtDate, fmtTime, fmtRp } from '../../lib/format'
+
+export default function RescheduleModal({ booking, onClose, onRefresh }) {
+  const [schedules, setSchedules] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [selected, setSelected] = useState(null)
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState('')
+  const [bookedCounts, setBookedCounts] = useState({})
+
+  // Info jadwal sekarang
+  const currentSchedule = booking.schedule
+
+  useEffect(() => {
+    fetchAvailableSchedules()
+  }, [])
+
+  const fetchAvailableSchedules = async () => {
+    setLoading(true)
+
+    // Fetch jadwal aktif dari hari ini ke depan
+    const today = new Date().toISOString().slice(0, 10)
+    const { data, error } = await supabase
+      .from('arena_class_schedules')
+      .select(`
+        id, schedule_date, start_time, end_time, instructor, quota, is_cancelled,
+        class_type:arena_class_types(id, name, color)
+      `)
+      .eq('is_cancelled', false)
+      .gte('schedule_date', today)
+      .neq('id', booking.schedule_id) // exclude jadwal sekarang
+      .order('schedule_date', { ascending: true })
+      .order('start_time', { ascending: true })
+
+    if (error) { setError(error.message); setLoading(false); return }
+
+    // Fetch booked count per schedule
+    const ids = (data || []).map(s => s.id)
+    if (ids.length > 0) {
+      const { data: bookings } = await supabase
+        .from('arena_class_bookings')
+        .select('schedule_id')
+        .in('schedule_id', ids)
+        .eq('status', 'confirmed')
+
+      const counts = {}
+      bookings?.forEach(b => {
+        counts[b.schedule_id] = (counts[b.schedule_id] || 0) + 1
+      })
+      setBookedCounts(counts)
+    }
+
+    setSchedules(data || [])
+    setLoading(false)
+  }
+
+  const handleReschedule = async () => {
+    if (!selected) { setError('Pilih jadwal tujuan dulu'); return }
+
+    // Validasi quota
+    const target = schedules.find(s => s.id === selected)
+    const booked = bookedCounts[selected] || 0
+    if (booked >= target.quota) {
+      setError('Jadwal ini sudah penuh, pilih jadwal lain')
+      return
+    }
+
+    setSubmitting(true)
+    setError('')
+
+    const { error } = await supabase
+      .from('arena_class_bookings')
+      .update({
+        schedule_id: selected,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', booking.id)
+
+    if (error) {
+      setError(error.message)
+      setSubmitting(false)
+      return
+    }
+
+    onRefresh()
+    onClose()
+  }
+
+  const getSisa = (schedule) => {
+    const booked = bookedCounts[schedule.id] || 0
+    return schedule.quota - booked
+  }
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal-box" style={{ maxWidth: 640 }}>
+        <h3 className="modal-title">Pindah Jadwal</h3>
+
+        {/* Info booking */}
+        <div style={{
+          background: 'var(--bg-page)',
+          border: '1px solid var(--border)',
+          borderRadius: 6,
+          padding: '12px 16px',
+          marginBottom: 20,
+          fontSize: 14,
+        }}>
+          <div style={{ fontWeight: 600, marginBottom: 4 }}>{booking.full_name}</div>
+          <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>
+            {booking.booking_code}
+          </div>
+          <div style={{ marginTop: 8, fontSize: 13 }}>
+            <span style={{ color: 'var(--text-muted)' }}>Jadwal sekarang: </span>
+            {currentSchedule?.class_type?.name} —{' '}
+            {fmtDate(currentSchedule?.schedule_date)}{' '}
+            {fmtTime(currentSchedule?.start_time)}–{fmtTime(currentSchedule?.end_time)}{' '}
+            ({currentSchedule?.instructor})
+          </div>
+        </div>
+
+        {/* Pilih jadwal baru */}
+        <div style={{ marginBottom: 8, fontWeight: 600, fontSize: 14 }}>
+          Pilih Jadwal Baru
+        </div>
+
+        {error && (
+          <p style={{ color: 'var(--red)', fontSize: 13, marginBottom: 12 }}>{error}</p>
+        )}
+
+        {loading ? (
+          <p style={{ color: 'var(--text-muted)', fontSize: 14 }}>Memuat jadwal...</p>
+        ) : schedules.length === 0 ? (
+          <p style={{ color: 'var(--text-muted)', fontSize: 14 }}>Tidak ada jadwal tersedia</p>
+        ) : (
+          <div style={{ maxHeight: 360, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 6 }}>
+            <table className="data-table" style={{ margin: 0 }}>
+              <thead>
+                <tr>
+                  <th style={{ width: 36 }}></th>
+                  <th>Tanggal</th>
+                  <th>Kelas</th>
+                  <th>Instruktur</th>
+                  <th>Waktu</th>
+                  <th>Sisa</th>
+                </tr>
+              </thead>
+              <tbody>
+                {schedules.map(s => {
+                  const sisa = getSisa(s)
+                  const full = sisa <= 0
+                  return (
+                    <tr
+                      key={s.id}
+                      onClick={() => !full && setSelected(s.id)}
+                      style={{
+                        cursor: full ? 'not-allowed' : 'pointer',
+                        opacity: full ? 0.5 : 1,
+                        background: selected === s.id ? '#FEF3F2' : undefined,
+                      }}
+                    >
+                      <td>
+                        <input
+                          type="radio"
+                          checked={selected === s.id}
+                          onChange={() => !full && setSelected(s.id)}
+                          disabled={full}
+                          style={{ accentColor: 'var(--red)' }}
+                        />
+                      </td>
+                      <td style={{ fontSize: 13 }}>{fmtDate(s.schedule_date)}</td>
+                      <td style={{ fontSize: 13 }}>
+                        {s.class_type?.color && (
+                          <span style={{ color: s.class_type.color, marginRight: 4 }}>●</span>
+                        )}
+                        {s.class_type?.name}
+                      </td>
+                      <td style={{ fontSize: 13 }}>{s.instructor}</td>
+                      <td style={{ fontSize: 13, whiteSpace: 'nowrap' }}>
+                        {fmtTime(s.start_time)}–{fmtTime(s.end_time)}
+                      </td>
+                      <td style={{ fontSize: 13 }}>
+                        <span style={{ color: sisa <= 3 ? 'var(--red)' : 'inherit', fontWeight: sisa <= 3 ? 600 : 400 }}>
+                          {full ? 'Penuh' : `${sisa} slot`}
+                        </span>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <div className="modal-footer">
+          <button className="btn-secondary" onClick={onClose} disabled={submitting}>
+            Batal
+          </button>
+          <button
+            className="btn-primary"
+            onClick={handleReschedule}
+            disabled={!selected || submitting}
+          >
+            {submitting ? 'Memproses...' : 'Pindah Jadwal'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+```
+
+---
+
+## UPDATE ArenaClassBookings.jsx
+
+### Import tambahan
+```javascript
+import RescheduleModal from '../../components/arena/RescheduleModal'
+```
+
+### Tambah modal render di bagian bawah (setelah modal lain)
+```jsx
+{rescheduleBooking && (
+  <RescheduleModal
+    booking={rescheduleBooking}
+    onClose={() => setRescheduleBooking(null)}
+    onRefresh={fetchData}
+  />
+)}
+```
+
+---
+
+## TESTING CHECKLIST
+
+1. ✅ Tombol "Edit" muncul di setiap row (warna biru, di antara Detail dan Confirm)
+2. ✅ Klik Edit → modal terbuka dengan info booking sekarang di atas
+3. ✅ Modal tampil list jadwal aktif dari hari ini ke depan (exclude jadwal sekarang)
+4. ✅ Kolom "Sisa" menampilkan sisa quota yang akurat
+5. ✅ Jadwal penuh → disabled (tidak bisa dipilih, opacity 50%)
+6. ✅ Sisa ≤ 3 → angka merah sebagai warning
+7. ✅ Klik row → radio button selected, row highlight merah muda
+8. ✅ Tombol "Pindah Jadwal" disabled jika belum pilih jadwal
+9. ✅ Submit → `schedule_id` booking ter-update ke jadwal baru
+10. ✅ Setelah sukses → modal tutup, tabel refresh, kolom Jadwal berubah
+11. ✅ Tidak ada error console

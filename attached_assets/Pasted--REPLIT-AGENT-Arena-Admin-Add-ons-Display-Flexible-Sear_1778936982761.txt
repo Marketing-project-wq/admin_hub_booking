@@ -1,0 +1,244 @@
+# REPLIT AGENT — Arena Admin: Add-ons Display + Flexible Search
+
+> **Scope:** Update beberapa halaman yang sudah ada.
+> **JANGAN ubah:** logika fetch utama, pagination, filter lain yang sudah ada.
+
+---
+
+## UPDATE 1 — CLASS BOOKINGS: Tampilkan Add-ons
+
+**File:** `src/pages/arena/ArenaClassBookings.jsx`
+
+### 1a. Update fetch query — tambah add-ons
+
+```javascript
+let query = supabase
+  .from('arena_class_bookings')
+  .select(`
+    id, booking_code, schedule_id, booker_type, customer_type,
+    full_name, email, phone, notes, price, discount, price_before_disc,
+    status, payment_method, payment_ref, paid_at, created_at, updated_at,
+    group_id,
+    schedule:arena_class_schedules(
+      schedule_date, start_time, end_time, instructor,
+      class_type:arena_class_types(name, color)
+    ),
+    addons:arena_class_booking_addons(
+      id, addon_name, addon_price, qty, subtotal
+    )
+  `, { count: 'exact' })
+```
+
+### 1b. Tampilkan add-ons di tabel — kolom Amount
+
+Update cell Amount untuk tampilkan breakdown kalau ada add-on:
+
+```jsx
+<td style={{ whiteSpace: 'nowrap' }}>
+  <div style={{ fontWeight: 600 }}>{fmtRp(row.price)}</div>
+  {row.addons?.length > 0 && (
+    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+      + {row.addons.length} add-on
+    </div>
+  )}
+</td>
+```
+
+### 1c. Tampilkan add-ons di Detail Modal
+
+Di `BookingDetailModal` atau detail view, tambahkan section add-ons setelah section harga:
+
+```jsx
+{/* Section Add-ons */}
+{booking.addons?.length > 0 && (
+  <div className="modal-section">
+    <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
+      Add-ons
+    </div>
+    {booking.addons.map(a => (
+      <div key={a.id} className="detail-row">
+        <span className="detail-label">{a.addon_name} ×{a.qty}</span>
+        <span className="detail-value">{fmtRp(a.subtotal)}</span>
+      </div>
+    ))}
+    <div className="detail-row" style={{ borderTop: '1px solid var(--border)', marginTop: 4, paddingTop: 8 }}>
+      <span className="detail-label" style={{ fontWeight: 600 }}>Total Addon</span>
+      <span className="detail-value" style={{ fontWeight: 600 }}>
+        {fmtRp(booking.addons.reduce((s, a) => s + a.subtotal, 0))}
+      </span>
+    </div>
+    <div className="detail-row">
+      <span className="detail-label" style={{ fontWeight: 700 }}>Grand Total</span>
+      <span className="detail-value" style={{ fontWeight: 700, color: 'var(--red)' }}>
+        {fmtRp(booking.price + booking.addons.reduce((s, a) => s + a.subtotal, 0))}
+      </span>
+    </div>
+  </div>
+)}
+```
+
+---
+
+## UPDATE 2 — FLEXIBLE SEARCH DI SEMUA MENU
+
+Untuk setiap halaman, ganti search yang hanya cari 1-2 field menjadi search yang lebih luas.
+
+### ArenaClassBookings.jsx
+
+**Search fields:** booking_code, full_name, email, phone, group_id (4 char pertama), payment_method
+
+```javascript
+// Update query search:
+if (search) {
+  // Cek apakah search match group_id prefix (4 char hex)
+  const isGroupSearch = /^[0-9a-f]{4}$/i.test(search.trim())
+
+  if (isGroupSearch) {
+    // Search by group_id prefix — fetch semua lalu filter client-side
+    // karena Supabase tidak support LIKE pada UUID langsung
+    query = query.or(`full_name.ilike.%${search}%,booking_code.ilike.%${search}%,email.ilike.%${search}%,phone.ilike.%${search}%`)
+    // group_id filter ditambahkan setelah fetch via post-processing
+  } else {
+    query = query.or(
+      `full_name.ilike.%${search}%,` +
+      `booking_code.ilike.%${search}%,` +
+      `email.ilike.%${search}%,` +
+      `phone.ilike.%${search}%,` +
+      `payment_method.ilike.%${search}%`
+    )
+  }
+}
+
+// Post-processing untuk group_id search:
+const isGroupSearch = /^[0-9a-f]{4}$/i.test(search.trim())
+if (isGroupSearch && rows) {
+  const filtered = rows.filter(r =>
+    r.group_id?.startsWith(search.toLowerCase()) ||
+    r.full_name?.toLowerCase().includes(search.toLowerCase()) ||
+    r.booking_code?.toLowerCase().includes(search.toLowerCase()) ||
+    r.email?.toLowerCase().includes(search.toLowerCase()) ||
+    r.phone?.includes(search)
+  )
+  setData(filtered)
+} else {
+  setData(rows || [])
+}
+```
+
+**Placeholder:** `"Cari nama, kode, email, telp, grup..."`
+
+---
+
+### ArenaVenueBooking.jsx
+
+**Search fields:** booking_code, full_name, phone, email, notes (nama event/PIC)
+
+```javascript
+if (search) query = query.or(
+  `full_name.ilike.%${search}%,` +
+  `booking_code.ilike.%${search}%,` +
+  `phone.ilike.%${search}%,` +
+  `email.ilike.%${search}%,` +
+  `notes.ilike.%${search}%`
+)
+```
+
+**Placeholder:** `"Cari nama, kode, telp, email, catatan..."`
+
+---
+
+### ArenaSlotBookings.jsx (kalau ada)
+
+**Search fields:** booking_code, full_name, phone, email, voucher_code
+
+```javascript
+if (search) query = query.or(
+  `full_name.ilike.%${search}%,` +
+  `booking_code.ilike.%${search}%,` +
+  `phone.ilike.%${search}%,` +
+  `email.ilike.%${search}%,` +
+  `voucher_code.ilike.%${search}%`
+)
+```
+
+**Placeholder:** `"Cari nama, kode, telp, email, voucher..."`
+
+---
+
+### ArenaPackageOrders.jsx
+
+**Search fields:** order_code, full_name, phone, email, package_name
+
+```javascript
+if (search) query = query.or(
+  `full_name.ilike.%${search}%,` +
+  `order_code.ilike.%${search}%,` +
+  `phone.ilike.%${search}%,` +
+  `email.ilike.%${search}%,` +
+  `package_name.ilike.%${search}%`
+)
+```
+
+**Placeholder:** `"Cari nama, kode order, telp, paket..."`
+
+---
+
+### ArenaVouchers.jsx
+
+**Search fields:** code, description
+
+```javascript
+// Client-side filter (vouchers biasanya sedikit, tidak perlu server-side)
+const filtered = vouchers.filter(v =>
+  v.code?.toLowerCase().includes(search.toLowerCase()) ||
+  v.description?.toLowerCase().includes(search.toLowerCase())
+)
+```
+
+**Placeholder:** `"Cari kode atau deskripsi voucher..."`
+
+---
+
+### SchedulesPage.jsx
+
+**Search fields:** instructor (sudah ada) + tambah class type name
+
+```javascript
+// Instruktur sudah ada, tambah fallback untuk nama kelas
+// Note: class type name ada di join, tidak bisa filter server-side langsung
+// Gunakan client-side filter setelah fetch:
+if (search) {
+  const s = search.toLowerCase()
+  const serverFiltered = await query.ilike('instructor', `%${search}%`)
+  // Setelah dapat data, tambah client-side untuk class type name:
+  const allFiltered = serverFiltered.filter(r =>
+    r.instructor?.toLowerCase().includes(s) ||
+    r.arena_class_types?.name?.toLowerCase().includes(s)
+  )
+}
+```
+
+**Placeholder:** `"Cari instruktur atau nama kelas..."`
+
+---
+
+## TESTING CHECKLIST
+
+### Add-ons di Class Bookings
+1. ✅ Booking dengan add-on → kolom Amount tampil "+ X add-on" di bawah harga
+2. ✅ Booking tanpa add-on → kolom Amount hanya tampil harga kelas
+3. ✅ Detail booking dengan add-on → section Add-ons muncul dengan breakdown
+4. ✅ Grand Total di detail = price + total addon subtotal
+
+### Flexible Search
+5. ✅ Class Bookings — search by email → hasil muncul
+6. ✅ Class Bookings — search by phone → hasil muncul
+7. ✅ Class Bookings — search 4 char group ID (misal "a3f2") → semua tiket grup muncul
+8. ✅ Class Bookings — search "mayar" → filter by payment method
+9. ✅ Venue Booking — search by notes/nama event → hasil muncul
+10. ✅ Venue Booking — search by email → hasil muncul
+11. ✅ Package Orders — search by nama paket → hasil muncul
+12. ✅ Vouchers — search by deskripsi → hasil muncul
+13. ✅ Schedules — search by nama kelas (Foundation/Complete) → hasil muncul
+14. ✅ Placeholder search box updated di semua halaman
+15. ✅ Tidak ada console error

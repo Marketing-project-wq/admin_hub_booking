@@ -1,0 +1,516 @@
+# REPLIT AGENT — Arena Admin: Tambah Menu "User Management"
+
+> **Context:** Admin Panel Arena. Menu ini hanya visible untuk role `super_admin`.
+> **Tujuan:** Super admin bisa manage akun admin/staff Arena — tambah, edit, reset password, toggle active, set permissions.
+>
+> **Schema:** tabel `admin_users` + RPC functions yang sudah ada di Supabase.
+> **JANGAN ubah:** menu lain, auth flow, routing lain.
+
+---
+
+## SCHEMA REFERENCE
+
+### Tabel `admin_users`
+```
+id UUID, email TEXT, full_name TEXT, role TEXT, unit TEXT,
+password_hash TEXT, permissions JSONB, is_active BOOLEAN,
+last_login_at TIMESTAMPTZ, created_at TIMESTAMPTZ, updated_at TIMESTAMPTZ
+```
+
+**Role values:** `'super_admin'` | `'admin'` | `'staff'`
+**Unit values:** `'arena'` | `'gym'` | `'clinic'` | NULL (super_admin)
+
+### RPC Functions tersedia:
+```javascript
+// Buat user baru
+supabase.rpc('create_admin_user', {
+  p_email: 'email@20fit.id',
+  p_full_name: 'Nama Lengkap',
+  p_role: 'staff',           // 'admin' atau 'staff'
+  p_unit: 'arena',
+  p_password: 'password123',
+  p_permissions: {}          // JSONB object
+})
+
+// Reset password
+supabase.rpc('set_admin_password', {
+  p_user_id: 'uuid',
+  p_new_password: 'newpassword'
+})
+
+// Update permissions
+supabase.rpc('update_admin_permissions', {
+  p_user_id: 'uuid',
+  p_permissions: { 'vouchers.edit': true, 'master.edit': false }
+})
+```
+
+### Permission keys yang dipakai:
+```javascript
+const PERMISSION_KEYS = [
+  { key: 'dashboard.view',    label: 'Lihat Dashboard' },
+  { key: 'bookings.view',     label: 'Lihat Bookings' },
+  { key: 'bookings.edit',     label: 'Edit / Confirm / Cancel Booking' },
+  { key: 'bookings.create',   label: 'Buat Manual Booking' },
+  { key: 'venue.view',        label: 'Lihat Venue Booking' },
+  { key: 'venue.edit',        label: 'Edit Venue Booking' },
+  { key: 'vouchers.view',     label: 'Lihat Vouchers' },
+  { key: 'vouchers.edit',     label: 'Buat / Edit Voucher' },
+  { key: 'packages.view',     label: 'Lihat Package Orders' },
+  { key: 'schedules.view',    label: 'Lihat Schedules' },
+  { key: 'schedules.edit',    label: 'Tambah / Edit / Cancel Schedule' },
+  { key: 'master.view',       label: 'Lihat Master Data' },
+  { key: 'master.edit',       label: 'Edit Master Data (Units, Class Types, Coaches, Addons)' },
+]
+```
+
+**Note:** Role `admin` otomatis punya semua akses. Permission hanya berlaku untuk role `staff`.
+
+---
+
+## PERUBAHAN SIDEBAR
+
+**File:** `src/components/Sidebar.jsx`
+
+Tambah menu "User Management" di `UNIT_MENUS.arena` — **hanya tampil untuk super_admin**:
+
+```javascript
+// Di dalam render menu items:
+{menus.map(m => {
+  // Sembunyikan User Management untuk non-super_admin
+  if (m.path === '/arena/users' && user?.role !== 'super_admin') return null
+  return <Link key={m.path} to={m.path} ...>{m.label}</Link>
+})}
+```
+
+Tambah item ke array:
+```javascript
+{ label: 'User Management', path: '/arena/users', icon: '◻' },
+```
+
+Letakkan setelah Vouchers, sebelum divider Master Data.
+
+---
+
+## ROUTING
+
+**File:** `src/App.jsx`
+
+```jsx
+import ArenaUserManagement from './pages/arena/ArenaUserManagement'
+
+// Di dalam Route path="/arena":
+<Route path="users" element={<ArenaUserManagement />} />
+```
+
+---
+
+## HALAMAN UTAMA: `src/pages/arena/ArenaUserManagement.jsx`
+
+### Layout
+```
+[Header: "User Management"] [+ Tambah User]
+[Filter: search | role | status]
+[Tabel users]
+[Modal: Tambah User]
+[Modal: Edit User]
+[Modal: Reset Password]
+[Modal: Set Permissions]
+```
+
+### Fetch users (hanya unit arena + super_admin bisa lihat semua)
+```javascript
+const fetchUsers = async () => {
+  setLoading(true)
+  // Tidak bisa query admin_users langsung karena RLS block
+  // Pakai service route via custom RPC atau fetch langsung dengan anon key
+  // WORKAROUND: query dengan .select() — RLS pub_select dikonfigurasi FALSE
+  // Jadi perlu buat RPC khusus get_admin_users
+
+  const { data, error } = await supabase
+    .rpc('get_admin_users', { p_unit: 'arena' })
+
+  if (!error) setUsers(data || [])
+  setLoading(false)
+}
+```
+
+**PENTING:** Karena RLS `admin_users` block direct SELECT, perlu buat RPC baru dulu.
+Sebelum paste prompt ini, jalankan SQL migration berikut di Supabase:
+
+```sql
+-- RPC untuk list users per unit (hanya arena untuk sekarang)
+CREATE OR REPLACE FUNCTION get_admin_users(p_unit TEXT DEFAULT NULL)
+RETURNS TABLE(
+  id UUID, email TEXT, full_name TEXT, role TEXT, unit TEXT,
+  permissions JSONB, is_active BOOLEAN, last_login_at TIMESTAMPTZ, created_at TIMESTAMPTZ
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, extensions
+AS $$
+BEGIN
+  RETURN QUERY
+  SELECT u.id, u.email, u.full_name, u.role, u.unit,
+         u.permissions, u.is_active, u.last_login_at, u.created_at
+    FROM admin_users u
+   WHERE (p_unit IS NULL OR u.unit = p_unit OR u.role = 'super_admin')
+   ORDER BY u.role, u.created_at;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION get_admin_users(TEXT) TO anon, authenticated;
+
+-- RPC untuk update user info (non-password fields)
+CREATE OR REPLACE FUNCTION update_admin_user(
+  p_user_id   UUID,
+  p_full_name TEXT,
+  p_role      TEXT,
+  p_is_active BOOLEAN
+) RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, extensions
+AS $$
+BEGIN
+  UPDATE admin_users
+     SET full_name = p_full_name,
+         role = p_role,
+         is_active = p_is_active,
+         updated_at = NOW()
+   WHERE id = p_user_id;
+  RETURN FOUND;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION update_admin_user(UUID, TEXT, TEXT, BOOLEAN) TO authenticated;
+```
+
+### State
+```javascript
+const [users, setUsers] = useState([])
+const [loading, setLoading] = useState(true)
+const [search, setSearch] = useState('')
+const [roleFilter, setRoleFilter] = useState('all')
+const [statusFilter, setStatusFilter] = useState('active')
+const [showAddModal, setShowAddModal] = useState(false)
+const [editUser, setEditUser] = useState(null)
+const [resetUser, setResetUser] = useState(null)
+const [permUser, setPermUser] = useState(null)
+const [error, setError] = useState('')
+const [success, setSuccess] = useState('')
+```
+
+### Filtered users (client-side filter)
+```javascript
+const filtered = users.filter(u => {
+  if (search && !u.full_name.toLowerCase().includes(search.toLowerCase()) &&
+      !u.email.toLowerCase().includes(search.toLowerCase())) return false
+  if (roleFilter !== 'all' && u.role !== roleFilter) return false
+  if (statusFilter === 'active' && !u.is_active) return false
+  if (statusFilter === 'inactive' && u.is_active) return false
+  return true
+})
+```
+
+### Tabel kolom
+| Nama | Email | Role | Unit | Status | Last Login | Aksi |
+
+```jsx
+<table className="data-table">
+  <thead>
+    <tr>
+      <th>Nama</th><th>Email</th><th>Role</th>
+      <th>Status</th><th>Last Login</th><th>Aksi</th>
+    </tr>
+  </thead>
+  <tbody>
+    {filtered.map(u => (
+      <tr key={u.id}>
+        <td>
+          <div style={{ fontWeight: 600 }}>{u.full_name}</div>
+          {u.role === 'super_admin' && (
+            <div style={{ fontSize: 11, color: 'var(--red)' }}>SUPER ADMIN</div>
+          )}
+        </td>
+        <td style={{ fontSize: 13 }}>{u.email}</td>
+        <td>
+          <span className={`badge ${u.role === 'super_admin' ? 'badge-cancelled' : u.role === 'admin' ? 'badge-confirmed' : 'badge-pending'}`}>
+            {u.role.toUpperCase()}
+          </span>
+        </td>
+        <td>
+          <span className={`badge ${u.is_active ? 'badge-confirmed' : 'badge-cancelled'}`}>
+            {u.is_active ? 'Aktif' : 'Nonaktif'}
+          </span>
+        </td>
+        <td style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+          {u.last_login_at ? fmtDateTime(u.last_login_at) : '-'}
+        </td>
+        <td style={{ whiteSpace: 'nowrap' }}>
+          {/* Jangan tampilkan aksi untuk super_admin */}
+          {u.role !== 'super_admin' && (
+            <>
+              <button className="action-btn detail"
+                onClick={() => setEditUser(u)}>Edit</button>
+              <button className="action-btn"
+                style={{ borderColor: '#2563EB', color: '#2563EB' }}
+                onClick={() => setResetUser(u)}>Reset PW</button>
+              {u.role === 'staff' && (
+                <button className="action-btn"
+                  style={{ borderColor: '#7C3AED', color: '#7C3AED' }}
+                  onClick={() => setPermUser(u)}>Permissions</button>
+              )}
+            </>
+          )}
+        </td>
+      </tr>
+    ))}
+  </tbody>
+</table>
+```
+
+---
+
+## MODAL 1: Tambah User
+
+```jsx
+// Fields:
+// - Nama Lengkap (text, required)
+// - Email (email, required)
+// - Role: admin / staff (radio)
+// - Password (text, required, min 8 char)
+// - Konfirmasi Password (text, harus match)
+
+const handleAddUser = async () => {
+  if (form.password !== form.confirmPassword) {
+    setFormError('Password tidak cocok')
+    return
+  }
+  if (form.password.length < 8) {
+    setFormError('Password minimal 8 karakter')
+    return
+  }
+  setSubmitting(true)
+  const { error } = await supabase.rpc('create_admin_user', {
+    p_email:       form.email.toLowerCase().trim(),
+    p_full_name:   form.fullName.trim(),
+    p_role:        form.role,
+    p_unit:        'arena',
+    p_password:    form.password,
+    p_permissions: {},
+  })
+  if (error) {
+    setFormError(error.message.includes('duplicate') ? 'Email sudah terdaftar' : error.message)
+  } else {
+    setShowAddModal(false)
+    setSuccess(`User ${form.email} berhasil dibuat`)
+    fetchUsers()
+  }
+  setSubmitting(false)
+}
+```
+
+---
+
+## MODAL 2: Edit User
+
+Fields yang bisa diedit:
+- **Nama Lengkap** (text)
+- **Role** (radio: admin / staff) — tidak bisa edit super_admin
+- **Status** (toggle: Aktif / Nonaktif)
+
+```javascript
+const handleEditUser = async () => {
+  setSubmitting(true)
+  const { error } = await supabase.rpc('update_admin_user', {
+    p_user_id:   editUser.id,
+    p_full_name: form.fullName.trim(),
+    p_role:      form.role,
+    p_is_active: form.isActive,
+  })
+  if (error) {
+    setFormError(error.message)
+  } else {
+    setEditUser(null)
+    setSuccess('User berhasil diupdate')
+    fetchUsers()
+  }
+  setSubmitting(false)
+}
+```
+
+---
+
+## MODAL 3: Reset Password
+
+Minimal — hanya input password baru:
+
+```jsx
+// Fields:
+// - Password Baru (text, min 8 char, required)
+// - Konfirmasi Password Baru
+
+const handleResetPassword = async () => {
+  if (form.password !== form.confirmPassword) {
+    setFormError('Password tidak cocok')
+    return
+  }
+  setSubmitting(true)
+  const { error } = await supabase.rpc('set_admin_password', {
+    p_user_id:      resetUser.id,
+    p_new_password: form.password,
+  })
+  if (error) {
+    setFormError(error.message)
+  } else {
+    setResetUser(null)
+    setSuccess(`Password ${resetUser.full_name} berhasil direset`)
+  }
+  setSubmitting(false)
+}
+```
+
+---
+
+## MODAL 4: Set Permissions (hanya untuk role staff)
+
+Tampilkan checklist semua permission keys:
+
+```jsx
+const PERMISSION_KEYS = [
+  { key: 'dashboard.view',  label: 'Lihat Dashboard' },
+  { key: 'bookings.view',   label: 'Lihat Bookings' },
+  { key: 'bookings.edit',   label: 'Edit / Confirm / Cancel Booking' },
+  { key: 'bookings.create', label: 'Buat Manual Booking' },
+  { key: 'venue.view',      label: 'Lihat Venue Booking' },
+  { key: 'venue.edit',      label: 'Edit Venue Booking' },
+  { key: 'vouchers.view',   label: 'Lihat Vouchers' },
+  { key: 'vouchers.edit',   label: 'Buat / Edit Voucher' },
+  { key: 'packages.view',   label: 'Lihat Package Orders' },
+  { key: 'schedules.view',  label: 'Lihat Schedules' },
+  { key: 'schedules.edit',  label: 'Tambah / Edit / Cancel Schedule' },
+  { key: 'master.view',     label: 'Lihat Master Data' },
+  { key: 'master.edit',     label: 'Edit Master Data' },
+]
+
+// Init dari existing permissions
+const [perms, setPerms] = useState({})
+useEffect(() => {
+  if (permUser) setPerms(permUser.permissions || {})
+}, [permUser])
+
+const togglePerm = (key) => setPerms(p => ({ ...p, [key]: !p[key] }))
+
+// "Select All" shortcut
+const selectAll = () => {
+  const all = {}
+  PERMISSION_KEYS.forEach(p => { all[p.key] = true })
+  setPerms(all)
+}
+const clearAll = () => setPerms({})
+
+const handleSavePermissions = async () => {
+  setSubmitting(true)
+  const { error } = await supabase.rpc('update_admin_permissions', {
+    p_user_id:     permUser.id,
+    p_permissions: perms,
+  })
+  if (error) {
+    setFormError(error.message)
+  } else {
+    setPermUser(null)
+    setSuccess(`Permissions ${permUser.full_name} berhasil disimpan`)
+    fetchUsers()
+  }
+  setSubmitting(false)
+}
+```
+
+**UI checklist:**
+```jsx
+<div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginBottom: 12 }}>
+  <button className="btn-secondary" style={{ fontSize: 12, padding: '4px 10px' }}
+    onClick={clearAll}>Clear All</button>
+  <button className="btn-secondary" style={{ fontSize: 12, padding: '4px 10px' }}
+    onClick={selectAll}>Select All</button>
+</div>
+
+{PERMISSION_KEYS.map(p => (
+  <label key={p.key} style={{
+    display: 'flex', alignItems: 'center', gap: 10,
+    padding: '10px 0', borderBottom: '1px solid var(--border)',
+    cursor: 'pointer', fontSize: 14,
+  }}>
+    <input
+      type="checkbox"
+      checked={!!perms[p.key]}
+      onChange={() => togglePerm(p.key)}
+      style={{ accentColor: 'var(--red)', width: 16, height: 16 }}
+    />
+    <span>{p.label}</span>
+    <code style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text-faint)' }}>
+      {p.key}
+    </code>
+  </label>
+))}
+```
+
+---
+
+## SUCCESS / ERROR BANNER
+
+Tampilkan di atas tabel, auto-dismiss setelah 3 detik:
+
+```javascript
+useEffect(() => {
+  if (success) {
+    const t = setTimeout(() => setSuccess(''), 3000)
+    return () => clearTimeout(t)
+  }
+}, [success])
+```
+
+```jsx
+{success && (
+  <div style={{
+    background: '#D1FAE5', border: '1px solid #6EE7B7',
+    borderRadius: 6, padding: '10px 16px', marginBottom: 16,
+    color: '#065F46', fontSize: 13,
+  }}>
+    ✓ {success}
+  </div>
+)}
+{error && (
+  <div style={{
+    background: '#FEE2E2', border: '1px solid #FECACA',
+    borderRadius: 6, padding: '10px 16px', marginBottom: 16,
+    color: '#991B1B', fontSize: 13,
+  }}>
+    {error}
+  </div>
+)}
+```
+
+---
+
+## TESTING CHECKLIST
+
+1. ✅ Menu "User Management" muncul di sidebar hanya untuk super_admin
+2. ✅ Login sebagai arena@20fit.id → menu tidak muncul
+3. ✅ List user muncul (minimal: super admin + arena admin)
+4. ✅ Search by nama/email berfungsi
+5. ✅ Filter role (admin/staff/semua) berfungsi
+6. ✅ Filter status (aktif/nonaktif/semua) berfungsi
+7. ✅ Tambah user baru → muncul di list
+8. ✅ Email duplikat → error "Email sudah terdaftar"
+9. ✅ Password < 8 karakter → error validasi
+10. ✅ Password tidak cocok → error validasi
+11. ✅ Edit nama + role → tersimpan
+12. ✅ Toggle nonaktif → status berubah, user tidak bisa login
+13. ✅ Reset password → user bisa login dengan password baru
+14. ✅ Set permissions staff → checklist tersimpan di DB
+15. ✅ Select All / Clear All permissions berfungsi
+16. ✅ Tombol aksi tidak muncul untuk super_admin row
+17. ✅ Success banner muncul dan auto-dismiss 3 detik
+18. ✅ Tidak ada console error

@@ -1,0 +1,208 @@
+# REPLIT AGENT — Cut-off Time: Admin Setting + Customer App Enforcement
+
+> **Context:** Fitur baru cut-off time untuk arena class booking.
+> **Logic:** Customer tidak bisa booking kelas jika waktu sekarang sudah melewati `(start_time - cutoff_minutes)`.
+> **Default global:** 60 menit (dari `arena_booking_units.cutoff_minutes`).
+> **Override:** Bisa di-set per jadwal via `arena_class_schedules.cutoff_minutes` (NULL = pakai default unit).
+>
+> **Prereq:** SQL migration sudah dijalankan (kolom `cutoff_minutes` sudah ada di kedua tabel).
+
+---
+
+## BAGIAN 1 — ADMIN PANEL
+
+### 1a. Halaman Units (`src/pages/arena/master/ArenaUnits.jsx`)
+
+Tambah field **"Cut-off Booking (menit)"** di form edit/tambah unit.
+
+```jsx
+<div className="form-group">
+  <label>Cut-off Booking (menit)</label>
+  <input
+    type="number"
+    min="0"
+    max="1440"
+    value={form.cutoff_minutes ?? 60}
+    onChange={e => setForm(f => ({ ...f, cutoff_minutes: Number(e.target.value) }))}
+  />
+  <small style={{ color: 'var(--text-muted)', fontSize: 11, marginTop: 4 }}>
+    Berapa menit sebelum kelas dimulai, booking ditutup. Default: 60 menit (1 jam).
+  </small>
+</div>
+```
+
+Tampilkan di tabel Units — tambah kolom **"Cut-off"**:
+```jsx
+<td>{row.cutoff_minutes} mnt</td>
+```
+
+Pastikan `cutoff_minutes` ikut di-include saat INSERT dan UPDATE payload.
+
+---
+
+### 1b. Halaman Schedules (`src/pages/arena/master/ArenaSchedules.jsx`)
+
+Tambah field **"Cut-off Override (menit)"** di form tambah/edit jadwal — opsional.
+
+```jsx
+<div className="form-group">
+  <label>Cut-off Override (menit) <span style={{color:'var(--text-muted)'}}>— opsional</span></label>
+  <input
+    type="number"
+    min="0"
+    max="1440"
+    placeholder={`Default: ${unitCutoff} menit (dari setting unit)`}
+    value={form.cutoff_minutes ?? ''}
+    onChange={e => setForm(f => ({
+      ...f,
+      cutoff_minutes: e.target.value === '' ? null : Number(e.target.value)
+    }))}
+  />
+  <small style={{ color: 'var(--text-muted)', fontSize: 11, marginTop: 4 }}>
+    Kosongkan untuk pakai default unit. Isi jika jadwal ini perlu cut-off berbeda.
+  </small>
+</div>
+```
+
+Untuk `unitCutoff` — fetch dari `arena_booking_units`:
+```javascript
+const [unitCutoff, setUnitCutoff] = useState(60)
+
+useEffect(() => {
+  supabase
+    .from('arena_booking_units')
+    .select('cutoff_minutes')
+    .eq('id', '6e8f44a7-23d4-4602-90d4-980c63b3acc2')
+    .single()
+    .then(({ data }) => {
+      if (data) setUnitCutoff(data.cutoff_minutes)
+    })
+}, [])
+```
+
+Tambah kolom **"Cut-off"** di tabel Schedules:
+```jsx
+<td style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+  {row.cutoff_minutes != null
+    ? `${row.cutoff_minutes}m *`
+    : `${unitCutoff}m`}
+</td>
+```
+`*` berarti override dari default unit.
+
+Pastikan `cutoff_minutes` ikut di payload INSERT/UPDATE (null jika kosong).
+
+---
+
+## BAGIAN 2 — CUSTOMER BOOKING APP
+
+### 2a. Fetch jadwal — filter jadwal yang sudah melewati cut-off
+
+**File:** halaman/komponen yang fetch `arena_class_schedules` untuk ditampilkan ke customer.
+
+Tambah filter: hanya tampilkan jadwal yang booking deadline-nya belum lewat.
+
+```javascript
+// Fetch schedules dengan filter cut-off
+const fetchSchedules = async (selectedDate) => {
+  const nowISO = new Date().toISOString()
+
+  const { data: schedules, error } = await supabase
+    .from('arena_class_schedules')
+    .select(`
+      id, schedule_date, start_time, end_time, instructor, quota,
+      cutoff_minutes,
+      class_type:arena_class_types(id, name, color, price_guest, duration_min),
+      unit:arena_booking_units(id, name, cutoff_minutes)
+    `)
+    .eq('schedule_date', selectedDate)
+    .eq('is_cancelled', false)
+    .order('start_time', { ascending: true })
+
+  if (error || !schedules) return []
+
+  // Filter client-side: hanya jadwal yang booking deadline belum lewat
+  const now = new Date()
+  const filtered = schedules.filter(s => {
+    // Effective cutoff: override schedule atau default unit
+    const cutoffMins = s.cutoff_minutes ?? s.unit?.cutoff_minutes ?? 60
+
+    // Booking deadline = schedule_date + start_time - cutoff_minutes
+    const [hours, minutes] = s.start_time.split(':').map(Number)
+    const classStart = new Date(`${s.schedule_date}T${s.start_time}`)
+    const deadline = new Date(classStart.getTime() - cutoffMins * 60 * 1000)
+
+    return now < deadline
+  })
+
+  return filtered
+}
+```
+
+### 2b. Tampilkan info cut-off di UI customer (opsional tapi recommended)
+
+Di card jadwal, tampilkan deadline booking:
+
+```jsx
+const getCutoffDeadline = (schedule) => {
+  const cutoffMins = schedule.cutoff_minutes ?? schedule.unit?.cutoff_minutes ?? 60
+  const classStart = new Date(`${schedule.schedule_date}T${schedule.start_time}`)
+  const deadline = new Date(classStart.getTime() - cutoffMins * 60 * 1000)
+  return deadline
+}
+
+// Di dalam card jadwal:
+const deadline = getCutoffDeadline(schedule)
+const isClosingSoon = (deadline - new Date()) < 30 * 60 * 1000 // < 30 menit lagi
+
+{isClosingSoon && (
+  <p style={{ color: '#E53E3E', fontSize: 12, margin: '4px 0 0' }}>
+    ⚠️ Booking tutup {deadline.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} WIB
+  </p>
+)}
+```
+
+### 2c. Validasi saat submit booking
+
+Tambah validasi di handler submit booking — double-check sebelum insert:
+
+```javascript
+const handleBookingSubmit = async (scheduleId, scheduleData) => {
+  // Validasi cut-off sebelum submit
+  const cutoffMins = scheduleData.cutoff_minutes ?? scheduleData.unit?.cutoff_minutes ?? 60
+  const classStart = new Date(`${scheduleData.schedule_date}T${scheduleData.start_time}`)
+  const deadline = new Date(classStart.getTime() - cutoffMins * 60 * 1000)
+
+  if (new Date() >= deadline) {
+    setError('Maaf, batas waktu booking untuk kelas ini sudah lewat.')
+    return
+  }
+
+  // Lanjut proses booking seperti biasa...
+}
+```
+
+---
+
+## TESTING CHECKLIST
+
+### Admin Panel
+1. ✅ Units → Edit → ada field "Cut-off Booking (menit)" dengan value 60
+2. ✅ Units → Save → cutoff_minutes tersimpan di DB
+3. ✅ Schedules → Tambah jadwal → ada field "Cut-off Override" opsional
+4. ✅ Schedules → isi override → tersimpan di DB (nilai angka, bukan null)
+5. ✅ Schedules → kosongkan override → tersimpan NULL di DB
+6. ✅ Tabel Schedules → kolom Cut-off tampil (angka dengan `*` jika override)
+
+### Customer App
+7. ✅ Jadwal yang booking deadline-nya sudah lewat → tidak muncul di list
+8. ✅ Jadwal yang masih bisa dibooking → muncul normal
+9. ✅ Jadwal dengan cut-off override → menggunakan nilai override, bukan default
+10. ✅ Warning "⚠️ Booking tutup HH:MM WIB" muncul jika deadline < 30 menit lagi
+11. ✅ Submit booking setelah deadline → muncul error "batas waktu booking sudah lewat"
+12. ✅ Submit booking sebelum deadline → lanjut normal
+
+### Edge cases
+13. ✅ Kelas hari ini jam 08:30, sekarang jam 07:45 → MUNCUL (deadline 07:30, masih 15 menit)
+14. ✅ Kelas hari ini jam 08:30, sekarang jam 07:31 → TIDAK MUNCUL (deadline 07:30, sudah lewat)
+15. ✅ Kelas besok → selalu muncul (deadline masih jauh)

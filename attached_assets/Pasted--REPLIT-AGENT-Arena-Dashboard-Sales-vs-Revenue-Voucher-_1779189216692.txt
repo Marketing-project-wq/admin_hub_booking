@@ -1,0 +1,562 @@
+# REPLIT AGENT — Arena Dashboard: Sales vs Revenue + Voucher Usage Tracking
+## 2 Prompt: A = Dashboard, B = Customer App (voucher tracking)
+
+---
+
+# PROMPT A — Admin Panel: Enhanced Dashboard
+
+**File:** `src/pages/arena/ArenaDashboard.jsx`
+
+> **Prereq:** SQL migration `14_voucher_usage_migration.sql` sudah dijalankan.
+> **JANGAN ubah:** routing, sidebar, auth.
+
+---
+
+## KONSEP
+
+- **SALES** = uang masuk → filter by `paid_at`
+- **REVENUE** = layanan terdelivered → filter by `schedule_date` / `booking_date`
+- **2 section terpisah** dalam 1 halaman, keduanya visible sekaligus
+- **Period filter fleksibel** dengan presets + custom date range
+
+---
+
+## PERIOD FILTER (ganti pills lama)
+
+```jsx
+const PRESETS = [
+  { label: 'Hari Ini',    getValue: () => { const t = today(); return { from: t, to: t } } },
+  { label: 'Kemarin',     getValue: () => { const y = yesterday(); return { from: y, to: y } } },
+  { label: '7 Hari',      getValue: () => ({ from: daysAgo(6), to: today() }) },
+  { label: 'Bulan Ini',   getValue: () => ({ from: startOfMonth(), to: today() }) },
+  { label: 'Bulan Lalu',  getValue: () => ({ from: startOfLastMonth(), to: endOfLastMonth() }) },
+]
+
+// Helpers
+const today          = () => new Date().toISOString().slice(0, 10)
+const yesterday      = () => { const d = new Date(); d.setDate(d.getDate()-1); return d.toISOString().slice(0, 10) }
+const daysAgo        = (n) => { const d = new Date(); d.setDate(d.getDate()-n); return d.toISOString().slice(0, 10) }
+const startOfMonth   = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01` }
+const startOfLastMonth = () => { const d = new Date(); d.setMonth(d.getMonth()-1); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01` }
+const endOfLastMonth = () => { const d = new Date(); d.setDate(0); return d.toISOString().slice(0, 10) }
+
+// State
+const [dateFrom,       setDateFrom]       = useState(startOfMonth())
+const [dateTo,         setDateTo]         = useState(today())
+const [activePreset,   setActivePreset]   = useState('Bulan Ini')
+const [showCustom,     setShowCustom]     = useState(false)
+```
+
+**UI Period Filter:**
+```jsx
+<div style={{
+  display: 'flex', alignItems: 'center', gap: 8,
+  flexWrap: 'wrap', marginBottom: 24,
+}}>
+  {PRESETS.map(p => (
+    <button
+      key={p.label}
+      onClick={() => {
+        const { from, to } = p.getValue()
+        setDateFrom(from); setDateTo(to)
+        setActivePreset(p.label); setShowCustom(false)
+      }}
+      style={{
+        padding: '6px 14px', borderRadius: 20,
+        border: `1.5px solid ${activePreset === p.label ? 'var(--text-primary)' : 'var(--border)'}`,
+        background: activePreset === p.label ? 'var(--text-primary)' : '#fff',
+        color: activePreset === p.label ? '#fff' : 'var(--text-primary)',
+        fontSize: 13, fontWeight: 500, cursor: 'pointer',
+        transition: 'all 0.15s',
+      }}
+    >
+      {p.label}
+    </button>
+  ))}
+
+  {/* Custom range toggle */}
+  <button
+    onClick={() => { setShowCustom(!showCustom); setActivePreset('') }}
+    style={{
+      padding: '6px 14px', borderRadius: 20,
+      border: `1.5px solid ${showCustom ? 'var(--text-primary)' : 'var(--border)'}`,
+      background: showCustom ? 'var(--text-primary)' : '#fff',
+      color: showCustom ? '#fff' : 'var(--text-muted)',
+      fontSize: 13, cursor: 'pointer',
+    }}
+  >
+    Custom ▾
+  </button>
+
+  {showCustom && (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <input type="date" value={dateFrom}
+        onChange={e => { setDateFrom(e.target.value); setActivePreset('') }}
+        style={{ padding: '6px 10px', border: '1.5px solid var(--border)', borderRadius: 6, fontSize: 13 }}
+      />
+      <span style={{ color: 'var(--text-muted)', fontSize: 13 }}>s/d</span>
+      <input type="date" value={dateTo}
+        onChange={e => { setDateTo(e.target.value); setActivePreset('') }}
+        style={{ padding: '6px 10px', border: '1.5px solid var(--border)', borderRadius: 6, fontSize: 13 }}
+      />
+    </div>
+  )}
+
+  <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--text-muted)' }}>
+    {dateFrom === dateTo ? fmtDate(dateFrom) : `${fmtDate(dateFrom)} — ${fmtDate(dateTo)}`}
+  </span>
+</div>
+```
+
+---
+
+## SECTION 1: SALES (dark theme)
+
+```jsx
+{/* Sales Section Header */}
+<div style={{
+  background: 'var(--text-primary)',
+  borderRadius: '12px 12px 0 0',
+  padding: '16px 24px',
+  display: 'flex', alignItems: 'center', gap: 10,
+}}>
+  <span style={{ fontSize: 18 }}>💰</span>
+  <div>
+    <div style={{ fontWeight: 700, fontSize: 16, color: '#fff' }}>Sales</div>
+    <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)' }}>
+      Uang masuk berdasarkan tanggal transaksi
+    </div>
+  </div>
+</div>
+
+{/* Sales KPI Cards */}
+<div style={{
+  background: '#1a1a1a', padding: '20px 24px',
+  display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12,
+}}>
+  {[
+    { label: 'Total Sales',  value: sales.total,   sub: `${salesCount} transaksi`,  color: '#fff' },
+    { label: 'Class',        value: sales.class,   sub: 'Class booking',            color: '#60A5FA' },
+    { label: 'Slot',         value: sales.slot,    sub: 'Individual',               color: '#34D399' },
+    { label: 'Venue',        value: sales.venue,   sub: 'Korporasi',                color: 'var(--red)' },
+    { label: 'Package',      value: sales.package, sub: 'Package orders',           color: '#A78BFA' },
+  ].map((k, i) => (
+    <div key={i} style={{
+      background: '#2a2a2a', borderRadius: 10, padding: '14px 16px',
+      borderTop: `3px solid ${k.color}`,
+    }}>
+      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
+        {k.label}
+      </div>
+      <div style={{ fontWeight: 700, fontSize: 18, color: k.color }}>
+        {fmtRp(k.value)}
+      </div>
+      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 4 }}>
+        {k.sub}
+      </div>
+    </div>
+  ))}
+</div>
+
+{/* Sales Chart */}
+<div style={{
+  background: '#111', borderRadius: '0 0 12px 12px',
+  padding: '20px 24px', marginBottom: 24,
+}}>
+  <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginBottom: 16, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+    Sales per Hari
+  </div>
+  <SalesBarChart data={salesChartData} />
+</div>
+```
+
+### SalesBarChart Component
+```jsx
+function SalesBarChart({ data }) {
+  if (!data || data.length === 0) return (
+    <div style={{ textAlign: 'center', padding: 40, color: 'rgba(255,255,255,0.3)', fontSize: 13 }}>
+      Tidak ada data
+    </div>
+  )
+
+  const maxVal = Math.max(...data.map(d => d.total), 1)
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, height: 120, padding: '0 4px' }}>
+      {data.map((d, i) => {
+        const h = Math.max((d.total / maxVal) * 100, d.total > 0 ? 4 : 0)
+        return (
+          <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+            <div
+              title={`${d.label}: ${fmtRp(d.total)}`}
+              style={{
+                width: '100%', height: `${h}%`,
+                background: 'linear-gradient(180deg, #C0392B 0%, #922B21 100%)',
+                borderRadius: '3px 3px 0 0',
+                minHeight: d.total > 0 ? 4 : 0,
+                alignSelf: 'flex-end',
+                cursor: 'pointer',
+                transition: 'opacity 0.15s',
+              }}
+              onMouseEnter={e => e.currentTarget.style.opacity = '0.8'}
+              onMouseLeave={e => e.currentTarget.style.opacity = '1'}
+            />
+            <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)', whiteSpace: 'nowrap', textAlign: 'center' }}>
+              {d.label}
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+```
+
+---
+
+## SECTION 2: REVENUE (light/red theme)
+
+```jsx
+{/* Revenue Section Header */}
+<div style={{
+  background: 'linear-gradient(135deg, var(--red) 0%, #922B21 100%)',
+  borderRadius: '12px 12px 0 0',
+  padding: '16px 24px',
+  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+}}>
+  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+    <span style={{ fontSize: 18 }}>📈</span>
+    <div>
+      <div style={{ fontWeight: 700, fontSize: 16, color: '#fff' }}>Revenue</div>
+      <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)' }}>
+        Layanan terdelivered berdasarkan tanggal kelas/booking
+      </div>
+    </div>
+  </div>
+</div>
+
+{/* Revenue KPI Cards */}
+<div style={{
+  background: '#FEF3F2', padding: '20px 24px',
+  display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12,
+}}>
+  {[
+    { label: 'Total Revenue', value: revenue.total,   sub: `${revenueCount} layanan`,  color: 'var(--text-primary)' },
+    { label: 'Class',         value: revenue.class,   sub: 'Kelas berjalan',           color: '#2563EB' },
+    { label: 'Slot',          value: revenue.slot,    sub: 'Individual',               color: '#059669' },
+    { label: 'Venue',         value: revenue.venue,   sub: 'Korporasi',                color: 'var(--red)' },
+    { label: 'Package',       value: revenue.package, sub: 'Sesi terpakai',            color: '#7C3AED' },
+  ].map((k, i) => (
+    <div key={i} style={{
+      background: '#fff', borderRadius: 10, padding: '14px 16px',
+      borderTop: `3px solid ${k.color}`,
+      boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
+    }}>
+      <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
+        {k.label}
+      </div>
+      <div style={{ fontWeight: 700, fontSize: 18, color: k.color }}>
+        {fmtRp(k.value)}
+      </div>
+      <div style={{ fontSize: 11, color: 'var(--text-faint)', marginTop: 4 }}>
+        {k.sub}
+      </div>
+    </div>
+  ))}
+</div>
+
+{/* Revenue Chart + Occupancy */}
+<div style={{
+  background: '#FEF3F2', borderRadius: '0 0 12px 12px',
+  padding: '0 24px 24px', marginBottom: 24,
+  display: 'grid', gridTemplateColumns: '1fr 280px', gap: 20,
+}}>
+  {/* Line chart */}
+  <div style={{ background: '#fff', borderRadius: 10, padding: 20, boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+    <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+      Revenue per Hari
+    </div>
+    <RevenueLineChart data={revenueChartData} />
+  </div>
+
+  {/* Occupancy gauges */}
+  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+    <div style={{ background: '#fff', borderRadius: 10, padding: 20, flex: 1, boxShadow: '0 1px 4px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12 }}>Venue Occupancy</div>
+      <OccupancyGauge value={venueOccupancy} color="var(--red)" />
+      <div style={{ fontSize: 11, color: 'var(--text-faint)', marginTop: 8 }}>dari 14 jam/hari</div>
+    </div>
+    <div style={{ background: '#fff', borderRadius: 10, padding: 20, flex: 1, boxShadow: '0 1px 4px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12 }}>Class Occupancy</div>
+      <OccupancyGauge value={classOccupancy} color="#2563EB" />
+      <div style={{ fontSize: 11, color: 'var(--text-faint)', marginTop: 8 }}>dari 40 peserta/kelas</div>
+    </div>
+  </div>
+</div>
+```
+
+### RevenueLineChart Component
+```jsx
+function RevenueLineChart({ data }) {
+  if (!data || data.length === 0) return (
+    <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-faint)', fontSize: 13 }}>
+      Tidak ada data
+    </div>
+  )
+
+  const maxVal = Math.max(...data.map(d => d.total), 1)
+  const W = 100 / (data.length - 1 || 1)
+  const points = data.map((d, i) => ({
+    x: i * W,
+    y: 100 - (d.total / maxVal) * 85,
+    ...d,
+  }))
+
+  const pathD = points.map((p, i) =>
+    `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`
+  ).join(' ')
+
+  const areaD = `${pathD} L ${points[points.length-1].x} 100 L 0 100 Z`
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <svg viewBox="0 0 100 100" preserveAspectRatio="none" style={{ width: '100%', height: 100 }}>
+        <defs>
+          <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#C0392B" stopOpacity="0.2" />
+            <stop offset="100%" stopColor="#C0392B" stopOpacity="0.01" />
+          </linearGradient>
+        </defs>
+        <path d={areaD} fill="url(#areaGrad)" />
+        <path d={pathD} fill="none" stroke="#C0392B" strokeWidth="1.5"
+          vectorEffect="non-scaling-stroke" strokeLinecap="round" strokeLinejoin="round" />
+        {points.map((p, i) => (
+          <circle key={i} cx={p.x} cy={p.y} r="1.2"
+            fill="#C0392B" vectorEffect="non-scaling-stroke" />
+        ))}
+      </svg>
+
+      {/* X axis labels */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
+        {data.filter((_, i) => i === 0 || i === Math.floor(data.length/2) || i === data.length-1)
+          .map((d, i) => (
+            <span key={i} style={{ fontSize: 10, color: 'var(--text-faint)' }}>{d.label}</span>
+          ))}
+      </div>
+    </div>
+  )
+}
+```
+
+---
+
+## DATA FETCHING
+
+### Sales Data
+```javascript
+const fetchSales = async () => {
+  const start = dateFrom + 'T00:00:00+07:00'
+  const end   = dateTo   + 'T23:59:59+07:00'
+
+  const [cls, ind, corp, pkg] = await Promise.all([
+    supabase.from('arena_class_bookings').select('price, paid_at')
+      .eq('status','confirmed').not('paid_at','is',null).gte('paid_at',start).lte('paid_at',end),
+    supabase.from('arena_bookings').select('price, paid_at')
+      .eq('status','confirmed').eq('customer_type','individual').not('paid_at','is',null).gte('paid_at',start).lte('paid_at',end),
+    supabase.from('arena_bookings').select('price, paid_at')
+      .eq('status','confirmed').eq('customer_type','corporation').not('paid_at','is',null).gte('paid_at',start).lte('paid_at',end),
+    supabase.from('arena_package_orders').select('price, paid_at')
+      .eq('status','confirmed').not('paid_at','is',null).gte('paid_at',start).lte('paid_at',end),
+  ])
+
+  const sum = d => (d.data || []).reduce((s,r) => s + Number(r.price), 0)
+  setSales({
+    class: sum(cls), slot: sum(ind), venue: sum(corp), package: sum(pkg),
+    total: sum(cls) + sum(ind) + sum(corp) + sum(pkg),
+  })
+  setSalesCount((cls.data?.length||0)+(ind.data?.length||0)+(corp.data?.length||0)+(pkg.data?.length||0))
+
+  // Chart: sales per hari
+  buildDailyChart([...(cls.data||[]),...(ind.data||[]),...(corp.data||[]),...(pkg.data||[])], 'paid_at', setSalesChartData)
+}
+```
+
+### Revenue Data
+```javascript
+const fetchRevenue = async () => {
+  const [cls, ind, corp, pkgUsage] = await Promise.all([
+    // Class revenue: berdasarkan schedule_date
+    supabase.from('arena_class_bookings').select('price, schedule:arena_class_schedules(schedule_date)')
+      .eq('status','confirmed').gte('arena_class_schedules.schedule_date', dateFrom).lte('arena_class_schedules.schedule_date', dateTo),
+
+    // Slot revenue: berdasarkan booking_date
+    supabase.from('arena_bookings').select('price, booking_date')
+      .eq('status','confirmed').eq('customer_type','individual').gte('booking_date',dateFrom).lte('booking_date',dateTo),
+
+    // Venue revenue: berdasarkan booking_date
+    supabase.from('arena_bookings').select('price, booking_date')
+      .eq('status','confirmed').eq('customer_type','corporation').gte('booking_date',dateFrom).lte('booking_date',dateTo),
+
+    // Package revenue: berdasarkan sesi terpakai
+    supabase.from('arena_package_revenue_view').select('session_revenue, used_at')
+      .gte('used_at', dateFrom + 'T00:00:00+07:00').lte('used_at', dateTo + 'T23:59:59+07:00'),
+  ])
+
+  // Filter class revenue client-side (nested filter limitation)
+  const clsFiltered = (cls.data || []).filter(r => {
+    const sd = r.schedule?.schedule_date
+    return sd && sd >= dateFrom && sd <= dateTo
+  })
+
+  const sumCls  = clsFiltered.reduce((s,r) => s + Number(r.price), 0)
+  const sumInd  = (ind.data||[]).reduce((s,r) => s + Number(r.price), 0)
+  const sumCorp = (corp.data||[]).reduce((s,r) => s + Number(r.price), 0)
+  const sumPkg  = (pkgUsage.data||[]).reduce((s,r) => s + Number(r.session_revenue), 0)
+
+  setRevenue({ class: sumCls, slot: sumInd, venue: sumCorp, package: sumPkg, total: sumCls+sumInd+sumCorp+sumPkg })
+  setRevenueCount(clsFiltered.length + (ind.data?.length||0) + (corp.data?.length||0) + (pkgUsage.data?.length||0))
+
+  // Chart
+  buildDailyChart([
+    ...clsFiltered.map(r => ({ ...r, date: r.schedule?.schedule_date })),
+    ...(ind.data||[]).map(r => ({ ...r, date: r.booking_date })),
+    ...(corp.data||[]).map(r => ({ ...r, date: r.booking_date })),
+    ...(pkgUsage.data||[]).map(r => ({ ...r, date: r.used_at?.slice(0,10) })),
+  ], 'date', setRevenueChartData)
+}
+
+// Helper: aggregate per hari untuk chart
+const buildDailyChart = (rows, dateField, setter) => {
+  const byDay = {}
+  rows.forEach(r => {
+    const d = dateField === 'paid_at' ? r[dateField]?.slice(0,10) : r[dateField]
+    if (!d) return
+    byDay[d] = (byDay[d] || 0) + Number(r.price || r.session_revenue || 0)
+  })
+
+  // Fill all days in range
+  const result = []
+  const start = new Date(dateFrom), end = new Date(dateTo)
+  for (let d = new Date(start); d <= end; d.setDate(d.getDate()+1)) {
+    const key = d.toISOString().slice(0,10)
+    result.push({
+      label: `${d.getDate()}/${d.getMonth()+1}`,
+      date: key,
+      total: byDay[key] || 0,
+    })
+  }
+  setter(result)
+}
+```
+
+---
+
+## BOTTOM SECTION
+
+```jsx
+{/* 2 kolom: Top Komunitas + Booking Terbaru */}
+<div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+
+  {/* Top Komunitas */}
+  <div className="card">
+    <div className="chart-title" style={{ marginBottom: 16 }}>🏆 Top Komunitas</div>
+    {topKomunitas.map((k, i) => (
+      <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{
+            width: 24, height: 24, borderRadius: '50%',
+            background: i === 0 ? '#F59E0B' : i === 1 ? '#9CA3AF' : i === 2 ? '#CD7C2F' : 'var(--border)',
+            color: i < 3 ? '#fff' : 'var(--text-muted)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 11, fontWeight: 700, flexShrink: 0,
+          }}>
+            {i + 1}
+          </span>
+          <span style={{ fontSize: 13, fontWeight: 500 }}>{k.name}</span>
+        </div>
+        <span style={{ fontWeight: 700, fontSize: 13, color: 'var(--red)' }}>{fmtRp(k.amount)}</span>
+      </div>
+    ))}
+  </div>
+
+  {/* Booking Terbaru */}
+  <div className="card">
+    <div className="chart-title" style={{ marginBottom: 16 }}>🕐 Booking Terbaru</div>
+    {recentBookings.map(r => (
+      <div key={r.booking_code} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid var(--border)', fontSize: 13 }}>
+        <div>
+          <div style={{ fontFamily: 'monospace', fontSize: 11, color: 'var(--text-muted)' }}>{r.booking_code}</div>
+          <div style={{ fontWeight: 500, marginTop: 2 }}>{r.full_name}</div>
+        </div>
+        <div style={{ textAlign: 'right' }}>
+          <span style={{
+            padding: '2px 8px', borderRadius: 3, fontSize: 11, fontWeight: 600,
+            background: r.type === 'Class' ? '#EFF6FF' : r.type === 'Venue' ? '#FEF3F2' : '#F0FFF4',
+            color: r.type === 'Class' ? '#2563EB' : r.type === 'Venue' ? 'var(--red)' : '#059669',
+          }}>{r.type}</span>
+          <div style={{ fontWeight: 700, color: 'var(--red)', marginTop: 4 }}>{fmtRp(r.price)}</div>
+        </div>
+      </div>
+    ))}
+  </div>
+
+</div>
+```
+
+---
+
+# PROMPT B — Customer App: Voucher Usage Tracking
+
+**File:** `src/lib/supabase.ts` dan `src/pages/BookingPage.tsx`
+
+> **Tujuan:** Setiap kali voucher package digunakan untuk booking class, insert record ke `arena_package_voucher_usage`.
+
+## Update `createClassBooking` atau handler submit
+
+Setelah booking class berhasil dibuat dengan voucher package, tambahkan:
+
+```typescript
+// Setelah createClassBooking sukses dan voucher type = package
+if (freshVoucher?.isPackageVoucher && freshVoucher.valid) {
+  // Get voucher id dari kode
+  const { data: voucherData } = await supabase
+    .from('arena_package_vouchers')
+    .select('id')
+    .eq('voucher_code', freshVoucher.voucher.code)
+    .single()
+
+  if (voucherData?.id && bookingId) {
+    await supabase
+      .from('arena_package_voucher_usage')
+      .insert({
+        voucher_id:        voucherData.id,
+        booking_id:        bookingId,
+        booking_code:      bookingCode,
+        used_at:           new Date().toISOString(),
+        sessions_deducted: 1,
+      })
+  }
+}
+```
+
+---
+
+## TESTING CHECKLIST
+
+### Dashboard
+1. ✅ Period presets (Hari Ini, Kemarin, 7 Hari, Bulan Ini, Bulan Lalu) berfungsi
+2. ✅ Custom date range picker muncul dan berfungsi
+3. ✅ Sales section — dark theme, 5 KPI card
+4. ✅ Sales bar chart render sesuai data
+5. ✅ Revenue section — light/red theme, 5 KPI card
+6. ✅ Revenue line chart render dengan area gradient
+7. ✅ Occupancy gauge muncul di samping revenue chart
+8. ✅ Sales ≠ Revenue untuk periode yang sama (karena beda date field)
+9. ✅ Package revenue = 0 jika tidak ada voucher usage (bukan dari sales)
+10. ✅ Top Komunitas + Booking Terbaru di bawah
+11. ✅ Responsive mobile
+
+### Voucher Usage Tracking
+12. ✅ Customer pakai voucher package → insert ke `arena_package_voucher_usage`
+13. ✅ Revenue package di dashboard naik setelah voucher dipakai
+14. ✅ Tidak ada double insert kalau booking gagal

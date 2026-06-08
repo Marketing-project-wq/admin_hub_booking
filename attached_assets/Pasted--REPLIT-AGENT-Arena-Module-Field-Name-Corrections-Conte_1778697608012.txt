@@ -1,0 +1,258 @@
+# REPLIT AGENT — Arena Module Field Name Corrections
+
+> **Context:** Batch 2 Arena module sudah dijalankan tapi ada field name yang salah
+> di beberapa halaman Master Data. Prompt ini fix tanpa rebuild ulang.
+
+---
+
+## KOREKSI FIELD NAME — SCHEMA ASLI
+
+Berikut schema **aktual** Supabase yang harus dipakai:
+
+### `arena_class_types` — kolom yang ADA:
+```
+id, name, description, duration_min, color, instructor,
+price_member, price_guest, is_active, created_at, updated_at
+```
+❌ TIDAK ADA: `unit_id`, `duration_minutes`
+✅ BENAR: `duration_min` (bukan `duration_minutes`)
+
+### `arena_class_schedules` — kolom yang ADA:
+```
+id, class_type_id, unit_id, schedule_date, start_time, end_time,
+instructor, quota, notes, is_cancelled, cancelled_reason,
+created_by, created_at, updated_at
+```
+❌ TIDAK ADA: `duration_minutes`, `color`
+✅ Ada: `notes`, `cancelled_reason`, `created_by`
+
+### `arena_booking_units` — 1 unit aktif:
+```
+id: 6e8f44a7-23d4-4602-90d4-980c63b3acc2
+name: Arena 20FIT
+unit_type: arena
+```
+
+---
+
+## FILE YANG PERLU DIUPDATE
+
+### 1. `src/pages/arena/master/ArenaClassTypes.jsx`
+
+**Ganti semua referensi:**
+- `duration_minutes` → `duration_min`
+- Hapus semua referensi ke `unit_id` (kolom tidak ada)
+
+**Form field — ganti:**
+```jsx
+// SALAH
+<input name="duration_minutes" ... />
+
+// BENAR
+<input name="duration_min" type="number" defaultValue={60} ... />
+```
+
+**Fetch & display — ganti:**
+```javascript
+// SALAH
+.select('id, name, description, price_guest, duration_minutes, color, is_active, unit_id')
+
+// BENAR
+.select('id, name, description, price_guest, price_member, duration_min, color, is_active')
+```
+
+**Tabel kolom — ganti:**
+```jsx
+// Hapus kolom Unit, ganti duration
+<th>Durasi</th>
+// ...
+<td>{row.duration_min} menit</td>
+```
+
+**Insert/Update payload — ganti:**
+```javascript
+// SALAH
+{ duration_minutes: ..., unit_id: ... }
+
+// BENAR
+{ duration_min: Number(form.duration_min) }
+// Hapus unit_id dari payload
+```
+
+---
+
+### 2. `src/pages/arena/master/ArenaSchedules.jsx`
+
+**Fetch schedules — join yang benar:**
+```javascript
+// BENAR — join class_type untuk dapat nama
+supabase
+  .from('arena_class_schedules')
+  .select(`
+    id, class_type_id, unit_id, schedule_date,
+    start_time, end_time, instructor, quota,
+    notes, is_cancelled, cancelled_reason, created_at,
+    class_type:arena_class_types(id, name, color, duration_min)
+  `)
+  .order('schedule_date', { ascending: false })
+```
+
+**Form create/edit — field yang benar:**
+```jsx
+// Unit: hardcode ke 1 unit yang ada, tidak perlu dropdown
+// Tapi tetap simpan unit_id di payload:
+const UNIT_ID = '6e8f44a7-23d4-4602-90d4-980c63b3acc2'
+
+// Form fields yang benar:
+// - class_type_id (dropdown arena_class_types)
+// - schedule_date (date)
+// - start_time (time)
+// - end_time (time — auto dari duration_min class type, editable)
+// - instructor (text input atau dropdown dari arena_coaches)
+// - quota (number, default 10)
+// - notes (textarea, optional)
+```
+
+**Insert payload — field yang benar:**
+```javascript
+const payload = {
+  class_type_id: form.class_type_id,
+  unit_id: UNIT_ID,
+  schedule_date: form.schedule_date,
+  start_time: form.start_time,
+  end_time: form.end_time,
+  instructor: form.instructor,
+  quota: Number(form.quota) || 10,
+  notes: form.notes || null,
+  is_cancelled: false,
+  created_by: user?.full_name || 'admin',
+}
+```
+
+**Cancel jadwal — gunakan field yang benar:**
+```javascript
+// Saat cancel jadwal
+await supabase
+  .from('arena_class_schedules')
+  .update({
+    is_cancelled: true,
+    cancelled_reason: cancelReason,   // bukan notes
+    updated_at: new Date().toISOString(),
+  })
+  .eq('id', scheduleId)
+```
+
+**Tabel display — kolom yang benar:**
+```jsx
+<thead>
+  <tr>
+    <th>Tanggal</th>
+    <th>Kelas</th>
+    <th>Instruktur</th>
+    <th>Waktu</th>
+    <th>Quota</th>
+    <th>Booked</th>
+    <th>Sisa</th>
+    <th>Status</th>
+    <th>Aksi</th>
+  </tr>
+</thead>
+
+// Row:
+<td>{fmtDate(row.schedule_date)}</td>
+<td>
+  <span style={{ color: row.class_type?.color }}>●</span>
+  {' '}{row.class_type?.name}
+</td>
+<td>{row.instructor}</td>
+<td>{fmtTime(row.start_time)} – {fmtTime(row.end_time)}</td>
+<td>{row.quota}</td>
+<td>{row.booked_count || 0}</td>
+<td>{row.quota - (row.booked_count || 0)}</td>
+<td>
+  {row.is_cancelled
+    ? <span className="badge badge-cancelled">Dibatalkan</span>
+    : <span className="badge badge-confirmed">Aktif</span>}
+</td>
+```
+
+**Booked count** — fetch terpisah atau subquery:
+```javascript
+// Setelah fetch schedules, fetch booked count
+const scheduleIds = schedules.map(s => s.id)
+const { data: bookingCounts } = await supabase
+  .from('arena_class_bookings')
+  .select('schedule_id')
+  .in('schedule_id', scheduleIds)
+  .eq('status', 'confirmed')
+
+// Map ke schedules
+const countMap = {}
+bookingCounts?.forEach(b => {
+  countMap[b.schedule_id] = (countMap[b.schedule_id] || 0) + 1
+})
+
+const schedulesWithCount = schedules.map(s => ({
+  ...s,
+  booked_count: countMap[s.id] || 0,
+}))
+```
+
+---
+
+### 3. `src/pages/arena/ArenaClassBookings.jsx`
+
+**Join yang benar saat fetch:**
+```javascript
+supabase
+  .from('arena_class_bookings')
+  .select(`
+    id, booking_code, schedule_id, booker_type, customer_type,
+    full_name, email, phone, notes, price, discount, price_before_disc,
+    status, payment_method, payment_ref, paid_at, created_at, updated_at,
+    schedule:arena_class_schedules(
+      schedule_date, start_time, end_time, instructor,
+      class_type:arena_class_types(name, color)
+    )
+  `)
+```
+
+**Display nama kelas:**
+```jsx
+// Kelas dari join
+<td>{row.schedule?.class_type?.name || '-'}</td>
+<td>{fmtDate(row.schedule?.schedule_date)} {fmtTime(row.schedule?.start_time)}</td>
+```
+
+---
+
+### 4. `src/components/arena/ManualBookingModal.jsx` — Class booking
+
+**Dropdown jadwal — query yang benar:**
+```javascript
+// Fetch class types
+const { data: classTypes } = await supabase
+  .from('arena_class_types')
+  .select('id, name, price_guest, price_member, duration_min, color')
+  .eq('is_active', true)
+
+// Fetch schedules by class type (filter tanggal >= hari ini, belum cancelled)
+const { data: schedules } = await supabase
+  .from('arena_class_schedules')
+  .select('id, schedule_date, start_time, end_time, instructor, quota')
+  .eq('class_type_id', selectedClassTypeId)
+  .eq('is_cancelled', false)
+  .gte('schedule_date', new Date().toISOString().slice(0, 10))
+  .order('schedule_date', { ascending: true })
+```
+
+---
+
+## TESTING SETELAH FIX
+
+1. **Master → Class Types** → halaman load tanpa error, tabel tampil 2 class (Foundation + Complete)
+2. **Master → Class Types → Edit Foundation** → form tampil `duration_min = 60`, tidak ada field unit
+3. **Master → Schedules** → halaman load, tampil 58 jadwal lama + jadwal baru hasil seed
+4. **Master → Schedules → Tambah** → form bisa disubmit, jadwal baru muncul di list
+5. **Class Bookings** → join ke schedule berhasil, kolom Kelas dan Jadwal terisi
+6. Tidak ada console error `column "duration_minutes" does not exist` atau `column "unit_id" does not exist`

@@ -1,0 +1,131 @@
+# REPLIT AGENT — Class Bookings: Tampilkan Payment Ref (Mayar ID)
+
+> **File:** `src/pages/arena/ArenaClassBookings.jsx`
+> **Tujuan:** Tampilkan `payment_ref` (Mayar Transaction ID) di tabel dan detail modal
+> sehingga admin bisa crosscheck dengan Mayar Dashboard.
+> **JANGAN ubah:** logika fetch, filter, pagination, fitur lain.
+
+---
+
+## UPDATE 1 — FETCH QUERY
+
+Pastikan `payment_ref` sudah di-include di select:
+
+```javascript
+let query = supabase
+  .from('arena_class_bookings')
+  .select(`
+    id, booking_code, schedule_id, booker_type, customer_type,
+    full_name, email, phone, notes, price, discount, price_before_disc,
+    status, payment_method, payment_ref,   // ← pastikan payment_ref ada
+    paid_at, created_at, updated_at, group_id,
+    addons:arena_class_booking_addons(
+      id, addon_name, addon_price, qty, subtotal
+    ),
+    schedule:arena_class_schedules(
+      schedule_date, start_time, end_time, instructor,
+      class_type:arena_class_types(name, color)
+    )
+  `, { count: 'exact' })
+```
+
+---
+
+## UPDATE 2 — KOLOM "REF" DI TABEL
+
+Tambah kolom tipis setelah kolom "Payment":
+
+### Header
+```jsx
+<th style={{ fontSize: 11, color: '#9CA3AF' }}>Ref</th>
+```
+
+### Cell
+```jsx
+<td style={{ fontSize: 11, fontFamily: 'monospace', color: 'var(--text-muted)' }}>
+  {row.payment_ref ? (
+    <span
+      title={`Mayar ID: ${row.payment_ref}`}
+      style={{
+        display: 'inline-block',
+        maxWidth: 80,
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap',
+        cursor: 'help',
+      }}
+    >
+      {row.payment_ref}
+    </span>
+  ) : '-'}
+</td>
+```
+
+---
+
+## UPDATE 3 — DETAIL MODAL
+
+Di `BookingDetailModal` atau section detail inline, tambahkan baris **Mayar Ref** setelah baris Payment Method:
+
+```jsx
+{/* Payment Method */}
+<div className="detail-row">
+  <span className="detail-label">Payment</span>
+  <span className="detail-value">{booking.payment_method || '-'}</span>
+</div>
+
+{/* TAMBAH: Mayar Ref */}
+{booking.payment_ref && (
+  <div className="detail-row">
+    <span className="detail-label">Mayar Ref</span>
+    <span className="detail-value" style={{ fontFamily: 'monospace', fontSize: 12 }}>
+      <a
+        href={`https://web.mayar.id/payments`}
+        target="_blank"
+        rel="noopener noreferrer"
+        title="Buka Mayar Dashboard"
+        style={{ color: 'var(--red)', textDecoration: 'none' }}
+      >
+        {booking.payment_ref}
+        <span style={{ fontSize: 10, marginLeft: 4 }}>↗</span>
+      </a>
+    </span>
+  </div>
+)}
+```
+
+---
+
+## UPDATE 4 — EDIT MODAL (opsional tapi recommended)
+
+Di form Edit Booking, tambah field **Mayar Ref** yang bisa diisi manual oleh admin:
+
+```jsx
+<div className="form-group">
+  <label>Mayar Ref ID <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>— opsional</span></label>
+  <input
+    type="text"
+    placeholder="Contoh: 605808"
+    value={form.payment_ref || ''}
+    onChange={e => setForm(f => ({ ...f, payment_ref: e.target.value.trim() || null }))}
+    style={{ fontFamily: 'monospace' }}
+  />
+  <small style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4, display: 'block' }}>
+    ID transaksi dari Mayar Dashboard untuk crosscheck pembayaran
+  </small>
+</div>
+```
+
+Pastikan `payment_ref` ikut di payload UPDATE saat admin save edit.
+
+---
+
+## TESTING CHECKLIST
+
+1. ✅ Kolom "Ref" muncul di tabel (tipis, monospace)
+2. ✅ Booking dengan `payment_ref` → tampil ID (truncated dengan tooltip full ID)
+3. ✅ Booking tanpa `payment_ref` → tampil "-"
+4. ✅ Detail modal → baris "Mayar Ref" muncul kalau ada, link ke Mayar Dashboard
+5. ✅ Edit modal → ada field Mayar Ref ID yang bisa diisi manual
+6. ✅ Save edit dengan Mayar Ref → tersimpan di DB
+7. ✅ Tidak ada console error
