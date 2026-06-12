@@ -22,6 +22,13 @@ import GymDashboard from './pages/gym/GymDashboard'
 import ClinicDashboard from './pages/clinic/ClinicDashboard'
 import ClinicBookings from './pages/clinic/ClinicBookings'
 import ClinicSlots from './pages/clinic/ClinicSlots'
+import ClinicPatients from './pages/clinic/ClinicPatients'
+import ClinicVisits from './pages/clinic/ClinicVisits'
+import ClinicStaff from './pages/clinic/ClinicStaff'
+import ClinicServices from './pages/clinic/ClinicServices'
+import ClinicReports from './pages/clinic/ClinicReports'
+import ClinicVisitDetail from './pages/clinic/ClinicVisitDetail'
+import ClinicUserManagement from './pages/clinic/ClinicUserManagement'
 
 export default function App() {
   return (
@@ -40,7 +47,14 @@ export default function App() {
           >
             <Route index element={<ClinicDashboard />} />
             <Route path="bookings" element={<ClinicBookings />} />
+            <Route path="visits" element={<ClinicVisits />} />
+            <Route path="visits/:id" element={<ClinicVisitDetail />} />
+            <Route path="users" element={<ClinicUserManagement />} />
             <Route path="slots" element={<ClinicSlots />} />
+            <Route path="patients" element={<ClinicPatients />} />
+            <Route path="staff" element={<ClinicStaff />} />
+            <Route path="services" element={<ClinicServices />} />
+            <Route path="reports" element={<ClinicReports />} />
           </Route>
 
           <Route

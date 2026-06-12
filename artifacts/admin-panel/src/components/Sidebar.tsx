@@ -38,7 +38,14 @@ const UNIT_MENUS: Record<string, MenuItem[]> = {
   clinic: [
     { label: 'Dashboard', path: '/clinic',          icon: '◻' },
     { label: 'Bookings',  path: '/clinic/bookings',  icon: '◻' },
+    { label: 'Users',     path: '/clinic/users',     icon: '◻' },
+    { label: 'Visits',    path: '/clinic/visits',    icon: '◻' },
+    { label: 'Patients',  path: '/clinic/patients',  icon: '◻' },
+    { label: '— Master',  path: null,                divider: true },
+    { label: 'Staff',     path: '/clinic/staff',     icon: '◻' },
+    { label: 'Services',  path: '/clinic/services',  icon: '◻' },
     { label: 'Slots',     path: '/clinic/slots',     icon: '◻' },
+    { label: 'Reports',   path: '/clinic/reports',   icon: '◻' },
   ],
 }
 
@@ -71,6 +78,7 @@ export default function Sidebar({ currentUnit, open, onClose }: SidebarProps) {
       <nav className="sidebar-menu">
         {menus.map((m, i) => {
           if (m.path === '/arena/users' && user?.role !== 'super_admin') return null
+          if (m.path === '/clinic/users' && !(user?.role === 'super_admin' || user?.permissions?.can_manage_users === true)) return null
           if (m.divider) {
             return (
               <div key={i} className="menu-divider">{m.label}</div>

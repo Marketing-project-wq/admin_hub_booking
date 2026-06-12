@@ -49,3 +49,4 @@ Thumbs.db
 .local/
 node_modules/
 **/node_modules/
+artifacts/admin-panel/.env
