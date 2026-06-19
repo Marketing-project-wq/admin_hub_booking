@@ -224,7 +224,11 @@ export default function ClinicVisits() {
                     <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'monospace' }}>{v.patient.patient_code}</div>
                   )}
                 </td>
-                <td>{v.service?.name || '-'}</td>
+                <td>
+                  {v.services.length === 0 ? '-'
+                    : v.services.length === 1 ? v.services[0].service_name
+                    : <>{v.services[0].service_name} <span className="badge" style={{ background: '#F3F4F6', color: '#6B7280' }}>+{v.services.length - 1} lagi</span></>}
+                </td>
                 <td style={{ whiteSpace: 'nowrap', fontSize: 12 }}>
                   {fmtDate(v.visit_date)}{v.visit_time ? ` · ${fmtTime(v.visit_time)}` : ''}
                 </td>
@@ -293,7 +297,9 @@ function VisitDetailModal({ visit, onClose, onSaved }: {
         <div style={{ display: 'grid', gridTemplateColumns: '140px 1fr', rowGap: 9, columnGap: 12, fontSize: 14 }}>
           <Label>Kode</Label><Val><span style={{ fontFamily: 'monospace' }}>{visit.visit_code}</span></Val>
           <Label>Pasien</Label><Val>{visit.patient?.full_name || '-'}{visit.patient?.phone ? ` · ${visit.patient.phone}` : ''}</Val>
-          <Label>Layanan</Label><Val>{visit.service?.name || '-'}</Val>
+          <Label>Layanan</Label><Val>{visit.services.length
+            ? visit.services.map(s => s.service_name).join(', ')
+            : '-'}</Val>
           <Label>Tanggal</Label><Val>{fmtDate(visit.visit_date)}</Val>
           <Label>Jam</Label><Val>{fmtTime(visit.visit_time)}</Val>
           <Label>Status</Label><Val><StatusBadge status={visit.status} /></Val>
@@ -324,6 +330,7 @@ function VisitFormModal({ mode, visit, defaultPatientId, onClose, onSaved }: {
 }) {
   const { user } = useAuth()
   const [services, setServices] = useState<ClinicServiceFull[]>([])
+  const [servicesLoading, setServicesLoading] = useState(true)
   const [staff, setStaff] = useState<ClinicStaff[]>([])
 
   // Patient picker
@@ -336,7 +343,10 @@ function VisitFormModal({ mode, visit, defaultPatientId, onClose, onSaved }: {
   const [showResults, setShowResults] = useState(false)
   const patientTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const [serviceId, setServiceId] = useState(visit?.service_id ?? '')
+  const [selectedServices, setSelectedServices] = useState<{ service_id: string; service_name: string; price: number }[]>(
+    visit?.services?.map(s => ({ service_id: s.service_id, service_name: s.service_name, price: s.price })) ?? [],
+  )
+  const [pickService, setPickService] = useState('')
   const [visitDate, setVisitDate] = useState(visit?.visit_date ?? todayISO())
   const [visitTime, setVisitTime] = useState(visit?.visit_time ?? '')
   const [status, setStatus] = useState(visit?.status ?? 'scheduled')
@@ -351,7 +361,11 @@ function VisitFormModal({ mode, visit, defaultPatientId, onClose, onSaved }: {
   const [error, setError] = useState('')
 
   useEffect(() => {
-    listServicesFull(true).then(setServices).catch(() => {})
+    setServicesLoading(true)
+    listServicesFull(true)
+      .then(list => { console.log('[ClinicVisits] services loaded:', list.length); setServices(list) })
+      .catch(err => { console.error('[ClinicVisits] services fetch FAILED:', err); setError(err instanceof Error ? err.message : 'Gagal memuat daftar layanan') })
+      .finally(() => setServicesLoading(false))
     listStaff(true).then(setStaff).catch(() => {})
   }, [])
 
@@ -380,22 +394,42 @@ function VisitFormModal({ mode, visit, defaultPatientId, onClose, onSaved }: {
     setPatientQuery(''); setPatientResults([]); setShowResults(false)
   }
 
-  const onServiceChange = (id: string) => {
-    setServiceId(id)
+  const servicesTotal = selectedServices.reduce((sum, s) => sum + (Number(s.price) || 0), 0)
+
+  const addService = (id: string) => {
+    console.log('addService called:', id, 'services:', services.length, 'found:', services.find(s => s.id === id))
+    if (!id) return
     const svc = services.find(s => s.id === id)
-    if (svc && (mode === 'create' || amount === 0)) setAmount(svc.price)
+    if (!svc) {
+      setError(servicesLoading
+        ? 'Daftar layanan masih dimuat — tunggu sebentar lalu coba lagi.'
+        : 'Layanan tidak ditemukan. Muat ulang halaman.')
+      return
+    }
+    if (selectedServices.some(s => s.service_id === svc.id)) { setPickService(''); return }
+    const next = [...selectedServices, { service_id: svc.id, service_name: svc.name, price: svc.price }]
+    setSelectedServices(next)
+    setPickService('')
+    setError('')
+    setAmount(next.reduce((sum, s) => sum + (Number(s.price) || 0), 0))
+  }
+
+  const removeService = (id: string) => {
+    const next = selectedServices.filter(s => s.service_id !== id)
+    setSelectedServices(next)
+    setAmount(next.reduce((sum, s) => sum + (Number(s.price) || 0), 0))
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!patientId) { setError('Pasien wajib dipilih'); return }
-    if (!serviceId) { setError('Layanan wajib dipilih'); return }
+    if (selectedServices.length === 0) { setError('Minimal satu layanan wajib dipilih'); return }
     if (!visitDate) { setError('Tanggal wajib diisi'); return }
     setSaving(true); setError('')
 
     const payload: VisitPayload = {
       patient_id: patientId,
-      service_id: serviceId,
+      services: selectedServices,
       visit_date: visitDate,
       visit_time: visitTime || null,
       status,
@@ -464,11 +498,27 @@ function VisitFormModal({ mode, visit, defaultPatientId, onClose, onSaved }: {
           </div>
 
           <div className="form-group">
-            <label>Layanan *</label>
-            <select value={serviceId} onChange={e => onServiceChange(e.target.value)} required>
-              <option value="">— Pilih Layanan —</option>
-              {services.map(s => <option key={s.id} value={s.id}>{s.name} — {fmtRp(s.price)}</option>)}
+            <label>Layanan * (bisa lebih dari satu)</label>
+            <select value={pickService} onChange={e => addService(e.target.value)} disabled={servicesLoading}>
+              <option value="">{servicesLoading ? 'Memuat layanan...' : '— Pilih layanan untuk menambah —'}</option>
+              {services.filter(s => !selectedServices.some(sel => sel.service_id === s.id)).map(s => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
             </select>
+            {selectedServices.length > 0 && (
+              <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {selectedServices.map(s => (
+                  <div key={s.service_id} style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#F9FAFB', border: '1px solid var(--border, #E5E7EB)', borderRadius: 8, padding: '6px 10px' }}>
+                    <span style={{ flex: 1, fontSize: 13 }}>{s.service_name}</span>
+                    <span style={{ fontSize: 13, fontWeight: 600 }}>{fmtRp(s.price)}</span>
+                    <button type="button" className="action-btn cancel" onClick={() => removeService(s.service_id)}>×</button>
+                  </div>
+                ))}
+                <div style={{ display: 'flex', justifyContent: 'flex-end', fontSize: 13, fontWeight: 600 }}>
+                  Total Layanan: {fmtRp(servicesTotal)}
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="form-row">
@@ -518,7 +568,7 @@ function VisitFormModal({ mode, visit, defaultPatientId, onClose, onSaved }: {
             </div>
             <div className="form-group">
               <label>Jumlah (Rp)</label>
-              <input type="number" min={0} value={amount} onChange={e => setAmount(Math.max(0, Number(e.target.value)))} />
+              <div style={{ padding: '9px 0', fontSize: 14, fontWeight: 600 }}>{fmtRp(amount)}</div>
             </div>
           </div>
           <div className="form-group">

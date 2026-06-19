@@ -498,12 +498,20 @@ export async function createManualBooking(input: ManualBookingInput): Promise<st
 //   chief_complaint, notes, handled_by, payment_method, payment_amount,
 //   payment_status ('unpaid'|'paid'), handled_by, created_by, created_at, updated_at
 // Also assumes clinic_bookings has: visit_id, check_in_at.
+// Layanan dari clinic_visit_services (satu visit bisa banyak layanan).
+export interface ClinicVisitService {
+  id: string
+  service_id: string
+  service_name: string
+  price: number
+  notes: string | null
+}
+
 export interface ClinicVisit {
   id: string
   visit_code: string
   patient_id: string | null
   booking_id: string | null
-  service_id: string | null
   visit_date: string | null
   visit_time: string | null
   status: string
@@ -517,39 +525,33 @@ export interface ClinicVisit {
   updated_at?: string | null
   // Derived by enrichVisits:
   patient?: { full_name: string; phone: string | null; patient_code: string } | null
-  service?: { name: string } | null
+  services: ClinicVisitService[]
 }
 
 const VISIT_FIELDS =
-  'id, visit_code, patient_id, booking_id, service_id, visit_date, visit_time, status, ' +
+  'id, visit_code, patient_id, booking_id, visit_date, visit_time, status, ' +
   'chief_complaint, notes, handled_by, payment_method, payment_amount, payment_status, created_at, updated_at'
 
-/** Attach patient + service info to visits via separate lookups (fault-tolerant). */
+const VISIT_SELECT =
+  VISIT_FIELDS + ', services:clinic_visit_services(id, service_id, service_name, price, notes, sort_order)'
+
+/** Attach patient info to visits via a separate lookup. Services come from the embed in VISIT_SELECT. */
 async function enrichVisits(rows: ClinicVisit[]): Promise<ClinicVisit[]> {
   const patientIds = [...new Set(rows.map(r => r.patient_id).filter(Boolean))] as string[]
-  const serviceIds = [...new Set(rows.map(r => r.service_id).filter(Boolean))] as string[]
-
-  const [patRes, svcRes] = await Promise.all([
-    patientIds.length
-      ? supabase.from('clinic_patients').select('id, full_name, phone, patient_code').in('id', patientIds)
-      : Promise.resolve({ data: [], error: null }),
-    serviceIds.length
-      ? supabase.from('clinic_services').select('id, name').in('id', serviceIds)
-      : Promise.resolve({ data: [], error: null }),
-  ])
-
+  const patData = patientIds.length
+    ? (await supabase.from('clinic_patients').select('id, full_name, phone, patient_code').in('id', patientIds)).data
+    : []
   const patMap = new Map(
-    ((patRes.data as { id: string; full_name: string; phone: string | null; patient_code: string }[]) || [])
+    ((patData as { id: string; full_name: string; phone: string | null; patient_code: string }[]) || [])
       .map(p => [p.id, p]),
   )
-  const svcMap = new Map(((svcRes.data as { id: string; name: string }[]) || []).map(s => [s.id, s.name]))
 
   return rows.map(r => ({
     ...r,
     patient: r.patient_id && patMap.has(r.patient_id)
       ? { full_name: patMap.get(r.patient_id)!.full_name, phone: patMap.get(r.patient_id)!.phone, patient_code: patMap.get(r.patient_id)!.patient_code }
       : null,
-    service: r.service_id ? { name: svcMap.get(r.service_id) || '-' } : null,
+    services: (r.services ?? []) as ClinicVisitService[],
   }))
 }
 
@@ -676,7 +678,6 @@ export async function createVisitFromBooking(bookingId: string, payload: VisitFr
     visit_code,
     patient_id: patientId,
     booking_id: b.id,
-    service_id: b.service_id,
     visit_date, visit_time,
     status: 'in_progress',
     chief_complaint: payload.chief_complaint ?? null,
@@ -686,20 +687,34 @@ export async function createVisitFromBooking(bookingId: string, payload: VisitFr
     payment_amount: paidOnline ? b.price : null,
     payment_status: paidOnline ? 'paid' : 'unpaid',
     created_at: new Date().toISOString(),
-  }).select(VISIT_FIELDS).single()
+  }).select('id').single()
   if (vErr) throw vErr
-  const visit = vRow as unknown as ClinicVisit
+  const visitId = (vRow as { id: string }).id
+
+  // Carry the booking's service over as a clinic_visit_services row.
+  if (b.service_id) {
+    const { data: svc } = await supabase.from('clinic_services').select('name, price').eq('id', b.service_id).maybeSingle()
+    const s = svc as { name: string; price: number } | null
+    await supabase.from('clinic_visit_services').insert({
+      visit_id: visitId,
+      service_id: b.service_id,
+      service_name: s?.name ?? '-',
+      price: s?.price ?? b.price ?? 0,
+      notes: null,
+      sort_order: 0,
+    })
+  }
 
   await supabase.from('clinic_bookings')
     .update({
       check_in_at: new Date().toISOString(),
-      visit_id: visit.id,
+      visit_id: visitId,
       // Backfill patient_id on the booking if it was missing.
       ...(b.patient_id ? {} : { patient_id: patientId }),
     })
     .eq('id', b.id)
 
-  return visit
+  return getVisit(visitId)
 }
 
 export interface WalkInVisitPayload {
@@ -721,7 +736,6 @@ export async function createWalkInVisit(payload: WalkInVisitPayload): Promise<Cl
     visit_code,
     patient_id: payload.patient_id,
     booking_id: null,
-    service_id: payload.service_id,
     visit_date: payload.visit_date,
     visit_time: payload.visit_time,
     status: 'in_progress',
@@ -732,24 +746,38 @@ export async function createWalkInVisit(payload: WalkInVisitPayload): Promise<Cl
     payment_amount: payload.payment_amount ?? null,
     payment_status: 'unpaid',
     created_at: new Date().toISOString(),
-  }).select(VISIT_FIELDS).single()
+  }).select('id').single()
   if (error) throw error
-  return data as unknown as ClinicVisit
+  const visitId = (data as { id: string }).id
+
+  if (payload.service_id) {
+    const { data: svc } = await supabase.from('clinic_services').select('name, price').eq('id', payload.service_id).maybeSingle()
+    const s = svc as { name: string; price: number } | null
+    await supabase.from('clinic_visit_services').insert({
+      visit_id: visitId,
+      service_id: payload.service_id,
+      service_name: s?.name ?? '-',
+      price: s?.price ?? payload.payment_amount ?? 0,
+      notes: null,
+      sort_order: 0,
+    })
+  }
+
+  return getVisit(visitId)
 }
 
 export async function listVisits(date: string): Promise<ClinicVisit[]> {
   const { data, error } = await supabase
     .from('clinic_visits')
-    .select(VISIT_FIELDS)
+    .select(VISIT_SELECT)
     .eq('visit_date', date)
     .order('visit_time', { ascending: true, nullsFirst: false })
-  console.log('visits error:', error)
   if (error) throw error
   return enrichVisits((data || []) as unknown as ClinicVisit[])
 }
 
 export async function getVisit(id: string): Promise<ClinicVisit> {
-  const { data, error } = await supabase.from('clinic_visits').select(VISIT_FIELDS).eq('id', id).single()
+  const { data, error } = await supabase.from('clinic_visits').select(VISIT_SELECT).eq('id', id).single()
   if (error) throw error
   const [v] = await enrichVisits([data as unknown as ClinicVisit])
   return v
@@ -910,7 +938,6 @@ export interface ClinicVisitRow {
   visit_code: string
   patient_id: string
   booking_id: string | null
-  service_id: string
   visit_date: string
   visit_time: string | null
   status: string
@@ -924,12 +951,12 @@ export interface ClinicVisitRow {
   created_at: string
   updated_at: string
   patient?: { full_name: string; phone: string | null; patient_code: string } | null
-  service?: { name: string; price: number; duration_minutes: number | null } | null
+  services: ClinicVisitService[]
 }
 
 const VISIT_LOG_SELECT =
   '*, patient:clinic_patients(full_name,phone,patient_code), ' +
-  'service:clinic_services(name,price,duration_minutes)'
+  'services:clinic_visit_services(id, service_id, service_name, price, notes, sort_order)'
 
 export async function listVisitsLog(params: {
   patientId?: string; search?: string; dateFrom?: string; dateTo?: string
@@ -954,9 +981,16 @@ export async function listVisitsLog(params: {
   return { rows: (data ?? []) as unknown as ClinicVisitRow[], count: count ?? 0 }
 }
 
+export interface VisitServiceInput {
+  service_id: string
+  service_name: string
+  price: number
+  notes?: string
+}
+
 export interface VisitPayload {
   patient_id: string
-  service_id: string
+  services: VisitServiceInput[]
   visit_date: string
   visit_time: string | null
   status: string
@@ -969,23 +1003,57 @@ export interface VisitPayload {
   created_by?: string | null
 }
 
+async function insertVisitServices(visitId: string, services: VisitServiceInput[]): Promise<void> {
+  if (!services || services.length === 0) return
+  const { error } = await supabase
+    .from('clinic_visit_services')
+    .insert(services.map((s, i) => ({
+      visit_id: visitId,
+      service_id: s.service_id,
+      service_name: s.service_name,
+      price: s.price,
+      notes: s.notes ?? null,
+      sort_order: i,
+    })))
+  if (error) throw error
+}
+
 export async function addVisit(v: VisitPayload): Promise<ClinicVisitRow> {
+  const { services, ...rest } = v
   const visit_code = await nextVisitCode()
   const { data, error } = await supabase
     .from('clinic_visits')
-    .insert({ ...v, visit_code, booking_id: null, created_at: new Date().toISOString() })
-    .select(VISIT_LOG_SELECT)
+    .insert({ ...rest, visit_code, booking_id: null, created_at: new Date().toISOString() })
+    .select('id')
     .single()
   if (error) throw error
-  return data as unknown as ClinicVisitRow
+  const visitId = (data as { id: string }).id
+
+  await insertVisitServices(visitId, services)
+
+  const { data: row, error: rowErr } = await supabase
+    .from('clinic_visits')
+    .select(VISIT_LOG_SELECT)
+    .eq('id', visitId)
+    .single()
+  if (rowErr) throw rowErr
+  return row as unknown as ClinicVisitRow
 }
 
 export async function updateVisit(id: string, v: Partial<VisitPayload>): Promise<void> {
+  const { services, ...rest } = v
   const { error } = await supabase
     .from('clinic_visits')
-    .update({ ...v, updated_at: new Date().toISOString() })
+    .update({ ...rest, updated_at: new Date().toISOString() })
     .eq('id', id)
   if (error) throw error
+
+  // If services provided, replace the visit's service rows.
+  if (services) {
+    const { error: delErr } = await supabase.from('clinic_visit_services').delete().eq('visit_id', id)
+    if (delErr) throw delErr
+    await insertVisitServices(id, services)
+  }
 }
 
 // ─── Reports ─────────────────────────────────────────────────────────────────────
@@ -1002,13 +1070,13 @@ export interface ReportSummary {
 export async function getReportSummary(dateFrom: string, dateTo: string): Promise<ReportSummary> {
   const { data: visits, error } = await supabase
     .from('clinic_visits')
-    .select('*, service:clinic_services(name,price)')
+    .select('*, services:clinic_visit_services(service_name, price)')
     .gte('visit_date', dateFrom)
     .lte('visit_date', dateTo)
     .eq('payment_status', 'paid')
   if (error) throw error
 
-  const rows = (visits ?? []) as (ClinicVisitRow & { service: { name: string; price: number } | null })[]
+  const rows = (visits ?? []) as (ClinicVisitRow & { services: { service_name: string; price: number }[] | null })[]
 
   const totalRevenue = rows.reduce((s, r) => s + (r.payment_amount ?? 0), 0)
   const totalVisits = rows.length
@@ -1029,7 +1097,7 @@ export async function getReportSummary(dateFrom: string, dateTo: string): Promis
     return map
   }
 
-  const svcMap = group(r => r.service?.name ?? 'Unknown')
+  const svcMap = group(r => r.services?.[0]?.service_name ?? 'Unknown')
   const staffMap = group(r => r.handled_by ?? 'Unknown')
   const pmMap = group(r => r.payment_method ?? 'Unknown')
 
@@ -1055,6 +1123,7 @@ export interface ClinicScreening {
   patient_id: string
   selected_services: string[]
   chief_complaint: string | null
+  vital_signs: ClinicVitalSigns
   par_q: Record<string, boolean>
   msk_location: string[]
   msk_character: string[]
@@ -1237,4 +1306,115 @@ export async function toggleClinicUserActive(id: string, active: boolean): Promi
 export async function resetClinicUserPassword(id: string, newPassword: string): Promise<void> {
   const { error } = await supabase.rpc('reset_admin_password', { p_id: id, p_password: newPassword })
   if (error) throw error
+}
+
+// ─── Lock / Unlock ────────────────────────────────────────────────────────────
+
+export type LockableTable = 'clinic_screenings' | 'clinic_consents' | 'clinic_assessments' | 'clinic_transactions'
+
+export interface AuditLog {
+  id: string
+  action: string
+  record_type: string
+  record_id: string
+  performed_by: string
+  performed_by_role: string | null
+  reason: string | null
+  metadata: Record<string, unknown>
+  created_at: string
+}
+
+// Auto-lock setelah save — panggil ini setelah upsert berhasil
+export async function lockRecord(
+  table: LockableTable,
+  recordId: string,
+  lockedBy: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from(table)
+    .update({
+      is_locked: true,
+      locked_at: new Date().toISOString(),
+      locked_by: lockedBy,
+    })
+    .eq('id', recordId)
+  if (error) throw error
+}
+
+// Unlock oleh super admin — wajib ada reason
+export async function unlockRecord(
+  table: LockableTable,
+  recordId: string,
+  unlockedBy: string,
+  unlockedByRole: string,
+  reason: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from(table)
+    .update({
+      is_locked: false,
+      locked_at: null,
+      locked_by: null,
+    })
+    .eq('id', recordId)
+  if (error) throw error
+
+  await supabase.from('clinic_audit_logs').insert({
+    action: 'unlock',
+    record_type: table,
+    record_id: recordId,
+    performed_by: unlockedBy,
+    performed_by_role: unlockedByRole,
+    reason,
+    metadata: { table },
+  })
+}
+
+// Re-lock setelah edit selesai
+export async function relockRecord(
+  table: LockableTable,
+  recordId: string,
+  lockedBy: string,
+  lockedByRole: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from(table)
+    .update({
+      is_locked: true,
+      locked_at: new Date().toISOString(),
+      locked_by: lockedBy,
+    })
+    .eq('id', recordId)
+  if (error) throw error
+
+  await supabase.from('clinic_audit_logs').insert({
+    action: 'relock',
+    record_type: table,
+    record_id: recordId,
+    performed_by: lockedBy,
+    performed_by_role: lockedByRole,
+    reason: 'Re-locked after edit',
+    metadata: { table },
+  })
+}
+
+export async function listAuditLogs(params: {
+  recordType?: string
+  recordId?: string
+  page?: number
+  pageSize?: number
+}): Promise<{ rows: AuditLog[]; count: number }> {
+  const { recordType, recordId, page = 0, pageSize = 20 } = params
+  let q = supabase
+    .from('clinic_audit_logs')
+    .select('*', { count: 'exact' })
+    .order('created_at', { ascending: false })
+
+  if (recordType) q = q.eq('record_type', recordType)
+  if (recordId) q = q.eq('record_id', recordId)
+  q = q.range(page * pageSize, (page + 1) * pageSize - 1)
+
+  const { data, error, count } = await q
+  if (error) throw error
+  return { rows: (data ?? []) as unknown as AuditLog[], count: count ?? 0 }
 }

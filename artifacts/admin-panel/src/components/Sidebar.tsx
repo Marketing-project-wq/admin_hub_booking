@@ -38,6 +38,9 @@ const UNIT_MENUS: Record<string, MenuItem[]> = {
   clinic: [
     { label: 'Dashboard', path: '/clinic',          icon: '◻' },
     { label: 'Bookings',  path: '/clinic/bookings',  icon: '◻' },
+    { label: 'Kasir',     path: '/clinic/kasir',     icon: '◻' },
+    { label: 'Triase',    path: '/clinic/triase',    icon: '◻' },
+    { label: 'Dokter',    path: '/clinic/dokter',    icon: '◻' },
     { label: 'Users',     path: '/clinic/users',     icon: '◻' },
     { label: 'Visits',    path: '/clinic/visits',    icon: '◻' },
     { label: 'Patients',  path: '/clinic/patients',  icon: '◻' },
@@ -46,6 +49,7 @@ const UNIT_MENUS: Record<string, MenuItem[]> = {
     { label: 'Services',  path: '/clinic/services',  icon: '◻' },
     { label: 'Slots',     path: '/clinic/slots',     icon: '◻' },
     { label: 'Reports',   path: '/clinic/reports',   icon: '◻' },
+    { label: 'Audit Log', path: '/clinic/audit',     icon: '◻' },
   ],
 }
 
@@ -79,6 +83,7 @@ export default function Sidebar({ currentUnit, open, onClose }: SidebarProps) {
         {menus.map((m, i) => {
           if (m.path === '/arena/users' && user?.role !== 'super_admin') return null
           if (m.path === '/clinic/users' && !(user?.role === 'super_admin' || user?.permissions?.can_manage_users === true)) return null
+          if (m.path === '/clinic/audit' && user?.role !== 'super_admin') return null
           if (m.divider) {
             return (
               <div key={i} className="menu-divider">{m.label}</div>
