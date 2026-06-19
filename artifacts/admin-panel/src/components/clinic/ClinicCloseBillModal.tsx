@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { fmtRp } from '../../lib/format'
+import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../context/AuthContext'
 import { createTransaction, completeVisitPayment, type ClinicTransaction } from '../../lib/clinicBilling'
 import {
@@ -20,11 +21,6 @@ interface Props {
 const METHODS = ['cash', 'transfer', 'qris', 'debit', 'kredit'] as const
 const METHOD_LABEL: Record<string, string> = { cash: 'Cash', transfer: 'Transfer', qris: 'QRIS', debit: 'Debit', kredit: 'Kredit' }
 
-// Layanan yang masuk kategori Medic (dokter). Sisanya dianggap Performance.
-const MEDIC_SERVICES = ['Doctor Consultation & Assessment', 'Corrective Therapy by Doctor']
-const isMedicService = (name: string) => MEDIC_SERVICES.includes(name)
-const isPerformanceService = (name: string) => !MEDIC_SERVICES.includes(name)
-
 export default function ClinicCloseBillModal({
   visitId, patientId, patientName, patientCode, services, onClose, onSuccess,
 }: Props) {
@@ -43,6 +39,7 @@ export default function ClinicCloseBillModal({
   // Paket
   const [packages, setPackages] = useState<ClinicPackage[]>([])
   const [patientPackages, setPatientPackages] = useState<ClinicPatientPackage[]>([])
+  const [serviceCategoryMap, setServiceCategoryMap] = useState<Record<string, string>>({})
   const [buyingPackage, setBuyingPackage] = useState(false)
   const [selectedNewPackageId, setSelectedNewPackageId] = useState('')
   const [packageNotes, setPackageNotes] = useState('')
@@ -51,11 +48,22 @@ export default function ClinicCloseBillModal({
     Promise.all([
       listPackages(),
       listPatientActivePackages(patientId),
-    ]).then(([pkgs, patPkgs]) => {
+      supabase.from('clinic_services').select('name, package_category'),
+    ]).then(([pkgs, patPkgs, svcRes]) => {
       setPackages(pkgs)
       setPatientPackages(patPkgs)
+      const map: Record<string, string> = {}
+      ;(svcRes.data as { name: string; package_category: string | null }[] | null ?? [])
+        .forEach(s => { if (s.package_category) map[s.name] = s.package_category })
+      setServiceCategoryMap(map)
     }).catch(() => {})
   }, [patientId])
+
+  // Kategorisasi layanan berdasarkan package_category dari database.
+  const isPerformanceService = (name: string) => serviceCategoryMap[name] === 'performance'
+  const isMedicService = (name: string) => serviceCategoryMap[name] === 'medic'
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const isNoCoverageService = (name: string) => !serviceCategoryMap[name] || serviceCategoryMap[name] === 'none'
 
   // Paket aktif pasien per kategori.
   const activePerformancePackage = patientPackages.find(pp => pp.package?.category === 'Performance') ?? null
