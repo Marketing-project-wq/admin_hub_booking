@@ -1,8 +1,11 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { fmtRp } from '../../lib/format'
 import { useAuth } from '../../context/AuthContext'
 import { createTransaction, completeVisitPayment, type ClinicTransaction } from '../../lib/clinicBilling'
-import { lockRecord } from '../../lib/clinic'
+import {
+  lockRecord, listPackages, listPatientActivePackages, purchasePatientPackage, usePackageSession,
+  type ClinicPackage, type ClinicPatientPackage,
+} from '../../lib/clinic'
 
 interface Props {
   visitId: string
@@ -16,6 +19,11 @@ interface Props {
 
 const METHODS = ['cash', 'transfer', 'qris', 'debit', 'kredit'] as const
 const METHOD_LABEL: Record<string, string> = { cash: 'Cash', transfer: 'Transfer', qris: 'QRIS', debit: 'Debit', kredit: 'Kredit' }
+
+// Layanan yang masuk kategori Medic (dokter). Sisanya dianggap Performance.
+const MEDIC_SERVICES = ['Doctor Consultation & Assessment', 'Corrective Therapy by Doctor']
+const isMedicService = (name: string) => MEDIC_SERVICES.includes(name)
+const isPerformanceService = (name: string) => !MEDIC_SERVICES.includes(name)
 
 export default function ClinicCloseBillModal({
   visitId, patientId, patientName, patientCode, services, onClose, onSuccess,
@@ -32,9 +40,42 @@ export default function ClinicCloseBillModal({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
-  const servicesTotal = services.reduce((sum, s) => sum + (Number(s.price) || 0), 0)
-  const total = Math.max(0, servicesTotal - (Number(discount) || 0))
-  const change = method === 'cash' && cashReceived > total ? cashReceived - total : 0
+  // Paket
+  const [packages, setPackages] = useState<ClinicPackage[]>([])
+  const [patientPackages, setPatientPackages] = useState<ClinicPatientPackage[]>([])
+  const [buyingPackage, setBuyingPackage] = useState(false)
+  const [selectedNewPackageId, setSelectedNewPackageId] = useState('')
+  const [packageNotes, setPackageNotes] = useState('')
+
+  useEffect(() => {
+    Promise.all([
+      listPackages(),
+      listPatientActivePackages(patientId),
+    ]).then(([pkgs, patPkgs]) => {
+      setPackages(pkgs)
+      setPatientPackages(patPkgs)
+    }).catch(() => {})
+  }, [patientId])
+
+  // Paket aktif pasien per kategori.
+  const activePerformancePackage = patientPackages.find(pp => pp.package?.category === 'Performance') ?? null
+  const activeMedicPackage = patientPackages.find(pp => pp.package?.category === 'Medic') ?? null
+
+  // Layanan yang ter-cover paket aktif vs yang bayar normal.
+  const coveredServices = services.filter(s => {
+    if (activePerformancePackage && isPerformanceService(s.service_name)) return true
+    if (activeMedicPackage && isMedicService(s.service_name)) return true
+    return false
+  })
+  const uncoveredServices = services.filter(s => !coveredServices.includes(s))
+
+  const visitSubtotal = uncoveredServices.reduce((sum, s) => sum + (Number(s.price) || 0), 0)
+  const selectedNewPkg = buyingPackage && selectedNewPackageId
+    ? packages.find(p => p.id === selectedNewPackageId) ?? null
+    : null
+  const packageSubtotal = selectedNewPkg ? selectedNewPkg.package_price : 0
+  const grandTotal = Math.max(0, visitSubtotal + packageSubtotal - (Number(discount) || 0))
+  const change = method === 'cash' && cashReceived > grandTotal ? cashReceived - grandTotal : 0
   const isCard = method === 'debit' || method === 'kredit'
 
   const handleConfirm = async () => {
@@ -48,21 +89,45 @@ export default function ClinicCloseBillModal({
         if (cardLast4.trim()) payment_detail.card_last4 = cardLast4.trim()
         if (bankName.trim()) payment_detail.bank_name = bankName.trim()
       }
+      const serviceName = [
+        services.map(s => s.service_name).join(', ') || null,
+        selectedNewPkg ? `Paket ${selectedNewPkg.name}` : null,
+      ].filter(Boolean).join(' + ') || '-'
+
       const trx = await createTransaction({
         visit_id: visitId,
         patient_id: patientId,
         service_id: services[0]?.service_id ?? undefined,
-        service_name: services.map(s => s.service_name).join(', ') || '-',
-        service_price: servicesTotal,
+        service_name: serviceName,
+        service_price: visitSubtotal + packageSubtotal,
         discount: Number(discount) || 0,
-        total_amount: total,
+        total_amount: grandTotal,
         payment_method: method,
         payment_detail,
         notes: notes.trim() || undefined,
         cashier_name: cashierName.trim() || undefined,
       })
       if (user) await lockRecord('clinic_transactions', trx.id, user.full_name)
-      await completeVisitPayment(visitId, method, total)
+      await completeVisitPayment(visitId, method, grandTotal)
+
+      // 1. Potong sesi paket aktif yang meng-cover layanan kunjungan ini (1 sesi per paket).
+      if (activePerformancePackage && coveredServices.some(s => isPerformanceService(s.service_name))) {
+        await usePackageSession(activePerformancePackage.id)
+      }
+      if (activeMedicPackage && coveredServices.some(s => isMedicService(s.service_name))) {
+        await usePackageSession(activeMedicPackage.id)
+      }
+
+      // 2. Pembelian paket baru (jika dicentang).
+      if (buyingPackage && selectedNewPackageId && selectedNewPkg) {
+        await purchasePatientPackage({
+          patient_id: patientId,
+          package_id: selectedNewPackageId,
+          total_sessions: selectedNewPkg.sessions,
+          notes: packageNotes.trim() || undefined,
+        })
+      }
+
       onSuccess(trx)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Gagal memproses pembayaran')
@@ -81,31 +146,117 @@ export default function ClinicCloseBillModal({
 
         {error && <p style={{ color: 'var(--red)', fontSize: 13, marginBottom: 12 }}>{error}</p>}
 
-        {/* Visit summary */}
+        {/* Visit header */}
         <div style={{ background: '#F9FAFB', borderRadius: 10, padding: 14, marginBottom: 16 }}>
           <div style={{ fontWeight: 700 }}>{patientName}</div>
-          <div style={{ fontSize: 12, color: 'var(--text-muted)', fontFamily: 'monospace', marginBottom: 8 }}>{patientCode}</div>
-          {services.length === 0 ? (
-            <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Tidak ada layanan</div>
-          ) : services.map(s => (
-            <div key={s.service_id} style={{ fontSize: 13, marginBottom: 2 }}>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', fontFamily: 'monospace' }}>{patientCode}</div>
+        </div>
+
+        {/* Info paket aktif (jika ada) */}
+        {patientPackages.length > 0 && (
+          <div style={{ marginBottom: 16, padding: 12, background: '#F0FFF4', borderRadius: 10, border: '1px solid #6EE7B7' }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: '#065F46', marginBottom: 6 }}>✓ Paket Aktif Pasien</div>
+            {patientPackages.map(pp => (
+              <div key={pp.id} style={{ fontSize: 12, color: '#374151', marginBottom: 2 }}>
+                {pp.package?.name} — Sisa {pp.remaining_sessions} sesi
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Rincian biaya */}
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8 }}>Rincian Biaya</div>
+
+          {coveredServices.length > 0 && (
+            <div style={{ marginBottom: 8 }}>
+              <div style={{ fontSize: 11, color: '#059669', fontWeight: 600, marginBottom: 4 }}>✓ Ter-cover Paket</div>
+              {coveredServices.map(s => (
+                <div key={s.service_name} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#6B7280', textDecoration: 'line-through' }}>
+                  <span>{s.service_name}</span>
+                  <span>{fmtRp(s.price)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {uncoveredServices.map(s => (
+            <div key={s.service_name} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 4 }}>
               <span>{s.service_name}</span>
+              <span>{fmtRp(s.price)}</span>
             </div>
           ))}
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, fontWeight: 700, borderTop: '1px solid var(--border, #E5E7EB)', marginTop: 6, paddingTop: 6 }}>
-            <span>Subtotal</span>
-            <span>{fmtRp(servicesTotal)}</span>
+
+          {selectedNewPkg && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 4, color: '#1D4ED8' }}>
+              <span>📦 {selectedNewPkg.name}</span>
+              <span>{fmtRp(selectedNewPkg.package_price)}</span>
+            </div>
+          )}
+
+          {discount > 0 && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#DC2626', marginBottom: 4 }}>
+              <span>Diskon</span>
+              <span>-{fmtRp(discount)}</span>
+            </div>
+          )}
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 15, borderTop: '1px solid #E5E7EB', paddingTop: 8, marginTop: 4 }}>
+            <span>Total</span>
+            <span style={{ color: '#C0392B' }}>{fmtRp(grandTotal)}</span>
           </div>
+        </div>
+
+        {/* Section beli paket baru */}
+        <div style={{ marginBottom: 16, padding: 14, background: '#F0F9FF', borderRadius: 10, border: '1px solid #BAE6FD' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+            <input type="checkbox" id="buyPkg" checked={buyingPackage} onChange={e => setBuyingPackage(e.target.checked)} />
+            <label htmlFor="buyPkg" style={{ fontSize: 13, fontWeight: 600, color: '#0369A1', cursor: 'pointer' }}>
+              📦 Tambah pembelian paket
+            </label>
+          </div>
+
+          {buyingPackage && (
+            <>
+              <select
+                value={selectedNewPackageId}
+                onChange={e => setSelectedNewPackageId(e.target.value)}
+                style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid #E5E7EB', fontSize: 13, marginBottom: 8 }}
+              >
+                <option value="">— Pilih Paket —</option>
+                {['Performance', 'Medic'].map(cat => (
+                  <optgroup key={cat} label={`${cat} Package`}>
+                    {packages.filter(p => p.category === cat).map(p => (
+                      <option key={p.id} value={p.id}>
+                        {p.name} — {fmtRp(p.package_price)} ({p.sessions}x sesi, hemat {p.discount_percent}%)
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+
+              {selectedNewPkg && (
+                <div style={{ fontSize: 12, color: '#0369A1', background: '#E0F2FE', padding: '8px 12px', borderRadius: 8, marginBottom: 8 }}>
+                  Harga paket: <strong>{fmtRp(selectedNewPkg.package_price)}</strong> untuk {selectedNewPkg.sessions} sesi
+                  (hemat {fmtRp(selectedNewPkg.retail_price - selectedNewPkg.package_price)})
+                </div>
+              )}
+
+              <textarea
+                value={packageNotes}
+                onChange={e => setPackageNotes(e.target.value)}
+                placeholder="Catatan paket (opsional)..."
+                rows={2}
+                style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid #E5E7EB', fontSize: 13, fontFamily: 'inherit', resize: 'none', boxSizing: 'border-box' }}
+              />
+            </>
+          )}
         </div>
 
         {/* Discount */}
         <div className="form-group">
           <label>Diskon (Rp)</label>
           <input type="number" min={0} value={discount} onChange={e => setDiscount(Math.max(0, Number(e.target.value)))} />
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, fontWeight: 700, margin: '4px 0 16px' }}>
-          <span>Total setelah diskon</span>
-          <span style={{ color: 'var(--red)' }}>{fmtRp(total)}</span>
         </div>
 
         {/* Payment method */}

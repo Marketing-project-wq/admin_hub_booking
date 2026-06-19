@@ -24,7 +24,7 @@ export interface ClinicTransaction {
   updated_at: string
   // joined
   patient?: Pick<ClinicPatient, 'full_name' | 'phone' | 'patient_code'> | null
-  visit?: (Pick<ClinicVisit, 'visit_code' | 'visit_date' | 'visit_time'> & {
+  visit?: (Pick<ClinicVisit, 'visit_code' | 'visit_date' | 'visit_time' | 'patient_package_id'> & {
     services: { service_name: string; price: number }[]
   }) | null
 }
@@ -58,7 +58,7 @@ export async function listTransactions(params: {
     .select(`
       *,
       patient:clinic_patients(full_name, phone, patient_code),
-      visit:clinic_visits(visit_code, visit_date, visit_time, services:clinic_visit_services(service_name, price))
+      visit:clinic_visits(visit_code, visit_date, visit_time, patient_package_id, services:clinic_visit_services(service_name, price))
     `, { count: 'exact' })
     .order('created_at', { ascending: false })
 
@@ -77,7 +77,7 @@ export async function listTransactions(params: {
 export async function getTransactionByVisit(visitId: string): Promise<ClinicTransaction | null> {
   const { data } = await supabase
     .from('clinic_transactions')
-    .select(`*, patient:clinic_patients(full_name, phone, patient_code), visit:clinic_visits(visit_code, visit_date, visit_time, services:clinic_visit_services(service_name, price))`)
+    .select(`*, patient:clinic_patients(full_name, phone, patient_code), visit:clinic_visits(visit_code, visit_date, visit_time, patient_package_id, services:clinic_visit_services(service_name, price))`)
     .eq('visit_id', visitId)
     .maybeSingle()
   return data as unknown as ClinicTransaction | null

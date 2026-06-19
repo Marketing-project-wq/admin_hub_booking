@@ -89,6 +89,9 @@ export default function ClinicVisitDetail() {
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           {visit.payment_status !== 'paid' && (
+            <button className="btn-secondary" style={{ width: 'auto', padding: '8px 16px' }} onClick={() => navigate(`/clinic/visits?edit=${visit.id}`)}>✏️ Edit Kunjungan</button>
+          )}
+          {visit.payment_status !== 'paid' && (
             <button className="btn-primary" style={{ width: 'auto', padding: '8px 16px', background: '#065F46' }} onClick={() => setShowCloseBill(true)}>💳 Close Bill</button>
           )}
         </div>

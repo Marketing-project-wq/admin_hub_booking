@@ -3,8 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { fmtDate } from '../../lib/format'
 import ClinicPatientForm, { type PatientFormValues } from './ClinicPatientForm'
 import {
-  listPatientsPaged, createPatient, updatePatient, deactivatePatient,
-  type ClinicPatient,
+  listPatientsPaged, createPatient, updatePatient, deactivatePatient, listPatientPackages,
+  type ClinicPatient, type ClinicPatientPackage,
 } from '../../lib/clinic'
 
 const PAGE_SIZE = 20
@@ -249,6 +249,9 @@ export default function ClinicPatients() {
                   <Field label="Catatan" value={selected.notes || '-'} />
                   <Field label="Terdaftar" value={fmtDate(selected.created_at)} />
                 </div>
+
+                <PatientPackagesSection patientId={selected.id} />
+
                 <div className="modal-footer" style={{ flexWrap: 'wrap' }}>
                   <button className="btn-secondary" onClick={() => navigate(`/clinic/visits?patient_id=${selected.id}`)}>
                     Lihat Riwayat Kunjungan
@@ -271,5 +274,59 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
       <div style={{ color: 'var(--text-muted)' }}>{label}</div>
       <div style={{ fontWeight: 500 }}>{value}</div>
     </>
+  )
+}
+
+// ─── Paket Aktif ───────────────────────────────────────────────────────────────
+function PatientPackagesSection({ patientId }: { patientId: string }) {
+  const [pkgs, setPkgs] = useState<ClinicPatientPackage[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let active = true
+    setLoading(true)
+    listPatientPackages(patientId, { includeInactive: true })
+      .then(r => { if (active) setPkgs(r) })
+      .catch(() => {})
+      .finally(() => { if (active) setLoading(false) })
+    return () => { active = false }
+  }, [patientId])
+
+  return (
+    <div style={{ marginTop: 20 }}>
+      <h4 style={{ fontSize: 14, fontWeight: 700, margin: '0 0 10px' }}>Paket</h4>
+      {loading ? (
+        <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Memuat paket...</p>
+      ) : pkgs.length === 0 ? (
+        <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Belum ada paket.</p>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {pkgs.map(pp => <PackageCard key={pp.id} pp={pp} />)}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function PackageCard({ pp }: { pp: ClinicPatientPackage }) {
+  const total = pp.total_sessions || 0
+  const used = pp.used_sessions || 0
+  const pct = total > 0 ? Math.min(100, Math.round((used / total) * 100)) : 0
+  const active = pp.is_active
+  return (
+    <div style={{ border: '1px solid #E5E7EB', borderRadius: 10, padding: 12 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+        <span style={{ fontWeight: 600, fontSize: 13 }}>{pp.package?.name ?? 'Paket'}</span>
+        <span className="badge" style={active ? { background: '#DCFCE7', color: '#166534' } : { background: '#F3F4F6', color: '#6B7280' }}>
+          {active ? 'Aktif' : 'Habis'}
+        </span>
+      </div>
+      <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>
+        {used} / {total} sesi terpakai · Sisa {pp.remaining_sessions} sesi
+      </div>
+      <div style={{ height: 8, background: '#F3F4F6', borderRadius: 999, overflow: 'hidden' }}>
+        <div style={{ width: `${pct}%`, height: '100%', background: active ? '#10B981' : '#9CA3AF' }} />
+      </div>
+    </div>
   )
 }

@@ -4,10 +4,11 @@ import { fmtRp, fmtDate, fmtTime, fmtDateTime } from '../../lib/format'
 import { useAuth } from '../../context/AuthContext'
 import {
   listVisitsLog, addVisit, updateVisit,
-  listPatientsPaged, listServicesFull, listStaff, getPatient,
+  listPatientsPaged, listServicesFull, listStaff, getPatient, getPatientPackage, listPatientActivePackages, getVisitRow,
   getBookingByCode, createVisitFromBooking, todayISO,
   type ClinicVisitRow, type VisitPayload, type ClinicPatient,
   type ClinicServiceFull, type ClinicStaff, type BookingWithDetails,
+  type ClinicPatientPackage,
 } from '../../lib/clinic'
 
 const PAGE_SIZE = 20
@@ -33,6 +34,7 @@ export default function ClinicVisits() {
   const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
   const patientFilterId = searchParams.get('patient_id')
+  const editId = searchParams.get('edit')
 
   const [rows, setRows] = useState<ClinicVisitRow[]>([])
   const [total, setTotal] = useState(0)
@@ -51,6 +53,7 @@ export default function ClinicVisits() {
 
   const [showAdd, setShowAdd] = useState(false)
   const [selected, setSelected] = useState<ClinicVisitRow | null>(null)
+  const [editVisit, setEditVisit] = useState<ClinicVisitRow | null>(null)
 
   // Check-in from booking
   const [code, setCode] = useState('')
@@ -90,6 +93,21 @@ export default function ClinicVisits() {
       .catch(() => {})
     return () => { active = false }
   }, [patientFilterId])
+
+  // Buka modal edit langsung saat datang dengan ?edit={visitId} (mis. dari halaman detail).
+  useEffect(() => {
+    if (!editId) return
+    let active = true
+    getVisitRow(editId)
+      .then(row => { if (active && row) setEditVisit(row) })
+      .catch(() => {})
+      .finally(() => {
+        const next = new URLSearchParams(searchParams)
+        next.delete('edit')
+        setSearchParams(next, { replace: true })
+      })
+    return () => { active = false }
+  }, [editId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSearchChange = (val: string) => {
     setSearchInput(val)
@@ -206,15 +224,15 @@ export default function ClinicVisits() {
         <table className="data-table">
           <thead>
             <tr>
-              <th>Kode</th><th>Pasien</th><th>Layanan</th><th>Tanggal</th>
+              <th>Kode</th><th>Pasien</th><th>Layanan</th><th>Paket</th><th>Tanggal</th>
               <th>Status</th><th>Pembayaran</th><th>Bayar</th><th>Ditangani</th><th>Aksi</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr className="loading-row"><td colSpan={9}>Memuat data...</td></tr>
+              <tr className="loading-row"><td colSpan={10}>Memuat data...</td></tr>
             ) : rows.length === 0 ? (
-              <tr><td colSpan={9} className="empty-state">Tidak ada kunjungan</td></tr>
+              <tr><td colSpan={10} className="empty-state">Tidak ada kunjungan</td></tr>
             ) : rows.map(v => (
               <tr key={v.id} style={{ cursor: 'pointer' }} onClick={() => setSelected(v)}>
                 <td style={{ fontFamily: 'monospace', fontSize: 11 }}>{v.visit_code}</td>
@@ -228,6 +246,11 @@ export default function ClinicVisits() {
                   {v.services.length === 0 ? '-'
                     : v.services.length === 1 ? v.services[0].service_name
                     : <>{v.services[0].service_name} <span className="badge" style={{ background: '#F3F4F6', color: '#6B7280' }}>+{v.services.length - 1} lagi</span></>}
+                </td>
+                <td>
+                  {v.patient_package_id
+                    ? <span className="badge" style={{ background: '#DBEAFE', color: '#1D4ED8' }}>📦 Paket</span>
+                    : '-'}
                 </td>
                 <td style={{ whiteSpace: 'nowrap', fontSize: 12 }}>
                   {fmtDate(v.visit_date)}{v.visit_time ? ` · ${fmtTime(v.visit_time)}` : ''}
@@ -275,6 +298,15 @@ export default function ClinicVisits() {
           onSaved={() => { setSelected(null); fetchData() }}
         />
       )}
+
+      {editVisit && (
+        <VisitFormModal
+          mode="edit"
+          visit={editVisit}
+          onClose={() => setEditVisit(null)}
+          onSaved={() => { setEditVisit(null); setPage(0); fetchData() }}
+        />
+      )}
     </div>
   )
 }
@@ -284,6 +316,17 @@ function VisitDetailModal({ visit, onClose, onSaved }: {
   visit: ClinicVisitRow; onClose: () => void; onSaved: () => void
 }) {
   const [editing, setEditing] = useState(false)
+  const [pkg, setPkg] = useState<ClinicPatientPackage | null>(null)
+
+  useEffect(() => {
+    if (!visit.patient_package_id) { setPkg(null); return }
+    let active = true
+    getPatientPackage(visit.patient_package_id)
+      .then(p => { if (active) setPkg(p) })
+      .catch(() => {})
+    return () => { active = false }
+  }, [visit.patient_package_id])
+
   if (editing) {
     return <VisitFormModal mode="edit" visit={visit} onClose={() => setEditing(false)} onSaved={onSaved} />
   }
@@ -300,6 +343,12 @@ function VisitDetailModal({ visit, onClose, onSaved }: {
           <Label>Layanan</Label><Val>{visit.services.length
             ? visit.services.map(s => s.service_name).join(', ')
             : '-'}</Val>
+          {visit.patient_package_id && (
+            <>
+              <Label>Paket</Label><Val>{pkg?.package?.name ?? '...'}</Val>
+              <Label>Sisa Sesi</Label><Val>{pkg ? `${pkg.remaining_sessions} dari ${pkg.total_sessions} sesi` : '...'}</Val>
+            </>
+          )}
           <Label>Tanggal</Label><Val>{fmtDate(visit.visit_date)}</Val>
           <Label>Jam</Label><Val>{fmtTime(visit.visit_time)}</Val>
           <Label>Status</Label><Val><StatusBadge status={visit.status} /></Val>
@@ -357,6 +406,10 @@ function VisitFormModal({ mode, visit, defaultPatientId, onClose, onSaved }: {
   const [amount, setAmount] = useState<number>(visit?.payment_amount ?? 0)
   const [paymentStatus, setPaymentStatus] = useState(visit?.payment_status ?? 'unpaid')
 
+  // Paket aktif pasien (opsional dipakai untuk kunjungan ini).
+  const [activePackages, setActivePackages] = useState<ClinicPatientPackage[]>([])
+  const [usePackageId, setUsePackageId] = useState<string | null>(visit?.patient_package_id ?? null)
+
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
@@ -376,6 +429,16 @@ function VisitFormModal({ mode, visit, defaultPatientId, onClose, onSaved }: {
     getPatient(id).then(p => p && setPatientLabel(`${p.full_name} (${p.patient_code})`)).catch(() => {})
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Muat paket aktif pasien terpilih (untuk opsi "Gunakan Paket").
+  useEffect(() => {
+    if (!patientId) { setActivePackages([]); return }
+    let active = true
+    listPatientActivePackages(patientId)
+      .then(pkgs => { if (active) setActivePackages(pkgs) })
+      .catch(() => {})
+    return () => { active = false }
+  }, [patientId])
+
   const handlePatientQuery = (val: string) => {
     setPatientQuery(val)
     if (patientTimer.current) clearTimeout(patientTimer.current)
@@ -392,6 +455,7 @@ function VisitFormModal({ mode, visit, defaultPatientId, onClose, onSaved }: {
     setPatientId(p.id)
     setPatientLabel(`${p.full_name} (${p.patient_code})`)
     setPatientQuery(''); setPatientResults([]); setShowResults(false)
+    setUsePackageId(null)
   }
 
   const servicesTotal = selectedServices.reduce((sum, s) => sum + (Number(s.price) || 0), 0)
@@ -438,7 +502,8 @@ function VisitFormModal({ mode, visit, defaultPatientId, onClose, onSaved }: {
       handled_by: handledBy.trim() || null,
       payment_method: paymentMethod || null,
       payment_amount: Number(amount) || 0,
-      payment_status: paymentStatus,
+      payment_status: usePackageId ? 'package' : paymentStatus,
+      patient_package_id: usePackageId,
       created_by: user?.email ?? null,
     }
     try {
@@ -468,7 +533,7 @@ function VisitFormModal({ mode, visit, defaultPatientId, onClose, onSaved }: {
             {patientLabel && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
                 <span style={{ fontWeight: 500 }}>{patientLabel}</span>
-                <button type="button" className="action-btn" onClick={() => { setPatientId(''); setPatientLabel('') }}>Ganti</button>
+                <button type="button" className="action-btn" onClick={() => { setPatientId(''); setPatientLabel(''); setUsePackageId(null) }}>Ganti</button>
               </div>
             )}
             {!patientLabel && (
@@ -520,6 +585,25 @@ function VisitFormModal({ mode, visit, defaultPatientId, onClose, onSaved }: {
               </div>
             )}
           </div>
+
+          {activePackages.length > 0 && (
+            <div className="form-group">
+              <label>Gunakan Paket (opsional)</label>
+              <select value={usePackageId ?? ''} onChange={e => setUsePackageId(e.target.value || null)}>
+                <option value="">— Tidak pakai paket —</option>
+                {activePackages.map(pp => (
+                  <option key={pp.id} value={pp.id}>
+                    {pp.package?.name} — Sisa {pp.remaining_sessions} sesi
+                  </option>
+                ))}
+              </select>
+              {usePackageId && (
+                <p style={{ fontSize: 12, color: '#0369A1', marginTop: 6 }}>
+                  Kunjungan ini akan ditandai memakai paket; sesi terpotong saat kasir close bill.
+                </p>
+              )}
+            </div>
+          )}
 
           <div className="form-row">
             <div className="form-group">

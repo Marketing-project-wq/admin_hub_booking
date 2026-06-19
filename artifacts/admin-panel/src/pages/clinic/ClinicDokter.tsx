@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../../lib/supabase'
 import { fmtDate, fmtTime, fmtDateTime } from '../../lib/format'
 import { useAuth } from '../../context/AuthContext'
-import { lockRecord } from '../../lib/clinic'
+import { lockRecord, listPatientPackages, scheduleFollowUpVisit, type ClinicPatientPackage } from '../../lib/clinic'
 import LockBadge from '../../components/clinic/LockBadge'
 
 interface DokterVisit {
@@ -13,14 +13,16 @@ interface DokterVisit {
   status: string
   chief_complaint: string | null
   handled_by: string | null
+  patient_package_id: string | null
   patient: {
+    id: string
     full_name: string
     patient_code: string
     phone: string
     date_of_birth: string | null
     gender: string | null
   } | null
-  services: { id: string; service_name: string; price: number }[]
+  services: { id: string; service_id: string; service_name: string; price: number }[]
 }
 
 interface PatientHistory {
@@ -163,9 +165,9 @@ async function saveAssessment(visitId: string, patientId: string, form: Assessme
 }
 
 const VISIT_SELECT = `
-  id, visit_code, visit_date, visit_time, status, chief_complaint, handled_by,
-  patient:clinic_patients(full_name, patient_code, phone, date_of_birth, gender),
-  services:clinic_visit_services(id, service_name, price)
+  id, visit_code, visit_date, visit_time, status, chief_complaint, handled_by, patient_package_id,
+  patient:clinic_patients(id, full_name, patient_code, phone, date_of_birth, gender),
+  services:clinic_visit_services(id, service_id, service_name, price)
 `
 
 // Fetch visits hari ini
@@ -273,6 +275,9 @@ function VisitCard({ visit, queue = false, onStatusChange, onOpen, busy }: {
         <div style={{ fontWeight: 700 }}>{visit.patient?.full_name || '-'}</div>
         <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'monospace' }}>{visit.patient?.patient_code || '-'}</div>
         <div style={{ fontSize: 13, marginTop: 2 }}>{visit.services.map(s => s.service_name).join(', ') || '-'}</div>
+        {visit.patient_package_id && (
+          <span style={{ display: 'inline-block', marginTop: 4, fontSize: 11, fontWeight: 600, padding: '1px 8px', borderRadius: 999, background: '#DBEAFE', color: '#1D4ED8' }}>📦 Paket</span>
+        )}
         {visit.chief_complaint && (
           <div style={{ fontSize: 12, fontStyle: 'italic', color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {visit.chief_complaint}
@@ -304,6 +309,24 @@ const EmptyState = ({ children }: { children: React.ReactNode }) => (
   <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)', background: '#fff', border: '1px dashed #E5E7EB', borderRadius: 12 }}>{children}</div>
 )
 
+const SCREENING_SECTION_TITLE: React.CSSProperties = { fontWeight: 700, fontSize: 12, color: '#374151', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }
+
+// Baris chips read-only untuk satu kategori. Tidak merender apa pun jika items kosong.
+function ChipRow({ label, items, tone = 'gray' }: { label: string; items: string[]; tone?: 'gray' | 'red' }) {
+  if (!items || items.length === 0) return null
+  const chip: React.CSSProperties = tone === 'red'
+    ? { padding: '2px 8px', background: '#FEE2E2', color: '#C0392B', borderRadius: 999, fontSize: 11 }
+    : { padding: '2px 8px', background: '#F3F4F6', color: '#374151', borderRadius: 999, fontSize: 11 }
+  return (
+    <div style={{ marginBottom: 8 }}>
+      <div style={{ fontSize: 12, color: '#6B7280', marginBottom: 4 }}>{label}</div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+        {items.map((it, i) => <span key={`${it}-${i}`} style={chip}>{it}</span>)}
+      </div>
+    </div>
+  )
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 export default function ClinicDokter() {
   const { user } = useAuth()
@@ -332,6 +355,22 @@ export default function ClinicDokter() {
   const [assessmentLocked, setAssessmentLocked] = useState(false)
   const [assessmentLockedAt, setAssessmentLockedAt] = useState<string | null>(null)
   const [assessmentLockedBy, setAssessmentLockedBy] = useState<string | null>(null)
+
+  // Follow-up scheduling + paket pasien
+  const [patientPackages, setPatientPackages] = useState<ClinicPatientPackage[]>([])
+  const [showFollowUpModal, setShowFollowUpModal] = useState(false)
+  const [followUpDate, setFollowUpDate] = useState('')
+  const [followUpNotes, setFollowUpNotes] = useState('')
+  const [selectedPackageId, setSelectedPackageId] = useState<string | null>(null)
+  const [savingFollowUp, setSavingFollowUp] = useState(false)
+  const [followUpResult, setFollowUpResult] = useState<string | null>(null)
+
+  // Auto-clear toast follow-up.
+  useEffect(() => {
+    if (!followUpResult) return
+    const t = window.setTimeout(() => setFollowUpResult(null), 4000)
+    return () => window.clearTimeout(t)
+  }, [followUpResult])
 
   const loadToday = useCallback(async (showSpinner = true) => {
     if (showSpinner) setLoading(true)
@@ -374,17 +413,26 @@ export default function ClinicDokter() {
     setConsentData([])
     setAssessmentError('')
 
+    // Reset state follow-up untuk kunjungan baru.
+    setShowFollowUpModal(false)
+    setFollowUpDate('')
+    setFollowUpNotes('')
+    setSelectedPackageId(null)
+    setPatientPackages([])
+
     setLoadingScreening(true)
     setLoadingConsent(true)
     setLoadingAssessment(true)
     try {
-      const [screening, consents, existingAssessment] = await Promise.all([
+      const [screening, consents, existingAssessment, packages] = await Promise.all([
         fetchScreening(visit.id),
         fetchConsents(visit.id),
         fetchAssessment(visit.id),
+        listPatientPackages(visit.patient?.id ?? ''),
       ])
       setScreeningData(screening)
       setConsentData(consents)
+      setPatientPackages(packages)
       if (existingAssessment) {
         setAssessment(existingAssessment.form)
         setAssessmentId(existingAssessment.id)
@@ -410,8 +458,8 @@ export default function ClinicDokter() {
     }
   }
 
-  const handleSaveAssessment = async () => {
-    if (!selectedVisit?.id || !selectedVisit?.patient?.full_name) return
+  const handleSaveAssessment = async (): Promise<boolean> => {
+    if (!selectedVisit?.id || !selectedVisit?.patient?.full_name) return false
     setSavingAssessment(true)
     setAssessmentError('')
     try {
@@ -429,10 +477,52 @@ export default function ClinicDokter() {
       setAssessmentLockedAt(new Date().toISOString())
       setAssessmentLockedBy(user?.full_name ?? null)
       await loadToday(false)
+      return true
     } catch (e) {
       setAssessmentError(e instanceof Error ? e.message : 'Gagal menyimpan assessment')
+      return false
     } finally {
       setSavingAssessment(false)
+    }
+  }
+
+  // Simpan SOAP lalu buka modal penjadwalan kunjungan berikutnya.
+  const handleSaveAndSchedule = async () => {
+    const ok = await handleSaveAssessment()
+    if (ok) {
+      setFollowUpDate('')
+      setFollowUpNotes('')
+      setSelectedPackageId(null)
+      setShowFollowUpModal(true)
+    }
+  }
+
+  const handleScheduleFollowUp = async () => {
+    if (!selectedVisit || !followUpDate) return
+    setSavingFollowUp(true)
+    try {
+      const services = selectedVisit.services?.map(s => ({
+        service_id: s.service_id,
+        service_name: s.service_name,
+        price: s.price,
+      })) ?? []
+
+      const result = await scheduleFollowUpVisit({
+        patient_id: selectedVisit.patient?.id ?? '',
+        follow_up_date: followUpDate,
+        follow_up_notes: followUpNotes || null,
+        patient_package_id: selectedPackageId,
+        services,
+      })
+
+      setFollowUpResult(result.visit_code)
+      setShowFollowUpModal(false)
+      setShowVisitModal(false)
+      await loadToday(false)
+    } catch (e) {
+      setAssessmentError(e instanceof Error ? e.message : 'Gagal menjadwalkan kunjungan berikutnya')
+    } finally {
+      setSavingFollowUp(false)
     }
   }
 
@@ -602,29 +692,40 @@ export default function ClinicDokter() {
                     )}
 
                     {/* MSK */}
-                    {screeningData.msk_location.length > 0 && (
+                    {(screeningData.msk_location.length > 0 || screeningData.msk_character.length > 0 ||
+                      screeningData.msk_timing.length > 0 || screeningData.msk_intensity !== null ||
+                      screeningData.msk_function.length > 0 || screeningData.msk_additional.length > 0 ||
+                      screeningData.msk_history.length > 0) && (
                       <div style={{ marginBottom: 12 }}>
-                        <div style={{ fontWeight: 700, fontSize: 12, color: '#374151', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>MSK Screening</div>
-                        <div style={{ fontSize: 12, color: '#6B7280', marginBottom: 4 }}>Lokasi Nyeri</div>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 8 }}>
-                          {screeningData.msk_location.map(l => <span key={l} style={{ padding: '2px 8px', background: '#FEE2E2', color: '#C0392B', borderRadius: 999, fontSize: 11 }}>{l}</span>)}
-                        </div>
+                        <div style={SCREENING_SECTION_TITLE}>MSK Screening</div>
+                        <ChipRow label="Lokasi Nyeri" items={screeningData.msk_location} tone="red" />
+                        <ChipRow label="Karakter Nyeri" items={screeningData.msk_character} />
+                        <ChipRow label="Waktu Timbul" items={screeningData.msk_timing} />
                         {screeningData.msk_intensity !== null && (
-                          <div style={{ fontSize: 13, color: '#374151' }}>
+                          <div style={{ fontSize: 13, color: '#374151', marginBottom: 8 }}>
                             Intensitas Nyeri: <strong style={{ color: screeningData.msk_intensity >= 7 ? '#C0392B' : screeningData.msk_intensity >= 4 ? '#F59E0B' : '#065F46' }}>{screeningData.msk_intensity}/10</strong>
                           </div>
                         )}
+                        <ChipRow label="Fungsi & Mobilitas" items={screeningData.msk_function} />
+                        <ChipRow label="Gejala Tambahan" items={screeningData.msk_additional} />
+                        <ChipRow label="Riwayat Treatment" items={screeningData.msk_history} />
                       </div>
                     )}
 
-                    {/* Riwayat Kesehatan ringkas */}
-                    {(screeningData.health_cardiovascular.length > 0 || screeningData.health_metabolic.length > 0 || screeningData.health_musculoskeletal.length > 0) && (
+                    {/* Riwayat Kesehatan */}
+                    {(screeningData.health_cardiovascular.length > 0 || screeningData.health_metabolic.length > 0 ||
+                      screeningData.health_respiratory.length > 0 || screeningData.health_musculoskeletal.length > 0 ||
+                      screeningData.health_special.length > 0 || !!screeningData.health_medications ||
+                      screeningData.health_allergies.length > 0) && (
                       <div style={{ marginBottom: 12 }}>
-                        <div style={{ fontWeight: 700, fontSize: 12, color: '#374151', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>Riwayat Kesehatan</div>
-                        {screeningData.health_cardiovascular.length > 0 && <div style={{ fontSize: 12, marginBottom: 4 }}><strong>Kardiovaskular:</strong> {screeningData.health_cardiovascular.join(', ')}</div>}
-                        {screeningData.health_metabolic.length > 0 && <div style={{ fontSize: 12, marginBottom: 4 }}><strong>Metabolik:</strong> {screeningData.health_metabolic.join(', ')}</div>}
-                        {screeningData.health_musculoskeletal.length > 0 && <div style={{ fontSize: 12, marginBottom: 4 }}><strong>Muskuloskeletal:</strong> {screeningData.health_musculoskeletal.join(', ')}</div>}
-                        {screeningData.health_medications && <div style={{ fontSize: 12 }}><strong>Obat:</strong> {screeningData.health_medications}</div>}
+                        <div style={SCREENING_SECTION_TITLE}>Riwayat Kesehatan</div>
+                        <ChipRow label="Kardiovaskular" items={screeningData.health_cardiovascular} />
+                        <ChipRow label="Metabolik" items={screeningData.health_metabolic} />
+                        <ChipRow label="Respirasi" items={screeningData.health_respiratory} />
+                        <ChipRow label="Muskuloskeletal" items={screeningData.health_musculoskeletal} />
+                        <ChipRow label="Kondisi Khusus" items={screeningData.health_special} />
+                        <ChipRow label="Obat-obatan" items={screeningData.health_medications ? [screeningData.health_medications] : []} />
+                        <ChipRow label="Alergi" items={screeningData.health_allergies} />
                       </div>
                     )}
 
@@ -755,17 +856,96 @@ export default function ClinicDokter() {
             <div style={{ padding: '12px 20px', borderTop: '1px solid #E5E7EB', background: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
               <button className="btn-secondary" onClick={() => setShowVisitModal(false)} style={{ width: 'auto' }}>Tutup</button>
               {modalTab === 'assessment' && !assessmentLocked && (
-                <button
-                  className="btn-primary"
-                  onClick={handleSaveAssessment}
-                  disabled={savingAssessment}
-                  style={{ width: 'auto', opacity: savingAssessment ? 0.6 : 1 }}
-                >
-                  {savingAssessment ? 'Menyimpan...' : 'Simpan Assessment & Selesai'}
-                </button>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button
+                    className="btn-secondary"
+                    onClick={handleSaveAssessment}
+                    disabled={savingAssessment}
+                    style={{ width: 'auto', opacity: savingAssessment ? 0.6 : 1 }}
+                  >
+                    {savingAssessment ? 'Menyimpan...' : 'Simpan Assessment'}
+                  </button>
+                  <button
+                    className="btn-primary"
+                    onClick={handleSaveAndSchedule}
+                    disabled={savingAssessment}
+                    style={{ width: 'auto', opacity: savingAssessment ? 0.6 : 1 }}
+                  >
+                    Simpan & Jadwalkan Berikutnya
+                  </button>
+                </div>
               )}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Follow-up modal — di atas modal visit */}
+      {showFollowUpModal && selectedVisit && (
+        <div className="modal-overlay" style={{ zIndex: 1100 }}>
+          <div className="modal-box" style={{ maxWidth: 480 }} onClick={e => e.stopPropagation()}>
+            <h3 className="modal-title">Jadwalkan Kunjungan Berikutnya</h3>
+
+            {/* Tanggal follow-up */}
+            <div className="form-group">
+              <label>Tanggal Kunjungan Berikutnya *</label>
+              <input
+                type="date"
+                value={followUpDate}
+                min={new Date().toISOString().slice(0, 10)}
+                onChange={e => setFollowUpDate(e.target.value)}
+              />
+            </div>
+
+            {/* Catatan untuk pasien */}
+            <div className="form-group">
+              <label>Catatan untuk Pasien</label>
+              <textarea
+                value={followUpNotes}
+                onChange={e => setFollowUpNotes(e.target.value)}
+                placeholder="Instruksi atau catatan untuk kunjungan berikutnya..."
+                rows={2}
+              />
+            </div>
+
+            {/* Pilih paket (jika pasien punya paket aktif) */}
+            {patientPackages.length > 0 && (
+              <div className="form-group">
+                <label>Gunakan Paket</label>
+                <select value={selectedPackageId ?? ''} onChange={e => setSelectedPackageId(e.target.value || null)}>
+                  <option value="">— Tidak pakai paket —</option>
+                  {patientPackages.map(pp => (
+                    <option key={pp.id} value={pp.id}>
+                      {pp.package?.name} — Sisa {pp.remaining_sessions} sesi
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            <div className="modal-footer">
+              <button className="btn-secondary" onClick={() => setShowFollowUpModal(false)}>Batal</button>
+              <button
+                className="btn-primary"
+                disabled={!followUpDate || savingFollowUp}
+                onClick={handleScheduleFollowUp}
+                style={{ width: 'auto' }}
+              >
+                {savingFollowUp ? 'Menyimpan...' : 'Jadwalkan →'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Toast sukses follow-up */}
+      {followUpResult && (
+        <div style={{
+          position: 'fixed', bottom: 24, right: 24, zIndex: 1200,
+          background: '#080808', color: '#fff', padding: '12px 20px', borderRadius: 10,
+          fontSize: 14, boxShadow: '0 4px 12px rgba(0,0,0,.2)',
+        }}>
+          Kunjungan berikutnya dijadwalkan: {followUpResult}
         </div>
       )}
     </div>

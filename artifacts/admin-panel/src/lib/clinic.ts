@@ -521,6 +521,9 @@ export interface ClinicVisit {
   payment_method: string | null
   payment_amount: number | null
   payment_status: string | null
+  patient_package_id: string | null
+  follow_up_date: string | null
+  follow_up_notes: string | null
   created_at: string
   updated_at?: string | null
   // Derived by enrichVisits:
@@ -530,7 +533,8 @@ export interface ClinicVisit {
 
 const VISIT_FIELDS =
   'id, visit_code, patient_id, booking_id, visit_date, visit_time, status, ' +
-  'chief_complaint, notes, handled_by, payment_method, payment_amount, payment_status, created_at, updated_at'
+  'chief_complaint, notes, handled_by, payment_method, payment_amount, payment_status, ' +
+  'patient_package_id, follow_up_date, follow_up_notes, created_at, updated_at'
 
 const VISIT_SELECT =
   VISIT_FIELDS + ', services:clinic_visit_services(id, service_id, service_name, price, notes, sort_order)'
@@ -948,6 +952,9 @@ export interface ClinicVisitRow {
   payment_status: string | null
   handled_by: string | null
   created_by: string | null
+  patient_package_id: string | null
+  follow_up_date: string | null
+  follow_up_notes: string | null
   created_at: string
   updated_at: string
   patient?: { full_name: string; phone: string | null; patient_code: string } | null
@@ -981,6 +988,17 @@ export async function listVisitsLog(params: {
   return { rows: (data ?? []) as unknown as ClinicVisitRow[], count: count ?? 0 }
 }
 
+// Fetch satu visit (bentuk ClinicVisitRow) by id — dipakai untuk buka modal edit langsung.
+export async function getVisitRow(id: string): Promise<ClinicVisitRow | null> {
+  const { data, error } = await supabase
+    .from('clinic_visits')
+    .select(VISIT_LOG_SELECT)
+    .eq('id', id)
+    .maybeSingle()
+  if (error) throw error
+  return data as unknown as ClinicVisitRow | null
+}
+
 export interface VisitServiceInput {
   service_id: string
   service_name: string
@@ -1000,6 +1018,7 @@ export interface VisitPayload {
   payment_method: string | null
   payment_amount: number | null
   payment_status: string
+  patient_package_id?: string | null
   created_by?: string | null
 }
 
@@ -1417,4 +1436,172 @@ export async function listAuditLogs(params: {
   const { data, error, count } = await q
   if (error) throw error
   return { rows: (data ?? []) as unknown as AuditLog[], count: count ?? 0 }
+}
+
+// ─── Paket (clinic_packages / clinic_patient_packages) ───────────────────────────
+export interface ClinicPackage {
+  id: string
+  name: string
+  category: string
+  sessions: number
+  price_per_session: number
+  package_price: number
+  retail_price: number
+  discount_percent: number
+  is_active: boolean
+}
+
+export interface ClinicPatientPackage {
+  id: string
+  patient_id: string
+  package_id: string
+  total_sessions: number
+  used_sessions: number
+  remaining_sessions: number
+  purchased_at: string
+  expires_at: string | null
+  is_active: boolean
+  notes: string | null
+  package?: ClinicPackage
+}
+
+// Fetch semua paket aktif
+export async function listPackages(): Promise<ClinicPackage[]> {
+  const { data, error } = await supabase
+    .from('clinic_packages')
+    .select('*')
+    .eq('is_active', true)
+    .order('category')
+    .order('sessions')
+  if (error) throw error
+  return (data ?? []) as ClinicPackage[]
+}
+
+// Fetch paket milik pasien (default hanya yang aktif)
+export async function listPatientPackages(
+  patientId: string,
+  opts: { includeInactive?: boolean } = {},
+): Promise<ClinicPatientPackage[]> {
+  let q = supabase
+    .from('clinic_patient_packages')
+    .select('*, package:clinic_packages(*)')
+    .eq('patient_id', patientId)
+  if (!opts.includeInactive) q = q.eq('is_active', true)
+  q = q.order('purchased_at', { ascending: false })
+  const { data, error } = await q
+  if (error) throw error
+  return (data ?? []) as ClinicPatientPackage[]
+}
+
+// Fetch paket aktif pasien yang masih punya sisa sesi
+export async function listPatientActivePackages(patientId: string): Promise<ClinicPatientPackage[]> {
+  const { data, error } = await supabase
+    .from('clinic_patient_packages')
+    .select('*, package:clinic_packages(*)')
+    .eq('patient_id', patientId)
+    .eq('is_active', true)
+    .gt('remaining_sessions', 0)
+    .order('purchased_at', { ascending: false })
+  if (error) throw error
+  return (data ?? []) as ClinicPatientPackage[]
+}
+
+// Fetch satu patient package by id (untuk detail kunjungan)
+export async function getPatientPackage(id: string): Promise<ClinicPatientPackage | null> {
+  const { data, error } = await supabase
+    .from('clinic_patient_packages')
+    .select('*, package:clinic_packages(*)')
+    .eq('id', id)
+    .maybeSingle()
+  if (error) throw error
+  return data as ClinicPatientPackage | null
+}
+
+// Beli paket baru untuk pasien
+export async function purchasePatientPackage(input: {
+  patient_id: string
+  package_id: string
+  total_sessions: number
+  notes?: string
+}): Promise<ClinicPatientPackage> {
+  const { data, error } = await supabase
+    .from('clinic_patient_packages')
+    .insert({
+      patient_id: input.patient_id,
+      package_id: input.package_id,
+      total_sessions: input.total_sessions,
+      used_sessions: 0,
+      is_active: true,
+      notes: input.notes ?? null,
+      purchased_at: new Date().toISOString(),
+    })
+    .select('*, package:clinic_packages(*)')
+    .single()
+  if (error) throw error
+  return data as ClinicPatientPackage
+}
+
+// Pakai 1 sesi paket (dipanggil saat kasir close bill)
+export async function usePackageSession(patientPackageId: string): Promise<void> {
+  const { data: pkg, error: fetchErr } = await supabase
+    .from('clinic_patient_packages')
+    .select('used_sessions, total_sessions')
+    .eq('id', patientPackageId)
+    .single()
+  if (fetchErr) throw fetchErr
+  if (!pkg) return
+
+  const newUsed = (pkg as { used_sessions: number; total_sessions: number }).used_sessions + 1
+  const isExhausted = newUsed >= (pkg as { used_sessions: number; total_sessions: number }).total_sessions
+
+  const { error } = await supabase
+    .from('clinic_patient_packages')
+    .update({
+      used_sessions: newUsed,
+      is_active: !isExhausted,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', patientPackageId)
+  if (error) throw error
+}
+
+// Schedule follow-up visit
+export async function scheduleFollowUpVisit(input: {
+  patient_id: string
+  follow_up_date: string
+  follow_up_notes: string | null
+  patient_package_id: string | null
+  services: { service_id: string; service_name: string; price: number }[]
+}): Promise<{ id: string; visit_code: string }> {
+  const { data: visit, error: visitErr } = await supabase
+    .from('clinic_visits')
+    .insert({
+      patient_id: input.patient_id,
+      visit_date: input.follow_up_date,
+      status: 'scheduled',
+      payment_status: input.patient_package_id ? 'package' : 'unpaid',
+      patient_package_id: input.patient_package_id,
+      follow_up_notes: input.follow_up_notes,
+      created_by: 'dokter',
+    })
+    .select('id, visit_code')
+    .single()
+  if (visitErr) throw visitErr
+
+  const created = visit as { id: string; visit_code: string }
+
+  if (input.services.length > 0) {
+    const { error: svcErr } = await supabase
+      .from('clinic_visit_services')
+      .insert(input.services.map((s, i) => ({
+        visit_id: created.id,
+        service_id: s.service_id,
+        service_name: s.service_name,
+        price: s.price,
+        sort_order: i,
+      })))
+    if (svcErr) throw svcErr
+  }
+
+  return { id: created.id, visit_code: created.visit_code }
 }
