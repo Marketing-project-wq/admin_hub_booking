@@ -46,12 +46,21 @@ export default function ArenaAnalytics() {
   const fetchAnalytics = async () => {
     setLoading(true)
     try {
-      const now = new Date()
-      const from = new Date()
-      if (dateRange === 'today') from.setHours(0, 0, 0, 0)
-      else if (dateRange === '7d') from.setDate(now.getDate() - 7)
-      else from.setDate(now.getDate() - 30)
-      const fromISO = from.toISOString()
+      let fromISO: string
+      if (dateRange === 'today') {
+        const today = new Date()
+        today.setHours(0, 0, 0, 0)
+        fromISO = today.toISOString()
+      } else if (dateRange === '7d') {
+        const d = new Date()
+        d.setDate(d.getDate() - 7)
+        fromISO = d.toISOString()
+      } else {
+        const d = new Date()
+        d.setDate(d.getDate() - 30)
+        fromISO = d.toISOString()
+      }
+      console.log('Fetching analytics from:', fromISO)
 
       // Fetch semua events dalam range
       const { data: events } = await supabase
@@ -59,6 +68,8 @@ export default function ArenaAnalytics() {
         .select('*')
         .gte('created_at', fromISO)
         .order('created_at', { ascending: false })
+
+      console.log('Events fetched:', events?.length)
 
       if (!events) return
 
