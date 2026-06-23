@@ -991,7 +991,7 @@ interface TriaseVisit {
     emergency_contact_name: string | null
     emergency_contact_phone: string | null
   } | null
-  services: { id: string; service_name: string; price: number }[]
+  services: { id: string; service_name: string; price: number; service: { requires_doctor: boolean } | null }[]
 }
 
 type ModalTab = 'screening' | 'consent'
@@ -1002,7 +1002,7 @@ interface LockRow { id: string; visit_id: string; is_locked: boolean | null; loc
 const TRIASE_SELECT = `
   id, visit_code, visit_date, visit_time, status,
   patient:clinic_patients(id, full_name, patient_code, phone, date_of_birth, gender, id_type, id_number, address, occupation, emergency_contact_name, emergency_contact_phone),
-  services:clinic_visit_services(id, service_name, price)
+  services:clinic_visit_services(id, service_name, price, service:clinic_services(requires_doctor))
 `
 
 type StepState = 'done' | 'active' | 'todo'
@@ -1128,6 +1128,30 @@ export default function ClinicTriase() {
     fetchVisits(false)
   }
 
+  const requiresDoctor = (visit: TriaseVisit): boolean => {
+    return visit.services?.some(s => s.service?.requires_doctor === true) ?? false
+  }
+
+  const handleSelesaiTreatment = async (visitId: string) => {
+    try {
+      const { error } = await supabase
+        .from('clinic_visits')
+        .update({
+          status: 'completed',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', visitId)
+
+      if (error) throw error
+
+      showToastMsg('Treatment selesai — pasien siap ke Kasir')
+      fetchVisits(false)
+    } catch (e) {
+      console.error(e)
+      showToastMsg('Gagal update status')
+    }
+  }
+
   const visitRef = selectedVisit
     ? { id: selectedVisit.id, patient_id: selectedVisit.patient?.id ?? null, patient: selectedVisit.patient }
     : null
@@ -1206,8 +1230,16 @@ export default function ClinicTriase() {
                     <button className="btn-primary" style={{ width: 'auto', padding: '8px 16px' }} onClick={() => openModal(v, 'screening')}>Isi Screening</button>
                   ) : !con ? (
                     <button className="btn-primary" style={{ width: 'auto', padding: '8px 16px', background: '#1D4ED8' }} onClick={() => openModal(v, 'consent')}>Isi Consent</button>
-                  ) : (
+                  ) : requiresDoctor(v) ? (
                     <span className="badge" style={{ background: '#EAF3DE', color: '#3B6D11' }}>✓ Siap Dokter</span>
+                  ) : (
+                    <button
+                      className="btn-primary"
+                      style={{ width: 'auto', padding: '8px 16px', background: '#059669' }}
+                      onClick={() => handleSelesaiTreatment(v.id)}
+                    >
+                      ✓ Selesai Treatment
+                    </button>
                   )}
                 </div>
               </div>
