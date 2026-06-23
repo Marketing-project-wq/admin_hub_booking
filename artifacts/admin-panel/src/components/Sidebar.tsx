@@ -74,9 +74,29 @@ export default function Sidebar({ currentUnit, open, onClose }: SidebarProps) {
 
   return (
     <aside className={`sidebar${open ? ' open' : ''}`}>
-      <div className="sidebar-header">
-        <h2 className="brand-small">20FIT</h2>
-        <span className="unit-label">{currentUnit.toUpperCase()}</span>
+      <div className="sidebar-header" style={{
+        padding: '24px 20px 16px',
+        borderBottom: '1px solid rgba(255,255,255,0.06)',
+      }}>
+        <h2 className="brand-small" style={{
+          fontFamily: "'Anton', sans-serif",
+          fontWeight: 400,
+          fontSize: 22,
+          letterSpacing: 2,
+          color: '#F0F4FF',
+          margin: 0,
+        }}>20FIT</h2>
+        <span className="unit-label" style={{
+          fontFamily: "'Barlow Condensed', sans-serif",
+          fontWeight: 700,
+          fontStyle: 'italic',
+          fontSize: 10,
+          letterSpacing: 3,
+          color: '#C0392B',
+          textTransform: 'uppercase',
+          display: 'block',
+          marginTop: 2,
+        }}>{currentUnit.toUpperCase()}</span>
       </div>
 
       <nav className="sidebar-menu">

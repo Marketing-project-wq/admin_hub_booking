@@ -1,15 +1,26 @@
 :root {
-  --bg-page:       #FAFAF5;
-  --bg-sidebar:    #0D0D0D;
-  --bg-card:       #FFFFFF;
-  --border:        #E5E5E5;
-  --border-strong: #D1D5DB;
-  --red:           #B94A3E;
-  --red-dark:      #96281B;
-  --text-primary:  #0D0D0D;
-  --text-muted:    #6B7280;
-  --text-faint:    #9CA3AF;
-  --shadow-card:   0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.06);
+  /* Dark premium palette */
+  --bg-page:        #0f1923;
+  --bg-sidebar:     #0a1628;
+  --bg-card:        #1a2740;
+  --bg-card-hover:  #1e2d4a;
+  --bg-input:       #152034;
+  --bg-elevated:    #243352;
+
+  --border:         rgba(255,255,255,0.08);
+  --border-strong:  rgba(255,255,255,0.15);
+
+  --red:            #C0392B;
+  --red-dark:       #96281B;
+  --red-glow:       rgba(192,57,43,0.15);
+
+  --text-primary:   #F0F4FF;
+  --text-secondary: #A8B8D8;
+  --text-muted:     #6B7A99;
+  --text-faint:     #3D4F6B;
+
+  --shadow-card:    0 4px 24px rgba(0,0,0,0.4), 0 1px 4px rgba(0,0,0,0.3);
+  --shadow-elevated: 0 8px 32px rgba(0,0,0,0.5);
 }
 
 *, *::before, *::after {
@@ -20,7 +31,7 @@ body {
   margin: 0;
   background: var(--bg-page);
   color: var(--text-primary);
-  font-family: 'Times New Roman', Times, serif;
+  font-family: 'Inter', 'Manrope', -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
 /* ---- Login ---- */
@@ -909,4 +920,231 @@ input[type="checkbox"] {
 /* Row selected highlight */
 tr.row-selected {
   background: #FEF3F2 !important;
+}
+
+/* ===================== PREMIUM DARK THEME OVERRIDES ===================== */
+/* Appended after existing rules so they win on source order. Nothing above is
+   removed — these re-declare values for the dark theme and add new tokens. */
+
+/* Login */
+.login-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-strong);
+  border-radius: 16px;
+  box-shadow: var(--shadow-elevated);
+}
+.login-card input {
+  background: var(--bg-input);
+  color: var(--text-primary);
+}
+
+/* Cards */
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow-card);
+}
+
+/* Inputs (!important to override per-element inline styling that has no !important) */
+input, textarea, select {
+  background: var(--bg-input) !important;
+  border: 1px solid var(--border-strong) !important;
+  color: var(--text-primary) !important;
+  border-radius: 8px;
+}
+input::placeholder, textarea::placeholder {
+  color: var(--text-muted) !important;
+}
+input:focus, textarea:focus, select:focus {
+  border-color: var(--red) !important;
+  outline: none;
+  box-shadow: 0 0 0 3px var(--red-glow);
+}
+
+/* Tables — generic + the more-specific .data-table selectors used by list pages */
+table {
+  background: var(--bg-card);
+}
+th {
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border-strong);
+}
+tr:hover {
+  background: var(--bg-card-hover);
+}
+td {
+  border-bottom: 1px solid var(--border);
+  color: var(--text-primary);
+}
+table.data-table thead th {
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  border-bottom-color: var(--border-strong);
+}
+table.data-table tbody td {
+  color: var(--text-primary);
+  border-bottom-color: var(--border);
+}
+table.data-table tbody tr:hover {
+  background: var(--bg-card-hover);
+}
+
+/* Buttons */
+.btn-primary {
+  background: var(--red);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  transition: background 0.2s, box-shadow 0.2s;
+}
+.btn-primary:hover:not(:disabled) {
+  background: var(--red-dark);
+  box-shadow: 0 4px 16px var(--red-glow);
+}
+.btn-secondary {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  padding: 10px 20px;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.btn-secondary:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--red);
+}
+
+/* Badges */
+.badge {
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 10px;
+}
+
+/* Modal — target the actual .modal-box class (not [class*="modal"], which would
+   also hit .modal-overlay and break the dim/backdrop). */
+.modal-overlay {
+  background: rgba(0,0,0,0.7);
+  backdrop-filter: blur(4px);
+}
+.modal-box, .modal-content {
+  background: var(--bg-card);
+  border: 1px solid var(--border-strong);
+  border-radius: 16px;
+  box-shadow: var(--shadow-elevated);
+}
+
+/* Sidebar */
+.sidebar {
+  background: var(--bg-sidebar);
+  border-right: 1px solid rgba(255,255,255,0.05);
+  width: 220px;
+}
+.main-content {
+  margin-left: 220px; /* keep content aligned with the 220px sidebar */
+}
+.menu-item {
+  display: block;
+  padding: 10px 20px;
+  color: var(--text-secondary);
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 500;
+  border-left: none;
+  border-radius: 8px;
+  margin: 2px 8px;
+  transition: all 0.15s ease;
+  letter-spacing: 0.3px;
+}
+.menu-item:hover:not(.disabled) {
+  background: rgba(255,255,255,0.06);
+  color: var(--text-primary);
+}
+.menu-item.active {
+  background: var(--red-glow);
+  color: #fff;
+  border-left: 3px solid var(--red);
+  padding-left: 17px;
+}
+.menu-divider {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  padding: 16px 20px 6px;
+}
+.sidebar-footer {
+  margin-top: auto;
+  padding: 16px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+}
+.sidebar-user-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.sidebar-user-role {
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  color: var(--red);
+  text-transform: uppercase;
+  margin-top: 2px;
+}
+.sidebar-footer button {
+  width: 100%;
+  margin-top: 12px;
+  padding: 8px;
+  background: rgba(192,57,43,0.1);
+  border: 1px solid rgba(192,57,43,0.2);
+  border-radius: 8px;
+  color: var(--red);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.sidebar-footer button:hover {
+  background: rgba(192,57,43,0.2);
+}
+
+/* Page container & headers */
+.page-container {
+  padding: 28px 32px;
+  max-width: 1400px;
+}
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+  gap: 16px;
+}
+.page-title {
+  font-family: 'Anton', sans-serif;
+  font-weight: 400;
+  font-size: 28px;
+  letter-spacing: 1px;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+/* KPI cards */
+.kpi-card, [class*="kpi"] {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px 20px;
+  transition: border-color 0.2s;
+}
+.kpi-card:hover {
+  border-color: var(--border-strong);
 }
