@@ -84,6 +84,24 @@ export default function Sidebar({ currentUnit, open, onClose }: SidebarProps) {
           if (m.path === '/arena/users' && user?.role !== 'super_admin') return null
           if (m.path === '/clinic/users' && !(user?.role === 'super_admin' || user?.permissions?.can_manage_users === true)) return null
           if (m.path === '/clinic/audit' && user?.role !== 'super_admin') return null
+
+          // Clinic role-based menu filter
+          if (currentUnit === 'clinic') {
+            // user.role di AuthContext masih sempit ('super_admin'|'admin'|'staff'),
+            // padahal clinic punya role 'dokter'|'therapist'|'registrasi'. Lebarkan ke string.
+            const role: string | undefined = user?.role
+
+            // Dokter hanya bisa akses menu Dokter
+            if (role === 'dokter' && m.path !== '/clinic/dokter') return null
+
+            // Therapist hanya bisa akses menu Triase
+            if (role === 'therapist' && m.path !== '/clinic/triase') return null
+
+            // Admin (kasir) hanya bisa akses Kasir dan Visits
+            if (role === 'admin' && m.path &&
+                !(['/clinic/kasir', '/clinic/visits'].includes(m.path))) return null
+          }
+
           if (m.divider) {
             return (
               <div key={i} className="menu-divider">{m.label}</div>
