@@ -166,7 +166,8 @@ async function saveAssessment(visitId: string, patientId: string, form: Assessme
       visit_id: visitId,
       patient_id: patientId,
       ...form,
-      follow_up_date: form.follow_up_date || null,
+      diagnosis: null,
+      follow_up_date: null,
       updated_at: new Date().toISOString(),
     }, { onConflict: 'visit_id' })
     .select('id')
@@ -853,10 +854,10 @@ export default function ClinicDokter() {
                     <fieldset disabled={assessmentLocked} style={{ border: 'none', padding: 0, margin: 0 }}>
 
                     {([
-                      { key: 'subjective', label: 'S — Subjective', color: '#1D4ED8', bg: '#EFF6FF', placeholder: 'Keluhan subjektif pasien, riwayat singkat...' },
-                      { key: 'objective', label: 'O — Objective', color: '#065F46', bg: '#D1FAE5', placeholder: 'Temuan pemeriksaan fisik, hasil tes...' },
-                      { key: 'assessment', label: 'A — Assessment', color: '#92400E', bg: '#FEF3C7', placeholder: 'Diagnosis / clinical impression...' },
-                      { key: 'plan', label: 'P — Plan', color: '#5B21B6', bg: '#EDE9FE', placeholder: 'Rencana tindakan, edukasi, follow-up...' },
+                      { key: 'subjective', label: 'Keluhan Subjektif Pasien', color: '#1D4ED8', bg: '#EFF6FF', placeholder: 'Keluhan subjektif pasien, riwayat singkat...' },
+                      { key: 'objective', label: 'Temuan Pemeriksaan Fisik', color: '#065F46', bg: '#D1FAE5', placeholder: 'Temuan pemeriksaan fisik, hasil tes...' },
+                      { key: 'assessment', label: 'Clinical Impression / Assessment', color: '#92400E', bg: '#FEF3C7', placeholder: 'Diagnosis / clinical impression...' },
+                      { key: 'plan', label: 'Rencana Tindakan', color: '#5B21B6', bg: '#EDE9FE', placeholder: 'Rencana tindakan, edukasi, follow-up...' },
                     ] as const).map(({ key, label, color, bg, placeholder }) => (
                       <div key={key} style={{ marginBottom: 14 }}>
                         <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
@@ -871,28 +872,6 @@ export default function ClinicDokter() {
                         />
                       </div>
                     ))}
-
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
-                      <div>
-                        <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 4 }}>Diagnosis</label>
-                        <input
-                          type="text"
-                          value={assessment.diagnosis}
-                          onChange={e => setAssessment(prev => ({ ...prev, diagnosis: e.target.value }))}
-                          placeholder="Diagnosis / ICD-10"
-                          style={{ width: '100%', padding: '8px 12px', border: '1.5px solid #E5E7EB', borderRadius: 8, fontSize: 13, boxSizing: 'border-box' }}
-                        />
-                      </div>
-                      <div>
-                        <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 4 }}>Follow-up</label>
-                        <input
-                          type="date"
-                          value={assessment.follow_up_date}
-                          onChange={e => setAssessment(prev => ({ ...prev, follow_up_date: e.target.value }))}
-                          style={{ width: '100%', padding: '8px 12px', border: '1.5px solid #E5E7EB', borderRadius: 8, fontSize: 13, boxSizing: 'border-box' }}
-                        />
-                      </div>
-                    </div>
 
                     <div style={{ marginBottom: 14 }}>
                       <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 4 }}>Ditangani oleh</label>

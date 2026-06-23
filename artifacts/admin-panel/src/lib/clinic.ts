@@ -981,7 +981,23 @@ export async function listVisitsLog(params: {
   if (status !== 'all') q = q.eq('status', status)
   if (dateFrom) q = q.gte('visit_date', dateFrom)
   if (dateTo) q = q.lte('visit_date', dateTo)
-  if (search) q = q.ilike('visit_code', `%${search.trim()}%`)
+  if (search.trim()) {
+    // Cari lintas visit_code + pasien (nama/kode/HP) + nama layanan. Nama pasien dan
+    // layanan ada di tabel join, jadi resolve dulu id-nya lalu gabungkan via .or().
+    const like = `%${search.trim()}%`
+    const [patRes, svcRes] = await Promise.all([
+      supabase.from('clinic_patients').select('id')
+        .or(`full_name.ilike."${like}",patient_code.ilike."${like}",phone.ilike."${like}"`),
+      supabase.from('clinic_visit_services').select('visit_id').ilike('service_name', like),
+    ])
+    const patientIds = [...new Set(((patRes.data as { id: string }[] | null) ?? []).map(p => p.id))]
+    const serviceVisitIds = [...new Set(((svcRes.data as { visit_id: string }[] | null) ?? []).map(r => r.visit_id))]
+
+    const orParts = [`visit_code.ilike."${like}"`]
+    if (patientIds.length) orParts.push(`patient_id.in.(${patientIds.join(',')})`)
+    if (serviceVisitIds.length) orParts.push(`id.in.(${serviceVisitIds.join(',')})`)
+    q = q.or(orParts.join(','))
+  }
   q = q.range(page * pageSize, (page + 1) * pageSize - 1)
 
   const { data, error, count } = await q

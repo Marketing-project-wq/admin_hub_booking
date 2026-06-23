@@ -215,7 +215,7 @@ export default function ClinicVisits() {
         <label style={{ fontSize: 13, color: 'var(--text-muted)' }}>Sampai</label>
         <input type="date" value={dateTo} onChange={e => { setDateTo(e.target.value); setPage(0) }} />
         <input
-          type="text" placeholder="Cari kode kunjungan..." value={searchInput}
+          type="text" placeholder="Cari..." value={searchInput}
           onChange={e => handleSearchChange(e.target.value)} style={{ minWidth: 200 }}
         />
       </div>
