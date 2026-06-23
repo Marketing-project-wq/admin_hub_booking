@@ -146,7 +146,7 @@ export default function ClinicCloseBillModal({
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-box" style={{ maxWidth: 480, width: '100%', maxHeight: '90vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
+      <div className="modal-box" style={{ maxWidth: 480, width: '100%', maxHeight: '90vh', overflowY: 'auto', background: '#1a2740', color: '#F0F4FF' }} onClick={e => e.stopPropagation()}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
           <h3 className="modal-title" style={{ margin: 0 }}>Close Bill</h3>
           <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: 'var(--text-muted)', lineHeight: 1 }}>×</button>
@@ -155,17 +155,17 @@ export default function ClinicCloseBillModal({
         {error && <p style={{ color: 'var(--red)', fontSize: 13, marginBottom: 12 }}>{error}</p>}
 
         {/* Visit header */}
-        <div style={{ background: '#F9FAFB', borderRadius: 10, padding: 14, marginBottom: 16 }}>
-          <div style={{ fontWeight: 700 }}>{patientName}</div>
-          <div style={{ fontSize: 12, color: 'var(--text-muted)', fontFamily: 'monospace' }}>{patientCode}</div>
+        <div style={{ background: '#243352', borderRadius: 10, padding: 14, marginBottom: 16 }}>
+          <div style={{ fontWeight: 700, color: '#F0F4FF' }}>{patientName}</div>
+          <div style={{ fontSize: 12, color: '#A8B8D8', fontFamily: 'monospace' }}>{patientCode}</div>
         </div>
 
         {/* Info paket aktif (jika ada) */}
         {patientPackages.length > 0 && (
-          <div style={{ marginBottom: 16, padding: 12, background: '#F0FFF4', borderRadius: 10, border: '1px solid #6EE7B7' }}>
-            <div style={{ fontSize: 12, fontWeight: 600, color: '#065F46', marginBottom: 6 }}>✓ Paket Aktif Pasien</div>
+          <div style={{ marginBottom: 16, padding: 12, background: 'rgba(5,150,105,0.1)', borderRadius: 10, border: '1px solid rgba(5,150,105,0.2)' }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: '#34D399', marginBottom: 6 }}>✓ Paket Aktif Pasien</div>
             {patientPackages.map(pp => (
-              <div key={pp.id} style={{ fontSize: 12, color: '#374151', marginBottom: 2 }}>
+              <div key={pp.id} style={{ fontSize: 12, color: '#F0F4FF', marginBottom: 2 }}>
                 {pp.package?.name} — Sisa {pp.remaining_sessions} sesi
               </div>
             ))}
@@ -178,9 +178,9 @@ export default function ClinicCloseBillModal({
 
           {coveredServices.length > 0 && (
             <div style={{ marginBottom: 8 }}>
-              <div style={{ fontSize: 11, color: '#059669', fontWeight: 600, marginBottom: 4 }}>✓ Ter-cover Paket</div>
+              <div style={{ fontSize: 11, color: '#34D399', fontWeight: 600, marginBottom: 4 }}>✓ Ter-cover Paket</div>
               {coveredServices.map(s => (
-                <div key={s.service_name} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#6B7280', textDecoration: 'line-through' }}>
+                <div key={s.service_name} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#A8B8D8', textDecoration: 'line-through' }}>
                   <span>{s.service_name}</span>
                   <span>{fmtRp(s.price)}</span>
                 </div>
@@ -196,30 +196,30 @@ export default function ClinicCloseBillModal({
           ))}
 
           {selectedNewPkg && (
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 4, color: '#1D4ED8' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 4, color: '#93C5FD' }}>
               <span>📦 {selectedNewPkg.name}</span>
               <span>{fmtRp(selectedNewPkg.package_price)}</span>
             </div>
           )}
 
           {discount > 0 && (
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#DC2626', marginBottom: 4 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#FC8181', marginBottom: 4 }}>
               <span>Diskon</span>
               <span>-{fmtRp(discount)}</span>
             </div>
           )}
 
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 15, borderTop: '1px solid #E5E7EB', paddingTop: 8, marginTop: 4 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 15, borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 8, marginTop: 4 }}>
             <span>Total</span>
             <span style={{ color: '#C0392B' }}>{fmtRp(grandTotal)}</span>
           </div>
         </div>
 
         {/* Section beli paket baru */}
-        <div style={{ marginBottom: 16, padding: 14, background: '#F0F9FF', borderRadius: 10, border: '1px solid #BAE6FD' }}>
+        <div style={{ marginBottom: 16, padding: 14, background: '#243352', borderRadius: 10, border: '1px solid rgba(255,255,255,0.1)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
             <input type="checkbox" id="buyPkg" checked={buyingPackage} onChange={e => setBuyingPackage(e.target.checked)} />
-            <label htmlFor="buyPkg" style={{ fontSize: 13, fontWeight: 600, color: '#0369A1', cursor: 'pointer' }}>
+            <label htmlFor="buyPkg" style={{ fontSize: 13, fontWeight: 600, color: '#F0F4FF', cursor: 'pointer' }}>
               📦 Tambah pembelian paket
             </label>
           </div>
@@ -244,7 +244,7 @@ export default function ClinicCloseBillModal({
               </select>
 
               {selectedNewPkg && (
-                <div style={{ fontSize: 12, color: '#0369A1', background: '#E0F2FE', padding: '8px 12px', borderRadius: 8, marginBottom: 8 }}>
+                <div style={{ fontSize: 12, color: '#93C5FD', background: 'rgba(59,130,246,0.1)', padding: '8px 12px', borderRadius: 8, marginBottom: 8 }}>
                   Harga paket: <strong>{fmtRp(selectedNewPkg.package_price)}</strong> untuk {selectedNewPkg.sessions} sesi
                   (hemat {fmtRp(selectedNewPkg.retail_price - selectedNewPkg.package_price)})
                 </div>
@@ -268,16 +268,20 @@ export default function ClinicCloseBillModal({
         </div>
 
         {/* Payment method */}
-        <label style={{ fontSize: 13, fontWeight: 600, display: 'block', marginBottom: 8 }}>Metode Pembayaran</label>
+        <label style={{ fontSize: 11, fontWeight: 600, display: 'block', marginBottom: 8, color: '#A8B8D8', textTransform: 'uppercase', letterSpacing: 1 }}>Metode Pembayaran</label>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
           {METHODS.map(m => {
             const on = method === m
             return (
               <button key={m} type="button" onClick={() => setMethod(m)}
-                style={{
-                  flex: '1 1 80px', padding: '10px 8px', borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontSize: 13,
-                  border: '1px solid', borderColor: on ? '#C0392B' : 'var(--border, #E5E7EB)',
-                  background: on ? '#FFF5F5' : '#fff', color: on ? '#C0392B' : 'var(--text-primary)',
+                style={on ? {
+                  flex: '1 1 80px', padding: '8px 14px', borderRadius: 8,
+                  border: '1px solid #C0392B', background: 'rgba(192,57,43,0.15)',
+                  color: '#fff', cursor: 'pointer', fontWeight: 600, fontSize: 13,
+                } : {
+                  flex: '1 1 80px', padding: '8px 14px', borderRadius: 8,
+                  border: '1px solid rgba(255,255,255,0.12)', background: '#243352',
+                  color: '#A8B8D8', cursor: 'pointer', fontWeight: 500, fontSize: 13, transition: 'all 0.15s',
                 }}>{METHOD_LABEL[m]}</button>
             )
           })}
@@ -292,7 +296,7 @@ export default function ClinicCloseBillModal({
             {cashReceived > 0 && (
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 12 }}>
                 <span style={{ color: 'var(--text-muted)' }}>Kembalian</span>
-                <span style={{ fontWeight: 700, color: '#065F46' }}>{fmtRp(change)}</span>
+                <span style={{ fontWeight: 700, color: '#34D399' }}>{fmtRp(change)}</span>
               </div>
             )}
           </>

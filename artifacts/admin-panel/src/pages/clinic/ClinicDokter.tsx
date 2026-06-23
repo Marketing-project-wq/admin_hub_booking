@@ -678,13 +678,13 @@ export default function ClinicDokter() {
             onClick={e => e.stopPropagation()}
           >
             {/* Modal Header */}
-            <div style={{ background: '#080808', padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+            <div style={{ background: '#0a1628', padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
               <div>
-                <div style={{ color: '#aaa', fontSize: 11, letterSpacing: 1 }}>KUNJUNGAN</div>
-                <div style={{ color: '#fff', fontWeight: 700, fontSize: 15 }}>
+                <div style={{ color: '#A8B8D8', fontSize: 11, letterSpacing: 1 }}>KUNJUNGAN</div>
+                <div style={{ color: '#F0F4FF', fontWeight: 700, fontSize: 15 }}>
                   {selectedVisit.patient?.full_name} · {selectedVisit.patient?.patient_code}
                 </div>
-                <div style={{ color: '#888', fontSize: 12, marginTop: 2 }}>
+                <div style={{ color: '#A8B8D8', fontSize: 12, marginTop: 2 }}>
                   {selectedVisit.services.map(s => s.service_name).join(' · ') || '-'} · {fmtTime(selectedVisit.visit_time ?? '')}
                 </div>
               </div>
@@ -692,7 +692,7 @@ export default function ClinicDokter() {
             </div>
 
             {/* Tab Bar */}
-            <div style={{ display: 'flex', borderBottom: '2px solid #E5E7EB', background: '#fff', flexShrink: 0 }}>
+            <div style={{ display: 'flex', borderBottom: '2px solid rgba(255,255,255,0.08)', background: '#0a1628', flexShrink: 0 }}>
               {(['screening', 'consent', 'assessment', 'riwayat'] as const).map(t => (
                 <button
                   key={t}
@@ -700,7 +700,7 @@ export default function ClinicDokter() {
                   style={{
                     padding: '12px 20px', border: 'none', background: 'none', cursor: 'pointer', fontSize: 13,
                     fontWeight: modalTab === t ? 700 : 400,
-                    color: modalTab === t ? '#C0392B' : '#6B7280',
+                    color: modalTab === t ? '#C0392B' : '#6B7A99',
                     borderBottom: modalTab === t ? '2px solid #C0392B' : '2px solid transparent',
                     marginBottom: -2, textTransform: 'capitalize',
                   }}
@@ -854,10 +854,10 @@ export default function ClinicDokter() {
                     <fieldset disabled={assessmentLocked} style={{ border: 'none', padding: 0, margin: 0 }}>
 
                     {([
-                      { key: 'subjective', label: 'Keluhan Subjektif Pasien', color: '#1D4ED8', bg: '#EFF6FF', placeholder: 'Keluhan subjektif pasien, riwayat singkat...' },
-                      { key: 'objective', label: 'Temuan Pemeriksaan Fisik', color: '#065F46', bg: '#D1FAE5', placeholder: 'Temuan pemeriksaan fisik, hasil tes...' },
-                      { key: 'assessment', label: 'Clinical Impression / Assessment', color: '#92400E', bg: '#FEF3C7', placeholder: 'Diagnosis / clinical impression...' },
-                      { key: 'plan', label: 'Rencana Tindakan', color: '#5B21B6', bg: '#EDE9FE', placeholder: 'Rencana tindakan, edukasi, follow-up...' },
+                      { key: 'subjective', label: 'Keluhan Subjektif Pasien', color: '#93C5FD', bg: 'rgba(59,130,246,0.15)', placeholder: 'Keluhan subjektif pasien, riwayat singkat...' },
+                      { key: 'objective', label: 'Temuan Pemeriksaan Fisik', color: '#34D399', bg: 'rgba(5,150,105,0.15)', placeholder: 'Temuan pemeriksaan fisik, hasil tes...' },
+                      { key: 'assessment', label: 'Clinical Impression / Assessment', color: '#FCD34D', bg: 'rgba(245,158,11,0.15)', placeholder: 'Diagnosis / clinical impression...' },
+                      { key: 'plan', label: 'Rencana Tindakan', color: '#C4B5FD', bg: 'rgba(139,92,246,0.15)', placeholder: 'Rencana tindakan, edukasi, follow-up...' },
                     ] as const).map(({ key, label, color, bg, placeholder }) => (
                       <div key={key} style={{ marginBottom: 14 }}>
                         <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
@@ -874,14 +874,14 @@ export default function ClinicDokter() {
                     ))}
 
                     <div style={{ marginBottom: 14 }}>
-                      <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 4 }}>Ditangani oleh</label>
+                      <label style={{ fontSize: 12, fontWeight: 600, color: '#A8B8D8', display: 'block', marginBottom: 4 }}>Ditangani oleh</label>
                       <div style={{
                         padding: '10px 12px',
-                        background: '#F9FAFB',
-                        border: '1px solid #E5E7EB',
+                        background: '#243352',
+                        border: '1px solid rgba(255,255,255,0.08)',
                         borderRadius: 8,
                         fontSize: 14,
-                        color: '#374151',
+                        color: '#A8B8D8',
                         fontWeight: 500,
                       }}>
                         {assessment.handled_by || user?.full_name || '-'}
@@ -889,7 +889,7 @@ export default function ClinicDokter() {
                     </div>
 
                     <div style={{ marginBottom: 14 }}>
-                      <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 4 }}>Catatan Tambahan</label>
+                      <label style={{ fontSize: 12, fontWeight: 600, color: '#A8B8D8', display: 'block', marginBottom: 4 }}>Catatan Tambahan</label>
                       <textarea
                         value={assessment.notes}
                         onChange={e => setAssessment(prev => ({ ...prev, notes: e.target.value }))}
@@ -917,21 +917,21 @@ export default function ClinicDokter() {
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                       {medicalHistory.map((h, i) => (
                         <div key={h.visit_id} style={{
-                          background: '#fff',
-                          border: '1px solid #E5E7EB',
+                          background: '#1a2740',
+                          border: '1px solid rgba(255,255,255,0.08)',
                           borderRadius: 12,
                           overflow: 'hidden',
                         }}>
                           {/* Header kunjungan */}
                           <div style={{
-                            background: '#080808', padding: '10px 16px',
+                            background: '#0a1628', padding: '10px 16px',
                             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                           }}>
                             <div>
                               <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 900, fontStyle: 'italic', fontSize: 11, color: '#9CA3AF', letterSpacing: 1, textTransform: 'uppercase' }}>
                                 Kunjungan #{medicalHistory.length - i}
                               </div>
-                              <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 13, color: '#fff', fontWeight: 600 }}>
+                              <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 13, color: '#F0F4FF', fontWeight: 600 }}>
                                 {new Date(h.visit_date).toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' })}
                                 {h.visit_time && ` · ${h.visit_time.slice(0, 5)}`}
                               </div>
@@ -946,7 +946,7 @@ export default function ClinicDokter() {
                             {h.chief_complaint && (
                               <div>
                                 <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: '#9CA3AF', marginBottom: 4 }}>Keluhan</div>
-                                <div style={{ fontSize: 13, color: '#374151', lineHeight: 1.6 }}>{h.chief_complaint}</div>
+                                <div style={{ fontSize: 13, color: '#A8B8D8', lineHeight: 1.6 }}>{h.chief_complaint}</div>
                               </div>
                             )}
 
@@ -958,7 +958,7 @@ export default function ClinicDokter() {
                                   {h.services.map(s => (
                                     <span key={s.service_name} style={{
                                       padding: '3px 10px', borderRadius: 999,
-                                      background: '#F3F4F6', fontSize: 12, color: '#374151',
+                                      background: '#243352', fontSize: 12, color: '#A8B8D8',
                                       fontWeight: 500,
                                     }}>
                                       {s.service_name}
@@ -970,25 +970,25 @@ export default function ClinicDokter() {
 
                             {/* Assessment dokter */}
                             {h.assessment && (
-                              <div style={{ background: '#F9FAFB', borderRadius: 8, padding: '10px 12px' }}>
+                              <div style={{ background: '#243352', borderRadius: 8, padding: '10px 12px' }}>
                                 <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: '#9CA3AF', marginBottom: 8 }}>Kesimpulan Dokter</div>
 
                                 {h.assessment.diagnosis && (
                                   <div style={{ marginBottom: 6 }}>
                                     <span style={{ fontSize: 11, fontWeight: 600, color: '#C0392B' }}>Diagnosis: </span>
-                                    <span style={{ fontSize: 12, color: '#374151' }}>{h.assessment.diagnosis}</span>
+                                    <span style={{ fontSize: 12, color: '#A8B8D8' }}>{h.assessment.diagnosis}</span>
                                   </div>
                                 )}
                                 {h.assessment.assessment && (
                                   <div style={{ marginBottom: 6 }}>
-                                    <span style={{ fontSize: 11, fontWeight: 600, color: '#374151' }}>Assessment: </span>
-                                    <span style={{ fontSize: 12, color: '#374151' }}>{h.assessment.assessment}</span>
+                                    <span style={{ fontSize: 11, fontWeight: 600, color: '#A8B8D8' }}>Assessment: </span>
+                                    <span style={{ fontSize: 12, color: '#A8B8D8' }}>{h.assessment.assessment}</span>
                                   </div>
                                 )}
                                 {h.assessment.plan && (
                                   <div>
-                                    <span style={{ fontSize: 11, fontWeight: 600, color: '#374151' }}>Plan: </span>
-                                    <span style={{ fontSize: 12, color: '#374151' }}>{h.assessment.plan}</span>
+                                    <span style={{ fontSize: 11, fontWeight: 600, color: '#A8B8D8' }}>Plan: </span>
+                                    <span style={{ fontSize: 12, color: '#A8B8D8' }}>{h.assessment.plan}</span>
                                   </div>
                                 )}
                               </div>
@@ -1003,7 +1003,7 @@ export default function ClinicDokter() {
             </div>
 
             {/* Modal Footer */}
-            <div style={{ padding: '12px 20px', borderTop: '1px solid #E5E7EB', background: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+            <div style={{ padding: '12px 20px', borderTop: '1px solid rgba(255,255,255,0.08)', background: '#1a2740', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
               <button className="btn-secondary" onClick={() => setShowVisitModal(false)} style={{ width: 'auto' }}>Tutup</button>
               {modalTab === 'assessment' && !assessmentLocked && (
                 <div style={{ display: 'flex', gap: 8 }}>
@@ -1019,7 +1019,7 @@ export default function ClinicDokter() {
                     className="btn-primary"
                     onClick={handleSaveAndSchedule}
                     disabled={savingAssessment}
-                    style={{ width: 'auto', opacity: savingAssessment ? 0.6 : 1 }}
+                    style={{ width: 'auto', opacity: savingAssessment ? 0.6 : 1, background: '#059669', border: 'none', color: '#fff' }}
                   >
                     Simpan & Jadwalkan Berikutnya
                   </button>

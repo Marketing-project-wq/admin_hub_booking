@@ -1148,3 +1148,162 @@ table.data-table tbody tr:hover {
 .kpi-card:hover {
   border-color: var(--border-strong);
 }
+
+/* ===== DARK THEME FIXES ===== */
+
+/* Modal overlay dan content */
+.modal-overlay,
+[class*="modal-overlay"] {
+  background: rgba(0, 0, 0, 0.75) !important;
+  backdrop-filter: blur(4px);
+}
+
+/* Semua modal/dialog content */
+.modal-content,
+.modal {
+  background: #1a2740 !important;
+  border: 1px solid rgba(255,255,255,0.1) !important;
+  color: #F0F4FF !important;
+}
+
+/* Modal header */
+.modal-header,
+[class*="modal-header"] {
+  background: #0a1628 !important;
+  border-bottom: 1px solid rgba(255,255,255,0.08) !important;
+  color: #F0F4FF !important;
+}
+
+/* Triase card pasien */
+.visit-card,
+[class*="visit-row"],
+[class*="patient-card"] {
+  background: #1a2740 !important;
+  border: 1px solid rgba(255,255,255,0.08) !important;
+  color: #F0F4FF !important;
+}
+
+/* Checkbox dark theme */
+input[type="checkbox"] {
+  accent-color: #C0392B;
+  width: 16px;
+  height: 16px;
+}
+
+/* (Removed broad `label` override — labels are now styled inline per component.) */
+
+/* Section headers dalam screening */
+[class*="section-title"],
+[class*="section-header"] {
+  color: #F0F4FF !important;
+  background: #243352 !important;
+  border-left: 3px solid #C0392B;
+  padding: 8px 12px;
+  border-radius: 6px;
+}
+
+/* Consent items */
+[class*="consent-item"],
+[class*="consent-card"] {
+  background: #243352 !important;
+  border: 1px solid rgba(255,255,255,0.08) !important;
+  border-radius: 10px;
+  padding: 12px 16px;
+}
+
+/* Payment method buttons */
+[class*="payment-btn"],
+[class*="method-btn"],
+[class*="pay-method"] {
+  background: #243352 !important;
+  border: 1px solid rgba(255,255,255,0.1) !important;
+  color: #A8B8D8 !important;
+  border-radius: 8px;
+}
+
+[class*="payment-btn"].active,
+[class*="payment-btn"]:focus,
+[class*="method-btn"].active,
+[class*="pay-method"].active {
+  background: rgba(192,57,43,0.2) !important;
+  border-color: #C0392B !important;
+  color: #fff !important;
+}
+
+/* Close bill rincian */
+[class*="bill-item"],
+[class*="rincian"] {
+  color: #F0F4FF !important;
+  border-bottom: 1px solid rgba(255,255,255,0.06) !important;
+}
+
+/* Total amount */
+[class*="total"] {
+  color: #C0392B !important;
+  font-weight: 700;
+}
+
+/* Tab navigation dalam modal */
+[class*="tab-btn"],
+[class*="modal-tab"] {
+  color: #6B7A99 !important;
+  background: transparent !important;
+  border-bottom: 2px solid transparent !important;
+}
+
+[class*="tab-btn"].active,
+[class*="modal-tab"].active {
+  color: #C0392B !important;
+  border-bottom-color: #C0392B !important;
+}
+
+/* Progress stepper chips */
+[class*="step-chip"],
+[class*="stepper"] {
+  background: #243352 !important;
+  color: #A8B8D8 !important;
+  border-radius: 999px;
+  font-size: 11px;
+  padding: 3px 10px;
+}
+
+/* Scrollbar dark */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #0f1923;
+}
+::-webkit-scrollbar-thumb {
+  background: #243352;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #C0392B;
+}
+
+/* KPI cards */
+.kpi-card,
+[class*="kpi-card"],
+[class*="stat-card"] {
+  background: #1a2740 !important;
+  border: 1px solid rgba(255,255,255,0.08) !important;
+  border-radius: 12px;
+  color: #F0F4FF !important;
+}
+
+/* (Removed broad table overrides — clinic tables are handled by the earlier
+   .data-table rules; removing these restores intentional inline cell colors
+   in arena/gym tables.) */
+
+/* Badge variants */
+.badge-success { background: rgba(5,150,105,0.15) !important; color: #34D399 !important; }
+.badge-warning { background: rgba(245,158,11,0.15) !important; color: #FCD34D !important; }
+.badge-danger  { background: rgba(192,57,43,0.15) !important; color: #FC8181 !important; }
+.badge-info    { background: rgba(59,130,246,0.15) !important; color: #93C5FD !important; }
+
+/* Divider */
+hr, [class*="divider"] {
+  border-color: rgba(255,255,255,0.06) !important;
+}
