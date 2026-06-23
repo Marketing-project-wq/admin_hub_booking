@@ -494,7 +494,7 @@ function ScreeningTab({ visit, patient, onToast, onSaved, isLocked, recordId, lo
 
   useEffect(() => {
     let active = true
-    getScreeningByVisit(visit.id).then(data => {
+    getScreeningByVisit(visit.id).then(async data => {
       if (!active) return
       if (data) {
         setForm({
@@ -523,7 +523,20 @@ function ScreeningTab({ visit, patient, onToast, onSaved, isLocked, recordId, lo
           setForm({ ...emptyScreening(), selected_services: defaultServices })
         }
       }
-      setLoaded(true)
+
+      // Pre-fill keluhan dari clinic_visits.chief_complaint — hanya jika masih kosong (tidak override isian yang sudah ada).
+      try {
+        const { data: visitData } = await supabase
+          .from('clinic_visits')
+          .select('chief_complaint')
+          .eq('id', visit.id)
+          .single()
+        if (active && visitData?.chief_complaint) {
+          setForm(prev => (prev.chief_complaint ? prev : { ...prev, chief_complaint: visitData.chief_complaint }))
+        }
+      } catch { /* silent fail */ }
+
+      if (active) setLoaded(true)
     }).catch(() => setLoaded(true))
     return () => { active = false }
   }, [visit.id]) // eslint-disable-line react-hooks/exhaustive-deps
