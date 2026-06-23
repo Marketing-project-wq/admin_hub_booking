@@ -998,7 +998,14 @@ interface TriaseVisit {
   services: { id: string; service_name: string; price: number; service: { requires_doctor: boolean } | null }[]
 }
 
-type ModalTab = 'screening' | 'consent'
+type ModalTab = 'screening' | 'consent' | 'assessment'
+
+interface TherapistAssessment {
+  patient_condition: string
+  treatment_performed: string
+  patient_response: string
+  notes: string
+}
 
 interface LockInfo { id: string; isLocked: boolean; lockedAt: string | null; lockedBy: string | null }
 interface LockRow { id: string; visit_id: string; is_locked: boolean | null; locked_at: string | null; locked_by: string | null }
@@ -1021,6 +1028,7 @@ function StepChip({ label, state }: { label: string; state: StepState }) {
 
 export default function ClinicTriase() {
   const isMobile = useIsMobile()
+  const { user } = useAuth()
   const [visits, setVisits] = useState<TriaseVisit[]>([])
   const [loading, setLoading] = useState(true)
   const [screeningStatus, setScreeningStatus] = useState<Record<string, boolean>>({})
@@ -1031,6 +1039,14 @@ export default function ClinicTriase() {
   const [modalTab, setModalTab] = useState<ModalTab>('screening')
   const [showModal, setShowModal] = useState(false)
   const [toast, setToast] = useState('')
+  const [therapistAssessment, setTherapistAssessment] = useState<TherapistAssessment>({
+    patient_condition: '',
+    treatment_performed: '',
+    patient_response: '',
+    notes: '',
+  })
+  const [assessmentLoading, setAssessmentLoading] = useState(false)
+  const [assessmentSaved, setAssessmentSaved] = useState(false)
 
   const showToastMsg = (msg: string) => {
     setToast(msg)
@@ -1105,10 +1121,37 @@ export default function ClinicTriase() {
     return () => window.clearInterval(t)
   }, [fetchVisits])
 
-  const openModal = (visit: TriaseVisit, tab: ModalTab) => {
+  const openModal = async (visit: TriaseVisit, tab: ModalTab) => {
     setSelectedVisit(visit)
     setModalTab(tab)
     setShowModal(true)
+
+    // Fetch existing therapist assessment untuk pre-fill form.
+    try {
+      const { data: existingAssessment } = await supabase
+        .from('clinic_assessments')
+        .select('*')
+        .eq('visit_id', visit.id)
+        .eq('assessment_type', 'therapist')
+        .maybeSingle()
+
+      if (existingAssessment) {
+        setTherapistAssessment({
+          patient_condition: existingAssessment.subjective ?? '',
+          treatment_performed: existingAssessment.objective ?? '',
+          patient_response: existingAssessment.assessment ?? '',
+          notes: existingAssessment.notes ?? '',
+        })
+        setAssessmentSaved(true)
+      } else {
+        setTherapistAssessment({ patient_condition: '', treatment_performed: '', patient_response: '', notes: '' })
+        setAssessmentSaved(false)
+      }
+    } catch (e) {
+      console.error(e)
+      setTherapistAssessment({ patient_condition: '', treatment_performed: '', patient_response: '', notes: '' })
+      setAssessmentSaved(false)
+    }
   }
 
   const handleScreeningSaved = () => {
@@ -1153,6 +1196,40 @@ export default function ClinicTriase() {
     } catch (e) {
       console.error(e)
       showToastMsg('Gagal update status')
+    }
+  }
+
+  const handleSaveTherapistAssessment = async (andFinish = false) => {
+    if (!selectedVisit) return
+    setAssessmentLoading(true)
+    try {
+      const { error } = await supabase
+        .from('clinic_assessments')
+        .upsert({
+          visit_id: selectedVisit.id,
+          patient_id: selectedVisit.patient?.id ?? null,
+          assessment_type: 'therapist',
+          subjective: therapistAssessment.patient_condition,
+          objective: therapistAssessment.treatment_performed,
+          assessment: therapistAssessment.patient_response,
+          notes: therapistAssessment.notes,
+          handled_by: user?.full_name ?? '',
+          created_by: user?.full_name ?? '',
+        }, { onConflict: 'visit_id,assessment_type' })
+      if (error) throw error
+
+      setAssessmentSaved(true)
+      showToastMsg('Assessment tersimpan')
+
+      if (andFinish) {
+        await handleSelesaiTreatment(selectedVisit.id)
+        setShowModal(false)
+      }
+    } catch (e) {
+      console.error(e)
+      showToastMsg('Gagal menyimpan assessment')
+    } finally {
+      setAssessmentLoading(false)
     }
   }
 
@@ -1283,11 +1360,21 @@ export default function ClinicTriase() {
                     marginBottom: -2, textTransform: 'capitalize',
                   }}>{t === 'screening' ? 'Screening' : 'Consent'}</button>
               ))}
+              {screeningStatus[selectedVisit.id] && consentStatus[selectedVisit.id] && (
+                <button onClick={() => setModalTab('assessment')}
+                  style={{
+                    padding: '12px 20px', border: 'none', background: 'none', cursor: 'pointer', fontSize: 13,
+                    fontWeight: modalTab === 'assessment' ? 700 : 400,
+                    color: modalTab === 'assessment' ? '#C0392B' : '#6B7280',
+                    borderBottom: modalTab === 'assessment' ? '2px solid #C0392B' : '2px solid transparent',
+                    marginBottom: -2, textTransform: 'capitalize',
+                  }}>Assessment</button>
+              )}
             </div>
 
             {/* Content */}
             <div style={{ flex: 1, overflow: 'auto', padding: 20 }}>
-              {modalTab === 'screening' ? (
+              {modalTab === 'screening' && (
                 <ScreeningTab
                   key={`scr-${selectedVisit.id}`}
                   visit={visitRef}
@@ -1302,7 +1389,8 @@ export default function ClinicTriase() {
                   onRelocked={() => fetchVisits(false)}
                   defaultServices={selectedVisit.services.map(s => s.service_name)}
                 />
-              ) : (
+              )}
+              {modalTab === 'consent' && (
                 <ConsentTab
                   key={`con-${selectedVisit.id}`}
                   visit={visitRef}
@@ -1315,6 +1403,100 @@ export default function ClinicTriase() {
                   onUnlocked={() => fetchVisits(false)}
                   onRelocked={() => fetchVisits(false)}
                 />
+              )}
+              {modalTab === 'assessment' && (
+                <div style={{ padding: '16px 0', display: 'flex', flexDirection: 'column', gap: 14 }}>
+
+                  {/* Kondisi pasien */}
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 6 }}>
+                      Kondisi Pasien Hari Ini
+                    </label>
+                    <textarea
+                      value={therapistAssessment.patient_condition}
+                      onChange={e => setTherapistAssessment(prev => ({ ...prev, patient_condition: e.target.value }))}
+                      rows={3}
+                      placeholder="Deskripsikan kondisi pasien saat datang..."
+                      style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #E5E7EB', fontSize: 13, resize: 'vertical', boxSizing: 'border-box' }}
+                    />
+                  </div>
+
+                  {/* Treatment */}
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 6 }}>
+                      Treatment yang Dilakukan
+                    </label>
+                    <textarea
+                      value={therapistAssessment.treatment_performed}
+                      onChange={e => setTherapistAssessment(prev => ({ ...prev, treatment_performed: e.target.value }))}
+                      rows={3}
+                      placeholder="Teknik dan area treatment yang dilakukan..."
+                      style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #E5E7EB', fontSize: 13, resize: 'vertical', boxSizing: 'border-box' }}
+                    />
+                  </div>
+
+                  {/* Respon pasien */}
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 6 }}>
+                      Respon Pasien
+                    </label>
+                    <textarea
+                      value={therapistAssessment.patient_response}
+                      onChange={e => setTherapistAssessment(prev => ({ ...prev, patient_response: e.target.value }))}
+                      rows={2}
+                      placeholder="Bagaimana respon pasien terhadap treatment..."
+                      style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #E5E7EB', fontSize: 13, resize: 'vertical', boxSizing: 'border-box' }}
+                    />
+                  </div>
+
+                  {/* Catatan */}
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 6 }}>
+                      Catatan Tambahan
+                    </label>
+                    <textarea
+                      value={therapistAssessment.notes}
+                      onChange={e => setTherapistAssessment(prev => ({ ...prev, notes: e.target.value }))}
+                      rows={2}
+                      placeholder="Catatan lain yang perlu diketahui..."
+                      style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #E5E7EB', fontSize: 13, resize: 'vertical', boxSizing: 'border-box' }}
+                    />
+                  </div>
+
+                  {/* Buttons */}
+                  <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
+                    <button
+                      onClick={() => handleSaveTherapistAssessment(false)}
+                      disabled={assessmentLoading}
+                      style={{
+                        flex: 1, padding: '10px 0', borderRadius: 8,
+                        border: '1px solid #E5E7EB', background: '#fff',
+                        color: '#374151', fontSize: 13, fontWeight: 600,
+                        cursor: assessmentLoading ? 'not-allowed' : 'pointer',
+                      }}
+                    >
+                      {assessmentLoading ? 'Menyimpan...' : 'Simpan Assessment'}
+                    </button>
+                    <button
+                      onClick={() => handleSaveTherapistAssessment(true)}
+                      disabled={assessmentLoading}
+                      style={{
+                        flex: 1, padding: '10px 0', borderRadius: 8,
+                        border: 'none', background: '#059669',
+                        color: '#fff', fontSize: 13, fontWeight: 600,
+                        cursor: assessmentLoading ? 'not-allowed' : 'pointer',
+                      }}
+                    >
+                      {assessmentLoading ? 'Menyimpan...' : '✓ Simpan & Selesai Treatment'}
+                    </button>
+                  </div>
+
+                  {assessmentSaved && (
+                    <div style={{ textAlign: 'center', fontSize: 12, color: '#059669' }}>
+                      ✓ Assessment sudah tersimpan
+                    </div>
+                  )}
+                </div>
               )}
             </div>
 
