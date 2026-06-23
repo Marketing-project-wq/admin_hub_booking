@@ -90,6 +90,24 @@ interface ClinicConsentData {
   signed_by_name: string | null
 }
 
+type ModalTab = 'screening' | 'consent' | 'assessment' | 'riwayat'
+
+interface MedicalHistory {
+  visit_id: string
+  visit_date: string
+  visit_time: string | null
+  chief_complaint: string | null
+  services: { service_name: string; price: number }[]
+  assessment: {
+    diagnosis: string | null
+    plan: string | null
+    subjective: string | null
+    objective: string | null
+    assessment: string | null
+    handled_by: string | null
+  } | null
+}
+
 async function fetchScreening(visitId: string): Promise<ClinicScreeningData | null> {
   const { data } = await supabase
     .from('clinic_screenings')
@@ -340,11 +358,13 @@ export default function ClinicDokter() {
   // Visit detail modal
   const [selectedVisit, setSelectedVisit] = useState<DokterVisit | null>(null)
   const [showVisitModal, setShowVisitModal] = useState(false)
-  const [modalTab, setModalTab] = useState<'screening' | 'consent' | 'assessment'>('screening')
+  const [modalTab, setModalTab] = useState<ModalTab>('screening')
   const [screeningData, setScreeningData] = useState<ClinicScreeningData | null>(null)
   const [loadingScreening, setLoadingScreening] = useState(false)
   const [consentData, setConsentData] = useState<ClinicConsentData[]>([])
   const [loadingConsent, setLoadingConsent] = useState(false)
+  const [medicalHistory, setMedicalHistory] = useState<MedicalHistory[]>([])
+  const [historyLoading, setHistoryLoading] = useState(false)
   const [assessment, setAssessment] = useState<AssessmentForm>({
     subjective: '', objective: '', assessment: '', plan: '', diagnosis: '', follow_up_date: '', notes: '', handled_by: '',
   })
@@ -393,6 +413,51 @@ export default function ClinicDokter() {
     return () => window.clearInterval(t)
   }, [tab, loadToday])
 
+  // Fetch riwayat kunjungan pasien saat tab Riwayat dibuka.
+  useEffect(() => {
+    if (modalTab !== 'riwayat' || !selectedVisit) return
+
+    const fetchHistory = async () => {
+      setHistoryLoading(true)
+      try {
+        const patientId = selectedVisit.patient?.id
+
+        // Fetch past visits (excluding current visit)
+        const { data: visits } = await supabase
+          .from('clinic_visits')
+          .select(`
+            id, visit_date, visit_time, chief_complaint,
+            services:clinic_visit_services(service_name, price),
+            assessment:clinic_assessments(
+              diagnosis, plan, subjective, objective, assessment, handled_by
+            )
+          `)
+          .eq('patient_id', patientId)
+          .neq('id', selectedVisit.id)
+          .eq('payment_status', 'paid')
+          .order('visit_date', { ascending: false })
+          .limit(10)
+
+        const history: MedicalHistory[] = (visits ?? []).map((v: any) => ({
+          visit_id: v.id,
+          visit_date: v.visit_date,
+          visit_time: v.visit_time,
+          chief_complaint: v.chief_complaint,
+          services: v.services ?? [],
+          assessment: Array.isArray(v.assessment) ? v.assessment[0] ?? null : v.assessment,
+        }))
+
+        setMedicalHistory(history)
+      } catch (e) {
+        console.error(e)
+      } finally {
+        setHistoryLoading(false)
+      }
+    }
+
+    fetchHistory()
+  }, [modalTab, selectedVisit])
+
   const handleStatusChange = async (id: string, status: string) => {
     setBusy(true)
     try {
@@ -411,6 +476,8 @@ export default function ClinicDokter() {
     setShowVisitModal(true)
     setScreeningData(null)
     setConsentData([])
+    setMedicalHistory([])
+    setHistoryLoading(false)
     setAssessmentError('')
 
     // Reset state follow-up untuk kunjungan baru.
@@ -623,7 +690,7 @@ export default function ClinicDokter() {
 
             {/* Tab Bar */}
             <div style={{ display: 'flex', borderBottom: '2px solid #E5E7EB', background: '#fff', flexShrink: 0 }}>
-              {(['screening', 'consent', 'assessment'] as const).map(t => (
+              {(['screening', 'consent', 'assessment', 'riwayat'] as const).map(t => (
                 <button
                   key={t}
                   onClick={() => setModalTab(t)}
@@ -635,7 +702,7 @@ export default function ClinicDokter() {
                     marginBottom: -2, textTransform: 'capitalize',
                   }}
                 >
-                  {t === 'screening' ? 'Screening' : t === 'consent' ? 'Consent' : 'Assessment'}
+                  {t === 'screening' ? 'Screening' : t === 'consent' ? 'Consent' : t === 'assessment' ? 'Assessment' : 'Riwayat'}
                 </button>
               ))}
             </div>
@@ -849,6 +916,104 @@ export default function ClinicDokter() {
                     </fieldset>
                   </div>
                 )
+              )}
+
+              {/* TAB RIWAYAT - read only */}
+              {modalTab === 'riwayat' && (
+                <div style={{ padding: '16px 0' }}>
+                  {historyLoading ? (
+                    <div style={{ textAlign: 'center', padding: 40, color: '#9CA3AF' }}>Memuat riwayat...</div>
+                  ) : medicalHistory.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: 40 }}>
+                      <div style={{ fontSize: 32, marginBottom: 8 }}>📋</div>
+                      <div style={{ color: '#9CA3AF', fontSize: 13 }}>Belum ada riwayat kunjungan sebelumnya</div>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                      {medicalHistory.map((h, i) => (
+                        <div key={h.visit_id} style={{
+                          background: '#fff',
+                          border: '1px solid #E5E7EB',
+                          borderRadius: 12,
+                          overflow: 'hidden',
+                        }}>
+                          {/* Header kunjungan */}
+                          <div style={{
+                            background: '#080808', padding: '10px 16px',
+                            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                          }}>
+                            <div>
+                              <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 900, fontStyle: 'italic', fontSize: 11, color: '#9CA3AF', letterSpacing: 1, textTransform: 'uppercase' }}>
+                                Kunjungan #{medicalHistory.length - i}
+                              </div>
+                              <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 13, color: '#fff', fontWeight: 600 }}>
+                                {new Date(h.visit_date).toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' })}
+                                {h.visit_time && ` · ${h.visit_time.slice(0, 5)}`}
+                              </div>
+                            </div>
+                            {h.assessment?.handled_by && (
+                              <div style={{ fontSize: 11, color: '#9CA3AF' }}>{h.assessment.handled_by}</div>
+                            )}
+                          </div>
+
+                          <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                            {/* Keluhan */}
+                            {h.chief_complaint && (
+                              <div>
+                                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: '#9CA3AF', marginBottom: 4 }}>Keluhan</div>
+                                <div style={{ fontSize: 13, color: '#374151', lineHeight: 1.6 }}>{h.chief_complaint}</div>
+                              </div>
+                            )}
+
+                            {/* Layanan */}
+                            {h.services.length > 0 && (
+                              <div>
+                                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: '#9CA3AF', marginBottom: 4 }}>Layanan</div>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                                  {h.services.map(s => (
+                                    <span key={s.service_name} style={{
+                                      padding: '3px 10px', borderRadius: 999,
+                                      background: '#F3F4F6', fontSize: 12, color: '#374151',
+                                      fontWeight: 500,
+                                    }}>
+                                      {s.service_name}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Assessment dokter */}
+                            {h.assessment && (
+                              <div style={{ background: '#F9FAFB', borderRadius: 8, padding: '10px 12px' }}>
+                                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: '#9CA3AF', marginBottom: 8 }}>Kesimpulan Dokter</div>
+
+                                {h.assessment.diagnosis && (
+                                  <div style={{ marginBottom: 6 }}>
+                                    <span style={{ fontSize: 11, fontWeight: 600, color: '#C0392B' }}>Diagnosis: </span>
+                                    <span style={{ fontSize: 12, color: '#374151' }}>{h.assessment.diagnosis}</span>
+                                  </div>
+                                )}
+                                {h.assessment.assessment && (
+                                  <div style={{ marginBottom: 6 }}>
+                                    <span style={{ fontSize: 11, fontWeight: 600, color: '#374151' }}>Assessment: </span>
+                                    <span style={{ fontSize: 12, color: '#374151' }}>{h.assessment.assessment}</span>
+                                  </div>
+                                )}
+                                {h.assessment.plan && (
+                                  <div>
+                                    <span style={{ fontSize: 11, fontWeight: 600, color: '#374151' }}>Plan: </span>
+                                    <span style={{ fontSize: 12, color: '#374151' }}>{h.assessment.plan}</span>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               )}
             </div>
 
