@@ -1307,3 +1307,107 @@ input[type="checkbox"] {
 hr, [class*="divider"] {
   border-color: rgba(255,255,255,0.06) !important;
 }
+
+/* ===== GLOBAL DARK TEXT FIX ===== */
+
+/* Fix semua button text */
+button {
+  color: inherit;
+}
+
+/* Fix outlined/secondary buttons */
+.btn-secondary,
+button[class*="secondary"],
+button[class*="outline"] {
+  color: #A8B8D8 !important;
+  background: #243352 !important;
+  border: 1px solid rgba(255,255,255,0.12) !important;
+}
+
+/* Fix "Kwitansi" buttons */
+button:not(.btn-primary):not([class*="btn-danger"]):not([class*="close"]) {
+  color: #A8B8D8;
+}
+
+/* Fix "Detail" buttons */
+[class*="btn-detail"],
+button[class*="detail"] {
+  color: #A8B8D8 !important;
+  background: #243352 !important;
+  border: 1px solid rgba(255,255,255,0.1) !important;
+}
+
+/* Fix "Edit" buttons */
+button[class*="edit"],
+[class*="btn-edit"] {
+  color: #A8B8D8 !important;
+  background: #243352 !important;
+  border: 1px solid rgba(255,255,255,0.1) !important;
+}
+
+/* Fix "Nonaktifkan" danger outlined buttons */
+button[class*="danger"],
+[class*="btn-danger"] {
+  color: #FC8181 !important;
+  background: rgba(192,57,43,0.1) !important;
+  border: 1px solid rgba(192,57,43,0.3) !important;
+}
+
+/* Fix date input */
+input[type="date"] {
+  color: #F0F4FF !important;
+  background: #152034 !important;
+  border: 1px solid rgba(255,255,255,0.12) !important;
+  border-radius: 8px;
+  padding: 6px 10px;
+}
+
+/* Fix select dropdown */
+select {
+  color: #F0F4FF !important;
+  background: #152034 !important;
+  border: 1px solid rgba(255,255,255,0.12) !important;
+}
+
+/* Fix search input */
+input[type="text"],
+input[type="search"],
+input[type="email"],
+input[type="password"] {
+  color: #F0F4FF !important;
+  background: #152034 !important;
+  border: 1px solid rgba(255,255,255,0.12) !important;
+}
+
+/* Fix "Buka" green button text */
+button[style*="059669"],
+button[style*="10B981"] {
+  color: #fff !important;
+}
+
+/* Fix all anchor/link colors */
+a:not(.menu-item):not(.switcher-item) {
+  color: #A8B8D8;
+}
+
+/* Fix column header AKSI text */
+th {
+  color: #6B7A99 !important;
+  background: #0a1628 !important;
+  font-size: 11px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+/* Fix all td text */
+td {
+  color: #A8B8D8;
+}
+
+/* Fix pagination buttons */
+[class*="pagination"] button,
+button[class*="page"] {
+  color: #A8B8D8 !important;
+  background: #243352 !important;
+  border: 1px solid rgba(255,255,255,0.1) !important;
+}
