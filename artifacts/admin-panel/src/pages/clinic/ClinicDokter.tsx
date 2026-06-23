@@ -277,25 +277,25 @@ function VisitCard({ visit, queue = false, onStatusChange, onOpen, busy }: {
   const leftColor = s === 'in_progress' ? '#1D4ED8' : s === 'scheduled' ? '#F59E0B' : s === 'completed' ? '#10B981' : 'transparent'
   const cardStyle: React.CSSProperties = {
     display: 'flex', gap: 14, alignItems: 'center',
-    background: queue && s === 'in_progress' ? '#FFF5F5' : '#fff',
-    border: '1px solid #E5E7EB',
+    background: queue && s === 'in_progress' ? 'rgba(192,57,43,0.12)' : 'var(--bg-card)',
+    border: '1px solid rgba(255,255,255,0.08)',
     borderLeft: `4px solid ${queue && s === 'in_progress' ? '#C0392B' : leftColor}`,
     borderRadius: 12, padding: 16, marginBottom: 8,
     opacity: s === 'completed' ? 0.8 : 1,
   }
   const timeBox: React.CSSProperties = {
     minWidth: 64, textAlign: 'center', padding: '8px 6px', borderRadius: 8, fontWeight: 700, fontSize: 14,
-    background: s === 'in_progress' ? '#FEE2E2' : '#F3F4F6',
-    color: s === 'in_progress' ? '#C0392B' : '#374151',
+    background: s === 'in_progress' ? 'rgba(192,57,43,0.2)' : '#243352',
+    color: s === 'in_progress' ? '#C0392B' : '#A8B8D8',
   }
 
   return (
     <div style={cardStyle}>
       <div style={timeBox}>{visit.visit_time ? fmtTime(visit.visit_time) : '—'}</div>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontWeight: 700 }}>{visit.patient?.full_name || '-'}</div>
-        <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'monospace' }}>{visit.patient?.patient_code || '-'}</div>
-        <div style={{ fontSize: 13, marginTop: 2 }}>{visit.services.map(s => s.service_name).join(', ') || '-'}</div>
+        <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{visit.patient?.full_name || '-'}</div>
+        <div style={{ fontSize: 11, color: 'var(--text-secondary)', fontFamily: 'monospace' }}>{visit.patient?.patient_code || '-'}</div>
+        <div style={{ fontSize: 13, marginTop: 2, color: 'var(--text-secondary)' }}>{visit.services.map(s => s.service_name).join(', ') || '-'}</div>
         {visit.patient_package_id && (
           <span style={{ display: 'inline-block', marginTop: 4, fontSize: 11, fontWeight: 600, padding: '1px 8px', borderRadius: 999, background: '#DBEAFE', color: '#1D4ED8' }}>📦 Paket</span>
         )}
@@ -327,7 +327,7 @@ function VisitCard({ visit, queue = false, onStatusChange, onOpen, busy }: {
 }
 
 const EmptyState = ({ children }: { children: React.ReactNode }) => (
-  <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)', background: '#fff', border: '1px dashed #E5E7EB', borderRadius: 12 }}>{children}</div>
+  <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)', background: 'var(--bg-card)', border: '1px dashed rgba(255,255,255,0.08)', borderRadius: 12 }}>{children}</div>
 )
 
 const SCREENING_SECTION_TITLE: React.CSSProperties = { fontWeight: 700, fontSize: 12, color: '#374151', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }
@@ -1164,12 +1164,12 @@ function RiwayatTab({ onOpenVisit }: { onOpenVisit: (visit: DokterVisit) => void
           ) : results.map(p => (
             <div key={p.id} onClick={() => selectPatient(p)}
               style={{
-                background: selectedPatient?.id === p.id ? '#FFF5F5' : '#fff',
-                border: '1px solid #E5E7EB', borderLeft: selectedPatient?.id === p.id ? '4px solid #C0392B' : '1px solid #E5E7EB',
+                background: selectedPatient?.id === p.id ? 'rgba(192,57,43,0.12)' : 'var(--bg-card)',
+                border: '1px solid rgba(255,255,255,0.08)', borderLeft: selectedPatient?.id === p.id ? '4px solid #C0392B' : '1px solid rgba(255,255,255,0.08)',
                 borderRadius: 10, padding: 12, marginBottom: 8, cursor: 'pointer',
               }}>
-              <div style={{ fontWeight: 600 }}>{p.full_name}</div>
-              <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+              <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{p.full_name}</div>
+              <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
                 <span style={{ fontFamily: 'monospace' }}>{p.patient_code}</span> · {p.phone} · {ageFromDob(p.date_of_birth)}
               </div>
             </div>
@@ -1181,8 +1181,8 @@ function RiwayatTab({ onOpenVisit }: { onOpenVisit: (visit: DokterVisit) => void
           {!selectedPatient ? (
             <EmptyState>Pilih pasien untuk melihat riwayat kunjungan</EmptyState>
           ) : (
-            <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, padding: 16 }}>
-              <div style={{ fontWeight: 700, fontSize: 16 }}>{selectedPatient.full_name}</div>
+            <div style={{ background: 'var(--bg-card)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: 16 }}>
+              <div style={{ fontWeight: 700, fontSize: 16, color: 'var(--text-primary)' }}>{selectedPatient.full_name}</div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '6px 16px', fontSize: 13, marginTop: 8, marginBottom: 16 }}>
                 <div><span style={{ color: 'var(--text-muted)' }}>Kode: </span><span style={{ fontFamily: 'monospace' }}>{selectedPatient.patient_code}</span></div>
                 <div><span style={{ color: 'var(--text-muted)' }}>HP: </span>{selectedPatient.phone}</div>
@@ -1195,7 +1195,7 @@ function RiwayatTab({ onOpenVisit }: { onOpenVisit: (visit: DokterVisit) => void
               ) : patientVisits.length === 0 ? (
                 <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>Belum ada riwayat kunjungan</p>
               ) : patientVisits.map(v => (
-                <div key={v.id} style={{ borderTop: '1px solid #F3F4F6', padding: '10px 0', display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
+                <div key={v.id} style={{ borderTop: '1px solid rgba(255,255,255,0.08)', padding: '10px 0', display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
                   <div style={{ minWidth: 0 }}>
                     <div style={{ fontSize: 13, fontWeight: 600 }}>{fmtDate(v.visit_date)}{v.visit_time ? ` · ${fmtTime(v.visit_time)}` : ''}</div>
                     <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{v.services.map(s => s.service_name).join(', ') || '-'}</div>
