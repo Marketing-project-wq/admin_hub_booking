@@ -10,7 +10,7 @@ export default function Layout({ currentUnit }: LayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   return (
-    <div className="layout">
+    <div className={`layout layout-${currentUnit}`}>
       <Sidebar currentUnit={currentUnit} open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       <main className="main-content">
         <button
