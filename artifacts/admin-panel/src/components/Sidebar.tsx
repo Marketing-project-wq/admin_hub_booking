@@ -46,7 +46,6 @@ const UNIT_MENUS: Record<string, MenuItem[]> = {
     { label: 'Visits',    path: '/clinic/visits',    icon: '◻' },
     { label: 'Patients',  path: '/clinic/patients',  icon: '◻' },
     { label: '— Master',  path: null,                divider: true },
-    { label: 'Staff',     path: '/clinic/staff',     icon: '◻' },
     { label: 'Services',  path: '/clinic/services',  icon: '◻' },
     { label: 'Slots',     path: '/clinic/slots',     icon: '◻' },
     { label: 'Reports',   path: '/clinic/reports',   icon: '◻' },

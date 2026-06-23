@@ -875,13 +875,17 @@ export default function ClinicDokter() {
 
                     <div style={{ marginBottom: 14 }}>
                       <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 4 }}>Ditangani oleh</label>
-                      <input
-                        type="text"
-                        value={assessment.handled_by}
-                        onChange={e => setAssessment(prev => ({ ...prev, handled_by: e.target.value }))}
-                        placeholder="Nama dokter / therapist"
-                        style={{ width: '100%', padding: '8px 12px', border: '1.5px solid #E5E7EB', borderRadius: 8, fontSize: 13, boxSizing: 'border-box' }}
-                      />
+                      <div style={{
+                        padding: '10px 12px',
+                        background: '#F9FAFB',
+                        border: '1px solid #E5E7EB',
+                        borderRadius: 8,
+                        fontSize: 14,
+                        color: '#374151',
+                        fontWeight: 500,
+                      }}>
+                        {assessment.handled_by || user?.full_name || '-'}
+                      </div>
                     </div>
 
                     <div style={{ marginBottom: 14 }}>
