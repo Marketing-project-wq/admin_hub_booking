@@ -550,7 +550,9 @@ function ScreeningTab({ visit, patient, onToast, onSaved, isLocked, recordId, lo
     return () => window.clearInterval(t)
   }, [form, loaded, draftKey])
 
-  if (!hasPermission('can_screening')) return <NoAccess>Anda tidak memiliki akses untuk mengisi screening.</NoAccess>
+  const role: string | undefined = user?.role
+  if (!hasPermission('can_screening') && role !== 'therapist' && role !== 'super_admin')
+    return <NoAccess>Anda tidak memiliki akses untuk mengisi screening.</NoAccess>
 
   const services = form.selected_services
   const showMSK = !(services.length > 0 && services.every(s => s === 'Personal Trainer Session'))
@@ -787,7 +789,9 @@ function ConsentTab({ visit, onToast, onSaved, isLocked, recordId, lockedAt, loc
     setName(prev || visit.patient?.full_name || '')
   }, [consents, visit.patient])
 
-  if (!hasPermission('can_consent')) return <NoAccess>Anda tidak memiliki akses untuk mengisi consent.</NoAccess>
+  const role: string | undefined = user?.role
+  if (!hasPermission('can_consent') && role !== 'therapist' && role !== 'super_admin')
+    return <NoAccess>Anda tidak memiliki akses untuk mengisi consent.</NoAccess>
   if (loading) return <p style={{ color: 'var(--text-muted)' }}>Memuat data...</p>
 
   const types = consentTypesFor(services)
