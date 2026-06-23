@@ -1220,7 +1220,7 @@ export default function ClinicTriase() {
                     <span style={{ color: 'var(--text-muted)' }}>→</span>
                     <StepChip label={con ? '✓ Consent' : '○ Consent'} state={con ? 'done' : (scr ? 'active' : 'todo')} />
                     <span style={{ color: 'var(--text-muted)' }}>→</span>
-                    <StepChip label={scr && con ? '✓ Siap Dokter' : '○ Siap Dokter'} state={scr && con ? 'done' : 'todo'} />
+                    <StepChip label={`${scr && con ? '✓' : '○'} ${requiresDoctor(v) ? 'Siap Dokter' : 'Siap Kasir'}`} state={scr && con ? 'done' : 'todo'} />
                   </div>
                 </div>
 
