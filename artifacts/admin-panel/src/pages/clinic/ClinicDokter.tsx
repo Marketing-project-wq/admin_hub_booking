@@ -22,7 +22,7 @@ interface DokterVisit {
     date_of_birth: string | null
     gender: string | null
   } | null
-  services: { id: string; service_id: string; service_name: string; price: number }[]
+  services: { id: string; service_id: string; service_name: string; price: number; service?: { requires_doctor: boolean } | null }[]
 }
 
 interface PatientHistory {
@@ -185,7 +185,7 @@ async function saveAssessment(visitId: string, patientId: string, form: Assessme
 const VISIT_SELECT = `
   id, visit_code, visit_date, visit_time, status, chief_complaint, handled_by, patient_package_id,
   patient:clinic_patients(id, full_name, patient_code, phone, date_of_birth, gender),
-  services:clinic_visit_services(id, service_id, service_name, price)
+  services:clinic_visit_services(id, service_id, service_name, price, service:clinic_services(requires_doctor))
 `
 
 // Fetch visits hari ini
@@ -197,7 +197,9 @@ async function fetchTodayVisits(): Promise<DokterVisit[]> {
     .eq('visit_date', today)
     .order('visit_time', { ascending: true, nullsFirst: false })
   if (error) throw error
-  return (data ?? []) as unknown as DokterVisit[]
+  const rows = (data ?? []) as unknown as DokterVisit[]
+  // Hanya tampilkan visit dengan minimal 1 layanan yang requires_doctor = true.
+  return rows.filter(v => v.services?.some(s => s.service?.requires_doctor === true))
 }
 
 // Update status visit
