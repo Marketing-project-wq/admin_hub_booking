@@ -1431,3 +1431,10 @@ tr.row-selected {
   background: #243352 !important;
   border: 1px solid rgba(255,255,255,0.1) !important;
 }
+
+/* Pulsing dot — "Pasien Menunggu Check-in" indicator */
+@keyframes pulse {
+  0%   { opacity: 1;   transform: scale(1); }
+  50%  { opacity: 0.4; transform: scale(1.35); }
+  100% { opacity: 1;   transform: scale(1); }
+}

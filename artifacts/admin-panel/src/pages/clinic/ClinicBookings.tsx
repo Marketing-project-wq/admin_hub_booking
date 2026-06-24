@@ -5,11 +5,12 @@ import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../context/AuthContext'
 import {
   getBookings, getAllBookings, confirmBooking, cancelBooking, serviceName,
-  todayISO, daysAgoISO, listServices, createManualVisit,
+  todayISO, daysAgoISO, listServices, createManualVisit, createVisitFromBooking,
   type ClinicBooking, type BookingFilters, type ClinicService,
 } from '../../lib/clinic'
 
 const PAGE_SIZE = 20
+const RED = '#C0392B'
 
 export default function ClinicBookings() {
   const { user } = useAuth()
@@ -55,6 +56,14 @@ export default function ClinicBookings() {
   const [usePackageId, setUsePackageId] = useState<string | null>(null)
   const [packageServiceId, setPackageServiceId] = useState<string | null>(null)
 
+  // Check-in pasien (booking status 'arrived')
+  const [arrivedBookings, setArrivedBookings] = useState<ClinicBooking[]>([])
+  const [showCheckinModal, setShowCheckinModal] = useState(false)
+  const [checkinBooking, setCheckinBooking] = useState<ClinicBooking | null>(null)
+  const [checkinKtp, setCheckinKtp] = useState('')
+  const [checkinLoading, setCheckinLoading] = useState(false)
+  const [checkinError, setCheckinError] = useState<string | null>(null)
+
   const [selected, setSelected] = useState<ClinicBooking | null>(null)
   const [confirmConfirm, setConfirmConfirm] = useState<ClinicBooking | null>(null)
   const [confirmCancel, setConfirmCancel] = useState<ClinicBooking | null>(null)
@@ -77,7 +86,57 @@ export default function ClinicBookings() {
     }
   }, [statusFilter, dateFrom, dateTo, search, page])
 
-  useEffect(() => { fetchData() }, [fetchData])
+  const fetchArrivedBookings = useCallback(async () => {
+    const today = new Date().toISOString().slice(0, 10)
+    const { data } = await supabase
+      .from('clinic_bookings')
+      .select(`
+        id, booking_code, full_name, phone, status, visit_id,
+        service:clinic_services(name),
+        slot:clinic_slots!inner(slot_date, start_time)
+      `)
+      .eq('status', 'arrived')
+      .eq('slot.slot_date', today)
+      .order('updated_at', { ascending: true })
+    setArrivedBookings((data ?? []) as any)
+  }, [])
+
+  const handleCheckinConfirm = async () => {
+    if (!checkinBooking) return
+    setCheckinLoading(true)
+    setCheckinError(null)
+    try {
+      // Update KTP di clinic_patients jika ada patient_id
+      if ((checkinBooking as any).patient_id && checkinKtp.trim()) {
+        await supabase
+          .from('clinic_patients')
+          .update({ id_number: checkinKtp.trim(), id_type: 'KTP' })
+          .eq('id', (checkinBooking as any).patient_id)
+      }
+
+      // Buat visit dari booking
+      await createVisitFromBooking(checkinBooking.id)
+
+      setShowCheckinModal(false)
+      setCheckinBooking(null)
+      setCheckinKtp('')
+      setToast(`Check-in berhasil — ${checkinBooking.full_name}`)
+      fetchArrivedBookings()
+      fetchData()
+    } catch (e) {
+      setCheckinError(e instanceof Error ? e.message : 'Check-in gagal')
+    } finally {
+      setCheckinLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchData()
+    fetchArrivedBookings()
+    // Auto-refresh setiap 30 detik
+    const interval = setInterval(fetchArrivedBookings, 30000)
+    return () => clearInterval(interval)
+  }, [fetchData, fetchArrivedBookings])
 
   useEffect(() => { listServices().then(setServices).catch(() => {}) }, [])
 
@@ -278,6 +337,46 @@ export default function ClinicBookings() {
       </div>
 
       {error && <p style={{ color: 'var(--red)', fontSize: 13, marginBottom: 12 }}>{error}</p>}
+
+      {/* Pasien Menunggu Check-in */}
+      {arrivedBookings.length > 0 && (
+        <div style={{ marginBottom: 24, padding: '16px 20px',
+          background: 'rgba(192,57,43,0.06)',
+          border: '1px solid rgba(192,57,43,0.2)',
+          borderRadius: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+            <div style={{ width: 10, height: 10, borderRadius: '50%',
+              background: RED, animation: 'pulse 1.5s infinite' }} />
+            <span style={{ fontWeight: 700, fontSize: 14, color: '#F0F4FF' }}>
+              Pasien Menunggu Check-in ({arrivedBookings.length})
+            </span>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {arrivedBookings.map(b => (
+              <div key={b.id} style={{ display: 'flex', justifyContent: 'space-between',
+                alignItems: 'center', padding: '10px 14px', borderRadius: 10,
+                background: '#1a2740', border: '1px solid rgba(255,255,255,0.08)' }}>
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: 14, color: '#F0F4FF' }}>
+                    {(b as any).full_name}
+                  </div>
+                  <div style={{ fontSize: 12, color: '#A8B8D8' }}>
+                    {(b as any).service?.name ?? '-'} · {(b as any).slot?.start_time?.slice(0, 5) ?? '-'} WIB
+                  </div>
+                </div>
+                <button
+                  onClick={() => { setCheckinBooking(b); setShowCheckinModal(true) }}
+                  style={{ padding: '8px 16px', borderRadius: 8, background: RED,
+                    color: '#fff', border: 'none', cursor: 'pointer',
+                    fontWeight: 600, fontSize: 13, whiteSpace: 'nowrap' }}
+                >
+                  Check-in →
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="filter-bar">
         <input
@@ -750,6 +849,91 @@ export default function ClinicBookings() {
           danger
           loading={acting}
         />
+      )}
+
+      {showCheckinModal && checkinBooking && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
+          padding: 16 }}>
+          <div style={{ background: '#1a2740', border: '1px solid rgba(255,255,255,0.1)',
+            borderRadius: 16, padding: 24, width: '100%', maxWidth: 440 }}>
+
+            {/* Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between',
+              alignItems: 'center', marginBottom: 20 }}>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 16, color: '#F0F4FF' }}>
+                  Check-in Pasien
+                </div>
+                <div style={{ fontSize: 12, color: '#A8B8D8', marginTop: 2 }}>
+                  {(checkinBooking as any).booking_code}
+                </div>
+              </div>
+              <button onClick={() => { setShowCheckinModal(false); setCheckinKtp(''); setCheckinError(null) }}
+                style={{ background: 'none', border: 'none', color: '#6B7A99',
+                  cursor: 'pointer', fontSize: 20 }}>×</button>
+            </div>
+
+            {/* Info pasien */}
+            <div style={{ padding: '12px 14px', borderRadius: 10, background: '#243352',
+              marginBottom: 20 }}>
+              <div style={{ fontWeight: 600, fontSize: 15, color: '#F0F4FF', marginBottom: 4 }}>
+                {(checkinBooking as any).full_name}
+              </div>
+              <div style={{ fontSize: 12, color: '#A8B8D8' }}>
+                {(checkinBooking as any).service?.name ?? '-'} · {(checkinBooking as any).slot?.start_time?.slice(0, 5) ?? '-'} WIB
+              </div>
+              <div style={{ fontSize: 12, color: '#6B7A99', marginTop: 4 }}>
+                {(checkinBooking as any).phone}
+              </div>
+            </div>
+
+            {/* Input KTP */}
+            <div style={{ marginBottom: 20 }}>
+              <label style={{ fontSize: 11, color: '#A8B8D8', textTransform: 'uppercase',
+                letterSpacing: 1, display: 'block', marginBottom: 6 }}>
+                Nomor KTP / NIK
+              </label>
+              <input
+                type="text"
+                value={checkinKtp}
+                onChange={e => setCheckinKtp(e.target.value)}
+                placeholder="16 digit NIK"
+                maxLength={16}
+                style={{ width: '100%', padding: '10px 12px', borderRadius: 8,
+                  background: '#152034', border: '1px solid rgba(255,255,255,0.12)',
+                  color: '#F0F4FF', fontSize: 14, fontFamily: "'JetBrains Mono', monospace",
+                  boxSizing: 'border-box' as const }}
+              />
+              <div style={{ fontSize: 11, color: '#6B7A99', marginTop: 4 }}>
+                Opsional — bisa diisi untuk melengkapi data rekam medis
+              </div>
+            </div>
+
+            {checkinError && (
+              <div style={{ color: '#FC8181', fontSize: 13, marginBottom: 12 }}>{checkinError}</div>
+            )}
+
+            {/* Buttons */}
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                onClick={() => { setShowCheckinModal(false); setCheckinKtp(''); setCheckinError(null) }}
+                style={{ flex: 1, padding: 12, borderRadius: 8, background: '#243352',
+                  border: '1px solid rgba(255,255,255,0.1)', color: '#A8B8D8',
+                  cursor: 'pointer', fontWeight: 600 }}>
+                Batal
+              </button>
+              <button
+                onClick={handleCheckinConfirm}
+                disabled={checkinLoading}
+                style={{ flex: 2, padding: 12, borderRadius: 8, background: RED,
+                  border: 'none', color: '#fff', cursor: checkinLoading ? 'not-allowed' : 'pointer',
+                  fontWeight: 700, fontSize: 14 }}>
+                {checkinLoading ? 'Memproses...' : '✓ Konfirmasi Check-in'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {toast && (
