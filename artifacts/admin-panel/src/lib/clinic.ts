@@ -22,7 +22,7 @@ export interface ClinicService {
   id: string
   name: string
   price: number
-  duration_min: number | null
+  duration_minutes: number | null
   is_active: boolean
   requires_doctor: boolean
 }
@@ -338,7 +338,7 @@ export async function cancelBooking(id: string): Promise<void> {
 export async function listServices(): Promise<ClinicService[]> {
   const { data, error } = await supabase
     .from('clinic_services')
-    .select('id, name, price, duration_min, is_active, requires_doctor')
+    .select('id, name, price, duration_minutes, is_active, requires_doctor')
     .order('name', { ascending: true })
   console.log('services fetch:', data, error)
   if (error) throw error

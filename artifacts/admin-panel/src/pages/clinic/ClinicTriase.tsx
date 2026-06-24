@@ -836,9 +836,9 @@ function ConsentTab({ visit, onToast, onSaved, isLocked, recordId, lockedAt, loc
         <>
           {types.map(type => <ConsentCard key={type} type={type} />)}
 
-          <div style={{ background: '#F0FFF4', border: '1px solid #6EE7B7', borderRadius: 10, padding: 20, marginBottom: 16 }}>
-            <h3 style={{ margin: '0 0 8px', fontSize: 15, fontWeight: 700 }}>✍ Tanda Tangan Persetujuan</h3>
-            <p style={{ fontSize: 13, lineHeight: 1.6, marginTop: 0, color: '#374151' }}>
+          <div style={{ background: '#152034', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 10, padding: 20, marginBottom: 16 }}>
+            <h3 style={{ margin: '0 0 8px', fontSize: 15, fontWeight: 700, color: '#F0F4FF' }}>✍ Tanda Tangan Persetujuan</h3>
+            <p style={{ fontSize: 13, lineHeight: 1.6, marginTop: 0, color: '#A8B8D8' }}>
               Dengan menandatangani di bawah ini, saya menyatakan telah membaca dan menyetujui seluruh persetujuan di atas.
             </p>
 
@@ -850,7 +850,7 @@ function ConsentTab({ visit, onToast, onSaved, isLocked, recordId, lockedAt, loc
 
             {existingSigned && !reSigning ? (
               <div>
-                <div style={{ fontSize: 13, color: '#065F46', fontWeight: 600, marginBottom: 8 }}>
+                <div style={{ fontSize: 13, color: '#34D399', fontWeight: 600, marginBottom: 8 }}>
                   ✓ Ditandatangani oleh {existingSigned.signed_by_name} pada {fmtDateTime(existingSigned.signed_at)}
                 </div>
                 {existingSigned.signature_data && (
@@ -955,7 +955,7 @@ const SignaturePad = forwardRef<SignaturePadHandle, { initial?: string | null }>
   return (
     <canvas
       ref={canvasRef} width={300} height={150}
-      style={{ border: '2px dashed #D1D5DB', borderRadius: 8, background: '#fff', touchAction: 'none', maxWidth: '100%' }}
+      style={{ border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, background: '#fff', touchAction: 'none', maxWidth: '100%' }}
       onMouseDown={start} onMouseMove={move} onMouseUp={end} onMouseLeave={end}
       onTouchStart={start} onTouchMove={move} onTouchEnd={end}
     />
@@ -966,7 +966,7 @@ SignaturePad.displayName = 'SignaturePad'
 function ConsentCard({ type }: { type: string }) {
   return (
     <div style={{ borderLeft: '4px solid #C0392B', background: '#243352', border: '1px solid rgba(255,255,255,0.08)', padding: 16, marginBottom: 12, borderRadius: 10 }}>
-      <h3 style={{ margin: '0 0 10px', fontSize: 14, fontWeight: 700, color: '#C0392B' }}>{CONSENT_TITLE[type] || type}</h3>
+      <h3 style={{ margin: '0 0 10px', fontSize: 14, fontWeight: 600, color: '#F0F4FF' }}>{CONSENT_TITLE[type] || type}</h3>
       <div style={{ color: '#A8B8D8', maxHeight: 320, overflowY: 'auto' }}>
         <ConsentContent type={type} />
       </div>
