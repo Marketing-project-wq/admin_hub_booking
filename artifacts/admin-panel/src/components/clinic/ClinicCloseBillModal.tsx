@@ -203,6 +203,15 @@ export default function ClinicCloseBillModal({
           }
 
           // Buat clinic_bookings untuk follow-up agar pasien bisa check-in (dengan / tanpa slot)
+          console.log('[FollowUp Debug]', {
+            scheduleFollowUp,
+            followUpDate,
+            followUpServicesLength: followUpServices.length,
+            followUpServices,
+            patientId,
+            patientName,
+            patientPhone,
+          })
           const followUpServiceId = followUpServices[0]?.service_id ?? null
           if (followUpServiceId) {
             const { data: newBooking, error: bookingErr } = await supabase
@@ -223,6 +232,8 @@ export default function ClinicCloseBillModal({
 
             if (bookingErr) {
               console.error('Gagal buat booking follow-up:', bookingErr)
+            } else {
+              console.log('Follow-up booking created:', newBooking)
             }
           }
         } catch (followUpErr) {
