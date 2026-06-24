@@ -16,6 +16,7 @@ interface Props {
   patientCode: string
   patientPhone: string
   services: { service_id: string; service_name: string; price: number }[]
+  paidOnline?: boolean
   onClose: () => void
   onSuccess: (transaction: ClinicTransaction) => void
 }
@@ -24,7 +25,7 @@ const METHODS = ['cash', 'transfer', 'qris', 'debit', 'kredit'] as const
 const METHOD_LABEL: Record<string, string> = { cash: 'Cash', transfer: 'Transfer', qris: 'QRIS', debit: 'Debit', kredit: 'Kredit' }
 
 export default function ClinicCloseBillModal({
-  visitId, patientId, patientName, patientCode, patientPhone, services, onClose, onSuccess,
+  visitId, patientId, patientName, patientCode, patientPhone, services, paidOnline, onClose, onSuccess,
 }: Props) {
   const { user } = useAuth()
   const [discount, setDiscount] = useState(0)
@@ -86,6 +87,7 @@ export default function ClinicCloseBillModal({
 
   // Layanan yang ter-cover paket aktif vs yang bayar normal.
   const coveredServices = services.filter(s => {
+    if (paidOnline) return false // pembayaran online: tanpa coverage paket (bayar penuh)
     if (activePerformancePackage && isPerformanceService(s.service_name)) return true
     if (activeMedicPackage && isMedicService(s.service_name)) return true
     return false
@@ -103,7 +105,7 @@ export default function ClinicCloseBillModal({
 
   const handleConfirm = async () => {
     setError('')
-    if (!method) { setError('Pilih metode pembayaran.'); return }
+    if (!paidOnline && !method) { setError('Pilih metode pembayaran.'); return }
     setSaving(true)
     try {
       const payment_detail: Record<string, string> = {}
@@ -117,21 +119,28 @@ export default function ClinicCloseBillModal({
         selectedNewPkg ? `Paket ${selectedNewPkg.name}` : null,
       ].filter(Boolean).join(' + ') || '-'
 
+      // Booking yang sudah dibayar online (Mayar): metode 'mayar', tanpa diskon, total penuh.
+      const finalPaymentMethod = paidOnline ? 'mayar' : method
+      const finalDiscount = paidOnline ? 0 : (Number(discount) || 0)
+      const finalTotal = paidOnline
+        ? services.reduce((sum, s) => sum + s.price, 0)
+        : grandTotal
+
       const trx = await createTransaction({
         visit_id: visitId,
         patient_id: patientId,
         service_id: services[0]?.service_id ?? undefined,
         service_name: serviceName,
         service_price: visitSubtotal + packageSubtotal,
-        discount: Number(discount) || 0,
-        total_amount: grandTotal,
-        payment_method: method,
+        discount: finalDiscount,
+        total_amount: finalTotal,
+        payment_method: finalPaymentMethod,
         payment_detail,
         notes: notes.trim() || undefined,
         cashier_name: cashierName.trim() || undefined,
       })
       if (user) await lockRecord('clinic_transactions', trx.id, user.full_name)
-      await completeVisitPayment(visitId, method, grandTotal)
+      await completeVisitPayment(visitId, finalPaymentMethod, finalTotal)
 
       // 1. Potong sesi paket aktif yang meng-cover layanan kunjungan ini (1 sesi per paket).
       if (activePerformancePackage && coveredServices.some(s => isPerformanceService(s.service_name))) {
@@ -327,7 +336,8 @@ export default function ClinicCloseBillModal({
           </div>
         </div>
 
-        {/* Section beli paket baru */}
+        {/* Section beli paket baru — disembunyikan untuk pembayaran online */}
+        {!paidOnline && (
         <div style={{ marginBottom: 16, padding: 14, background: '#243352', borderRadius: 10, border: '1px solid rgba(255,255,255,0.1)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
             <input type="checkbox" id="buyPkg" checked={buyingPackage} onChange={e => setBuyingPackage(e.target.checked)} />
@@ -372,32 +382,56 @@ export default function ClinicCloseBillModal({
             </>
           )}
         </div>
+        )}
+
+        {/* Banner: sudah dibayar online */}
+        {paidOnline && (
+          <div style={{ padding: '12px 14px', borderRadius: 10,
+            background: 'rgba(5,150,105,0.1)', border: '1px solid rgba(5,150,105,0.2)',
+            marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 18 }}>✅</span>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: '#34D399' }}>
+                Sudah Dibayar Online
+              </div>
+              <div style={{ fontSize: 11, color: '#A8B8D8' }}>
+                Pembayaran via Mayar sudah terkonfirmasi
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Discount */}
-        <div className="form-group">
-          <label>Diskon (Rp)</label>
-          <input type="number" min={0} value={discount} onChange={e => setDiscount(Math.max(0, Number(e.target.value)))} />
-        </div>
+        {!paidOnline && (
+          <div className="form-group">
+            <label>Diskon (Rp)</label>
+            <input type="number" min={0} value={discount} onChange={e => setDiscount(Math.max(0, Number(e.target.value)))} />
+          </div>
+        )}
 
         {/* Payment method */}
-        <label style={{ fontSize: 11, fontWeight: 600, display: 'block', marginBottom: 8, color: '#A8B8D8', textTransform: 'uppercase', letterSpacing: 1 }}>Metode Pembayaran</label>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
-          {METHODS.map(m => {
-            const on = method === m
-            return (
-              <button key={m} type="button" onClick={() => setMethod(m)}
-                style={on ? {
-                  flex: '1 1 80px', padding: '8px 14px', borderRadius: 8,
-                  border: '1px solid #C0392B', background: 'rgba(192,57,43,0.15)',
-                  color: '#fff', cursor: 'pointer', fontWeight: 600, fontSize: 13,
-                } : {
-                  flex: '1 1 80px', padding: '8px 14px', borderRadius: 8,
-                  border: '1px solid rgba(255,255,255,0.12)', background: '#243352',
-                  color: '#A8B8D8', cursor: 'pointer', fontWeight: 500, fontSize: 13, transition: 'all 0.15s',
-                }}>{METHOD_LABEL[m]}</button>
-            )
-          })}
-        </div>
+        {!paidOnline && (
+          <>
+            <label style={{ fontSize: 11, fontWeight: 600, display: 'block', marginBottom: 8, color: '#A8B8D8', textTransform: 'uppercase', letterSpacing: 1 }}>Metode Pembayaran</label>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
+              {METHODS.map(m => {
+                const on = method === m
+                return (
+                  <button key={m} type="button" onClick={() => setMethod(m)}
+                    style={on ? {
+                      flex: '1 1 80px', padding: '8px 14px', borderRadius: 8,
+                      border: '1px solid #C0392B', background: 'rgba(192,57,43,0.15)',
+                      color: '#fff', cursor: 'pointer', fontWeight: 600, fontSize: 13,
+                    } : {
+                      flex: '1 1 80px', padding: '8px 14px', borderRadius: 8,
+                      border: '1px solid rgba(255,255,255,0.12)', background: '#243352',
+                      color: '#A8B8D8', cursor: 'pointer', fontWeight: 500, fontSize: 13, transition: 'all 0.15s',
+                    }}>{METHOD_LABEL[m]}</button>
+                )
+              })}
+            </div>
+          </>
+        )}
 
         {method === 'cash' && (
           <>
@@ -541,8 +575,8 @@ export default function ClinicCloseBillModal({
 
         <div className="modal-footer">
           <button className="btn-secondary" onClick={onClose}>Batal</button>
-          <button className="btn-primary" onClick={handleConfirm} disabled={saving || !method}>
-            {saving ? 'Memproses...' : 'Konfirmasi Pembayaran'}
+          <button className="btn-primary" onClick={handleConfirm} disabled={saving || (!paidOnline && !method)}>
+            {saving ? 'Memproses...' : (paidOnline ? 'Konfirmasi & Selesai →' : 'Konfirmasi Pembayaran →')}
           </button>
         </div>
       </div>

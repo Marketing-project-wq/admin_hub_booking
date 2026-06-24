@@ -36,6 +36,8 @@ interface PendingVisit {
   payment_status: string
   patient: { id: string; full_name: string; patient_code: string; phone: string } | null
   services: { id: string; service_id: string; service_name: string; price: number }[]
+  booking_payment_method?: string | null
+  booking_status?: string | null
 }
 
 export default function ClinicKasir() {
@@ -69,14 +71,20 @@ export default function ClinicKasir() {
         .select(`
           id, visit_code, visit_date, visit_time, status, payment_status,
           patient:clinic_patients(id, full_name, patient_code, phone),
-          services:clinic_visit_services(id, service_id, service_name, price)
+          services:clinic_visit_services(id, service_id, service_name, price),
+          bookings:clinic_bookings(payment_method, status)
         `)
         .eq('visit_date', today)
         .eq('payment_status', 'unpaid')
         .in('status', ['in_progress', 'completed'])
         .order('visit_time', { ascending: true })
       if (err) throw err
-      setPendingVisits((data ?? []) as unknown as PendingVisit[])
+      const visits = (data ?? []).map((v: any) => ({
+        ...v,
+        booking_payment_method: v.bookings?.[0]?.payment_method ?? null,
+        booking_status: v.bookings?.[0]?.status ?? null,
+      }))
+      setPendingVisits(visits as unknown as PendingVisit[])
     } catch (e) {
       console.error('[ClinicKasir] fetch pending failed:', e)
     } finally {
@@ -285,6 +293,7 @@ export default function ClinicKasir() {
           patientCode={closeBillVisit.patient.patient_code}
           patientPhone={closeBillVisit.patient.phone}
           services={closeBillVisit.services.map(s => ({ service_id: s.service_id, service_name: s.service_name, price: s.price }))}
+          paidOnline={closeBillVisit.booking_payment_method === 'mayar'}
           onClose={() => setCloseBillVisit(null)}
           onSuccess={() => { setCloseBillVisit(null); fetchPending(); fetchData() }}
         />
