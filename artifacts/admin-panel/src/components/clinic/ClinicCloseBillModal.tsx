@@ -214,9 +214,14 @@ export default function ClinicCloseBillModal({
           })
           const followUpServiceId = followUpServices[0]?.service_id ?? null
           if (followUpServiceId) {
+            // Generate booking code dulu
+            const { data: codeData } = await supabase
+              .rpc('generate_clinic_booking_code')
+
             const { data: newBooking, error: bookingErr } = await supabase
               .from('clinic_bookings')
               .insert({
+                booking_code: codeData as string,
                 patient_id: patientId,
                 service_id: followUpServiceId,
                 slot_id: matchSlot?.id ?? null,
