@@ -1170,9 +1170,10 @@ export default function ClinicTriase() {
     } catch (e) {
       console.error(e)
     }
-    setShowModal(false)
-    showToastMsg('Consent tersimpan — pasien siap dokter')
-    fetchVisits(false)
+    await fetchVisits(false)
+    // Pindah ke tab assessment, jangan tutup modal
+    setModalTab('assessment')
+    showToastMsg('Consent tersimpan — lanjut ke assessment')
   }
 
   const requiresDoctor = (visit: TriaseVisit): boolean => {
