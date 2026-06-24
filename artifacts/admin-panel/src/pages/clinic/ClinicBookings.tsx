@@ -42,6 +42,11 @@ export default function ClinicBookings() {
   const [manualDate, setManualDate] = useState(new Date().toISOString().slice(0, 10))
   const [manualTime, setManualTime] = useState('')
   const [manualComplaint, setManualComplaint] = useState('')
+  const [manualPatientMode, setManualPatientMode] = useState<'search' | 'new'>('search')
+  const [newPatientForm, setNewPatientForm] = useState({
+    full_name: '', phone: '', gender: 'male', date_of_birth: '',
+    id_type: 'KTP', id_number: '',
+  })
 
   const [selected, setSelected] = useState<ClinicBooking | null>(null)
   const [confirmConfirm, setConfirmConfirm] = useState<ClinicBooking | null>(null)
@@ -113,6 +118,45 @@ export default function ClinicBookings() {
     }
   }
 
+  const handleStep1Continue = async () => {
+    if (manualPatientMode === 'search') {
+      if (!selectedPatient) return
+      setManualStep(2)
+      return
+    }
+
+    // Pasien baru
+    if (!newPatientForm.full_name || !newPatientForm.phone) return
+    setManualLoading(true)
+    try {
+      const { data, error } = await supabase
+        .from('clinic_patients')
+        .insert({
+          full_name: newPatientForm.full_name.trim(),
+          phone: newPatientForm.phone.trim(),
+          gender: newPatientForm.gender,
+          date_of_birth: newPatientForm.date_of_birth || null,
+          id_type: newPatientForm.id_type,
+          id_number: newPatientForm.id_number.trim() || null,
+          is_active: true,
+        })
+        .select('id, full_name, patient_code, phone')
+        .single()
+
+      if (error) throw error
+      setSelectedPatient(data)
+      setManualStep(2)
+    } catch {
+      setManualError('Gagal membuat pasien baru.')
+    } finally {
+      setManualLoading(false)
+    }
+  }
+
+  const step1Ready = manualPatientMode === 'search'
+    ? !!selectedPatient
+    : !!(newPatientForm.full_name.trim() && newPatientForm.phone.trim())
+
   const resetManualModal = () => {
     setManualStep(1)
     setPatientSearch('')
@@ -123,6 +167,9 @@ export default function ClinicBookings() {
     setManualTime('')
     setManualComplaint('')
     setManualError(null)
+    setManualPatientMode('search')
+    setNewPatientForm({ full_name: '', phone: '', gender: 'male',
+      date_of_birth: '', id_type: 'KTP', id_number: '' })
     setShowManualModal(false)
   }
 
@@ -300,42 +347,113 @@ export default function ClinicBookings() {
               <div>
                 <h3 style={{ color: '#F0F4FF', marginBottom: 16 }}>Step 1: Pilih Pasien</h3>
 
-                <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-                  <input
-                    value={patientSearch}
-                    onChange={e => setPatientSearch(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && searchPatients()}
-                    placeholder="Cari nama, HP, atau kode pasien..."
-                    style={{ flex: 1, padding: '10px 12px', borderRadius: 8,
-                      background: '#152034', border: '1px solid rgba(255,255,255,0.12)',
-                      color: '#F0F4FF', fontSize: 13 }}
-                  />
-                  <button onClick={searchPatients} disabled={searchLoading}
-                    style={{ padding: '10px 16px', borderRadius: 8, background: '#C0392B',
-                      color: '#fff', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
-                    {searchLoading ? '...' : 'Cari'}
+                {/* Toggle: Pasien Lama / Baru */}
+                <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+                  <button
+                    onClick={() => setManualPatientMode('search')}
+                    style={{
+                      flex: 1, padding: '8px 0', borderRadius: 8, fontSize: 13, fontWeight: 600,
+                      background: manualPatientMode === 'search' ? '#C0392B' : '#243352',
+                      color: manualPatientMode === 'search' ? '#fff' : '#A8B8D8',
+                      border: 'none', cursor: 'pointer',
+                    }}
+                  >
+                    Pasien Lama
+                  </button>
+                  <button
+                    onClick={() => setManualPatientMode('new')}
+                    style={{
+                      flex: 1, padding: '8px 0', borderRadius: 8, fontSize: 13, fontWeight: 600,
+                      background: manualPatientMode === 'new' ? '#C0392B' : '#243352',
+                      color: manualPatientMode === 'new' ? '#fff' : '#A8B8D8',
+                      border: 'none', cursor: 'pointer',
+                    }}
+                  >
+                    Pasien Baru
                   </button>
                 </div>
 
-                {patientResults.length > 0 && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
-                    {patientResults.map(p => (
-                      <div key={p.id}
-                        onClick={() => { setSelectedPatient(p); setPatientResults([]) }}
-                        style={{
-                          padding: '10px 14px', borderRadius: 10, cursor: 'pointer',
-                          background: selectedPatient?.id === p.id ? 'rgba(192,57,43,0.15)' : '#243352',
-                          border: `1px solid ${selectedPatient?.id === p.id ? '#C0392B' : 'rgba(255,255,255,0.08)'}`,
-                        }}
-                      >
-                        <div style={{ color: '#F0F4FF', fontWeight: 600, fontSize: 13 }}>{p.full_name}</div>
-                        <div style={{ color: '#A8B8D8', fontSize: 11 }}>{p.patient_code} · {p.phone}</div>
+                {manualPatientMode === 'search' && (
+                  <>
+                    <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                      <input
+                        value={patientSearch}
+                        onChange={e => setPatientSearch(e.target.value)}
+                        onKeyDown={e => e.key === 'Enter' && searchPatients()}
+                        placeholder="Cari nama, HP, atau kode pasien..."
+                        style={{ flex: 1, padding: '10px 12px', borderRadius: 8,
+                          background: '#152034', border: '1px solid rgba(255,255,255,0.12)',
+                          color: '#F0F4FF', fontSize: 13 }}
+                      />
+                      <button onClick={searchPatients} disabled={searchLoading}
+                        style={{ padding: '10px 16px', borderRadius: 8, background: '#C0392B',
+                          color: '#fff', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
+                        {searchLoading ? '...' : 'Cari'}
+                      </button>
+                    </div>
+
+                    {patientResults.length > 0 && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
+                        {patientResults.map(p => (
+                          <div key={p.id}
+                            onClick={() => { setSelectedPatient(p); setPatientResults([]) }}
+                            style={{
+                              padding: '10px 14px', borderRadius: 10, cursor: 'pointer',
+                              background: selectedPatient?.id === p.id ? 'rgba(192,57,43,0.15)' : '#243352',
+                              border: `1px solid ${selectedPatient?.id === p.id ? '#C0392B' : 'rgba(255,255,255,0.08)'}`,
+                            }}
+                          >
+                            <div style={{ color: '#F0F4FF', fontWeight: 600, fontSize: 13 }}>{p.full_name}</div>
+                            <div style={{ color: '#A8B8D8', fontSize: 11 }}>{p.patient_code} · {p.phone}</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {manualPatientMode === 'new' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
+                    {[
+                      { key: 'full_name', label: 'Nama Lengkap *', type: 'text', placeholder: 'Nama lengkap' },
+                      { key: 'phone', label: 'Nomor HP *', type: 'text', placeholder: '08xx' },
+                      { key: 'date_of_birth', label: 'Tanggal Lahir *', type: 'date', placeholder: '' },
+                      { key: 'id_number', label: 'Nomor KTP *', type: 'text', placeholder: '16 digit' },
+                    ].map(field => (
+                      <div key={field.key}>
+                        <label style={{ fontSize: 11, color: '#A8B8D8', textTransform: 'uppercase', letterSpacing: 1, display: 'block', marginBottom: 4 }}>
+                          {field.label}
+                        </label>
+                        <input
+                          type={field.type}
+                          placeholder={field.placeholder}
+                          value={newPatientForm[field.key as keyof typeof newPatientForm]}
+                          onChange={e => setNewPatientForm(prev => ({ ...prev, [field.key]: e.target.value }))}
+                          style={{ width: '100%', padding: '10px 12px', borderRadius: 8,
+                            background: '#152034', border: '1px solid rgba(255,255,255,0.12)',
+                            color: '#F0F4FF', fontSize: 13, boxSizing: 'border-box' as const }}
+                        />
                       </div>
                     ))}
+                    <div>
+                      <label style={{ fontSize: 11, color: '#A8B8D8', textTransform: 'uppercase', letterSpacing: 1, display: 'block', marginBottom: 4 }}>
+                        Jenis Kelamin *
+                      </label>
+                      <select
+                        value={newPatientForm.gender}
+                        onChange={e => setNewPatientForm(prev => ({ ...prev, gender: e.target.value }))}
+                        style={{ width: '100%', padding: '10px 12px', borderRadius: 8,
+                          background: '#152034', border: '1px solid rgba(255,255,255,0.12)',
+                          color: '#F0F4FF', fontSize: 13 }}
+                      >
+                        <option value="male">Laki-laki</option>
+                        <option value="female">Perempuan</option>
+                      </select>
+                    </div>
                   </div>
                 )}
 
-                {selectedPatient && (
+                {selectedPatient && manualPatientMode === 'search' && (
                   <div style={{ padding: '12px 14px', borderRadius: 10,
                     background: 'rgba(192,57,43,0.1)', border: '1px solid rgba(192,57,43,0.3)',
                     marginBottom: 16 }}>
@@ -344,16 +462,20 @@ export default function ClinicBookings() {
                   </div>
                 )}
 
+                {manualError && (
+                  <div style={{ color: '#FC8181', fontSize: 13, marginBottom: 12 }}>{manualError}</div>
+                )}
+
                 <button
-                  onClick={() => setManualStep(2)}
-                  disabled={!selectedPatient}
+                  onClick={handleStep1Continue}
+                  disabled={!step1Ready || manualLoading}
                   style={{ width: '100%', padding: 12, borderRadius: 8,
-                    background: selectedPatient ? '#C0392B' : '#243352',
-                    color: selectedPatient ? '#fff' : '#6B7A99',
-                    border: 'none', cursor: selectedPatient ? 'pointer' : 'not-allowed',
+                    background: step1Ready ? '#C0392B' : '#243352',
+                    color: step1Ready ? '#fff' : '#6B7A99',
+                    border: 'none', cursor: step1Ready ? 'pointer' : 'not-allowed',
                     fontWeight: 600, fontSize: 14 }}
                 >
-                  Lanjut →
+                  {manualLoading ? 'Menyimpan...' : 'Lanjut →'}
                 </button>
               </div>
             )}
