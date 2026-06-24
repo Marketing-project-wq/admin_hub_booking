@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../../lib/supabase'
 import { fmtDate, fmtTime, fmtDateTime } from '../../lib/format'
 import { useAuth } from '../../context/AuthContext'
-import { lockRecord, listPatientPackages, scheduleFollowUpVisit, type ClinicPatientPackage } from '../../lib/clinic'
+import { lockRecord } from '../../lib/clinic'
 import LockBadge from '../../components/clinic/LockBadge'
 
 interface DokterVisit {
@@ -379,22 +379,6 @@ export default function ClinicDokter() {
   const [assessmentLockedAt, setAssessmentLockedAt] = useState<string | null>(null)
   const [assessmentLockedBy, setAssessmentLockedBy] = useState<string | null>(null)
 
-  // Follow-up scheduling + paket pasien
-  const [patientPackages, setPatientPackages] = useState<ClinicPatientPackage[]>([])
-  const [showFollowUpModal, setShowFollowUpModal] = useState(false)
-  const [followUpDate, setFollowUpDate] = useState('')
-  const [followUpNotes, setFollowUpNotes] = useState('')
-  const [selectedPackageId, setSelectedPackageId] = useState<string | null>(null)
-  const [savingFollowUp, setSavingFollowUp] = useState(false)
-  const [followUpResult, setFollowUpResult] = useState<string | null>(null)
-
-  // Auto-clear toast follow-up.
-  useEffect(() => {
-    if (!followUpResult) return
-    const t = window.setTimeout(() => setFollowUpResult(null), 4000)
-    return () => window.clearTimeout(t)
-  }, [followUpResult])
-
   const loadToday = useCallback(async (showSpinner = true) => {
     if (showSpinner) setLoading(true)
     try {
@@ -483,26 +467,17 @@ export default function ClinicDokter() {
     setHistoryLoading(false)
     setAssessmentError('')
 
-    // Reset state follow-up untuk kunjungan baru.
-    setShowFollowUpModal(false)
-    setFollowUpDate('')
-    setFollowUpNotes('')
-    setSelectedPackageId(null)
-    setPatientPackages([])
-
     setLoadingScreening(true)
     setLoadingConsent(true)
     setLoadingAssessment(true)
     try {
-      const [screening, consents, existingAssessment, packages] = await Promise.all([
+      const [screening, consents, existingAssessment] = await Promise.all([
         fetchScreening(visit.id),
         fetchConsents(visit.id),
         fetchAssessment(visit.id),
-        listPatientPackages(visit.patient?.id ?? ''),
       ])
       setScreeningData(screening)
       setConsentData(consents)
-      setPatientPackages(packages)
       if (existingAssessment) {
         setAssessment(existingAssessment.form)
         setAssessmentId(existingAssessment.id)
@@ -553,46 +528,6 @@ export default function ClinicDokter() {
       return false
     } finally {
       setSavingAssessment(false)
-    }
-  }
-
-  // Simpan SOAP lalu buka modal penjadwalan kunjungan berikutnya.
-  const handleSaveAndSchedule = async () => {
-    const ok = await handleSaveAssessment()
-    if (ok) {
-      setFollowUpDate('')
-      setFollowUpNotes('')
-      setSelectedPackageId(null)
-      setShowFollowUpModal(true)
-    }
-  }
-
-  const handleScheduleFollowUp = async () => {
-    if (!selectedVisit || !followUpDate) return
-    setSavingFollowUp(true)
-    try {
-      const services = selectedVisit.services?.map(s => ({
-        service_id: s.service_id,
-        service_name: s.service_name,
-        price: s.price,
-      })) ?? []
-
-      const result = await scheduleFollowUpVisit({
-        patient_id: selectedVisit.patient?.id ?? '',
-        follow_up_date: followUpDate,
-        follow_up_notes: followUpNotes || null,
-        patient_package_id: selectedPackageId,
-        services,
-      })
-
-      setFollowUpResult(result.visit_code)
-      setShowFollowUpModal(false)
-      setShowVisitModal(false)
-      await loadToday(false)
-    } catch (e) {
-      setAssessmentError(e instanceof Error ? e.message : 'Gagal menjadwalkan kunjungan berikutnya')
-    } finally {
-      setSavingFollowUp(false)
     }
   }
 
@@ -1015,14 +950,6 @@ export default function ClinicDokter() {
                   >
                     {savingAssessment ? 'Menyimpan...' : 'Simpan Assessment'}
                   </button>
-                  <button
-                    className="btn-primary"
-                    onClick={handleSaveAndSchedule}
-                    disabled={savingAssessment}
-                    style={{ width: 'auto', opacity: savingAssessment ? 0.6 : 1, background: '#059669', border: 'none', color: '#fff' }}
-                  >
-                    Simpan & Jadwalkan Berikutnya
-                  </button>
                 </div>
               )}
             </div>
@@ -1030,74 +957,6 @@ export default function ClinicDokter() {
         </div>
       )}
 
-      {/* Follow-up modal — di atas modal visit */}
-      {showFollowUpModal && selectedVisit && (
-        <div className="modal-overlay" style={{ zIndex: 1100 }}>
-          <div className="modal-box" style={{ maxWidth: 480 }} onClick={e => e.stopPropagation()}>
-            <h3 className="modal-title">Jadwalkan Kunjungan Berikutnya</h3>
-
-            {/* Tanggal follow-up */}
-            <div className="form-group">
-              <label>Tanggal Kunjungan Berikutnya *</label>
-              <input
-                type="date"
-                value={followUpDate}
-                min={new Date().toISOString().slice(0, 10)}
-                onChange={e => setFollowUpDate(e.target.value)}
-              />
-            </div>
-
-            {/* Catatan untuk pasien */}
-            <div className="form-group">
-              <label>Catatan untuk Pasien</label>
-              <textarea
-                value={followUpNotes}
-                onChange={e => setFollowUpNotes(e.target.value)}
-                placeholder="Instruksi atau catatan untuk kunjungan berikutnya..."
-                rows={2}
-              />
-            </div>
-
-            {/* Pilih paket (jika pasien punya paket aktif) */}
-            {patientPackages.length > 0 && (
-              <div className="form-group">
-                <label>Gunakan Paket</label>
-                <select value={selectedPackageId ?? ''} onChange={e => setSelectedPackageId(e.target.value || null)}>
-                  <option value="">— Tidak pakai paket —</option>
-                  {patientPackages.map(pp => (
-                    <option key={pp.id} value={pp.id}>
-                      {pp.package?.name} — Sisa {pp.remaining_sessions} sesi
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            <div className="modal-footer">
-              <button className="btn-secondary" onClick={() => setShowFollowUpModal(false)}>Batal</button>
-              <button
-                className="btn-primary"
-                disabled={!followUpDate || savingFollowUp}
-                onClick={handleScheduleFollowUp}
-                style={{ width: 'auto' }}
-              >
-                {savingFollowUp ? 'Menyimpan...' : 'Jadwalkan →'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Toast sukses follow-up */}
-      {followUpResult && (
-        <div style={{
-          position: 'fixed', bottom: 24, right: 24, zIndex: 1200,
-          background: '#080808', color: '#fff', padding: '12px 20px', borderRadius: 10,
-          fontSize: 14, boxShadow: '0 4px 12px rgba(0,0,0,.2)',
-        }}>
-          Kunjungan berikutnya dijadwalkan: {followUpResult}
-        </div>
-      )}
     </div>
   )
 }

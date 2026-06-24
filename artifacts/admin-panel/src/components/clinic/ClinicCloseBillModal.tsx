@@ -5,6 +5,7 @@ import { useAuth } from '../../context/AuthContext'
 import { createTransaction, completeVisitPayment, type ClinicTransaction } from '../../lib/clinicBilling'
 import {
   lockRecord, listPackages, listPatientActivePackages, purchasePatientPackage, usePackageSession,
+  listServices,
   type ClinicPackage, type ClinicPatientPackage,
 } from '../../lib/clinic'
 
@@ -44,6 +45,15 @@ export default function ClinicCloseBillModal({
   const [selectedNewPackageId, setSelectedNewPackageId] = useState('')
   const [packageNotes, setPackageNotes] = useState('')
 
+  // Jadwalkan kunjungan berikutnya (opsional)
+  const [scheduleFollowUp, setScheduleFollowUp] = useState(false)
+  const [followUpDate, setFollowUpDate] = useState('')
+  const [followUpTime, setFollowUpTime] = useState('')
+  const [followUpServices, setFollowUpServices] = useState<{
+    service_id: string; service_name: string; price: number
+  }[]>([])
+  const [allServices, setAllServices] = useState<any[]>([])
+
   useEffect(() => {
     Promise.all([
       listPackages(),
@@ -58,6 +68,10 @@ export default function ClinicCloseBillModal({
       setServiceCategoryMap(map)
     }).catch(() => {})
   }, [patientId])
+
+  useEffect(() => {
+    listServices().then(setAllServices).catch(() => {})
+  }, [])
 
   // Kategorisasi layanan berdasarkan package_category dari database.
   const isPerformanceService = (name: string) => serviceCategoryMap[name] === 'performance'
@@ -134,6 +148,41 @@ export default function ClinicCloseBillModal({
           total_sessions: selectedNewPkg.sessions,
           notes: packageNotes.trim() || undefined,
         })
+      }
+
+      // Jadwalkan kunjungan berikutnya (best-effort — pembayaran di atas sudah committed).
+      if (scheduleFollowUp && followUpDate && followUpServices.length > 0) {
+        try {
+          const { data: newVisit, error: followUpVisitErr } = await supabase
+            .from('clinic_visits')
+            .insert({
+              patient_id: patientId,
+              visit_date: followUpDate,
+              visit_time: followUpTime || null,
+              status: 'scheduled',
+              payment_status: 'unpaid',
+              chief_complaint: 'Follow-up visit',
+              created_by: cashierName || 'Kasir',
+            })
+            .select('id')
+            .single()
+          if (followUpVisitErr) throw followUpVisitErr
+
+          const { error: followUpSvcErr } = await supabase
+            .from('clinic_visit_services')
+            .insert(followUpServices.map((s, i) => ({
+              visit_id: newVisit.id,
+              service_id: s.service_id,
+              service_name: s.service_name,
+              price: s.price,
+              sort_order: i,
+            })))
+          if (followUpSvcErr) throw followUpSvcErr
+        } catch (followUpErr) {
+          // Pembayaran sudah berhasil — jangan blokir/biarkan retry (risiko double-charge).
+          // Log saja; kunjungan berikutnya bisa dijadwalkan manual jika gagal.
+          console.error('Gagal menjadwalkan kunjungan berikutnya:', followUpErr)
+        }
       }
 
       onSuccess(trx)
@@ -330,6 +379,101 @@ export default function ClinicCloseBillModal({
         <div className="form-group">
           <label>Catatan (opsional)</label>
           <textarea rows={2} value={notes} onChange={e => setNotes(e.target.value)} />
+        </div>
+
+        {/* Jadwalkan Kunjungan Berikutnya */}
+        <div style={{ marginBottom: 16 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={scheduleFollowUp}
+              onChange={e => setScheduleFollowUp(e.target.checked)}
+              style={{ accentColor: '#C0392B', width: 16, height: 16 }}
+            />
+            <span style={{ fontSize: 13, fontWeight: 600, color: '#F0F4FF' }}>
+              📅 Jadwalkan Kunjungan Berikutnya
+            </span>
+          </label>
+
+          {scheduleFollowUp && (
+            <div style={{ marginTop: 12, padding: '14px 16px', borderRadius: 10,
+              background: '#152034', border: '1px solid rgba(255,255,255,0.1)' }}>
+
+              {/* Tanggal & Jam */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+                <div>
+                  <label style={{ fontSize: 11, color: '#A8B8D8', textTransform: 'uppercase',
+                    letterSpacing: 1, display: 'block', marginBottom: 4 }}>Tanggal *</label>
+                  <input type="date" value={followUpDate}
+                    onChange={e => setFollowUpDate(e.target.value)}
+                    min={new Date().toISOString().slice(0, 10)}
+                    style={{ width: '100%', padding: '8px 10px', borderRadius: 8,
+                      background: '#0f1923', border: '1px solid rgba(255,255,255,0.12)',
+                      color: '#F0F4FF', fontSize: 13, boxSizing: 'border-box' as const }} />
+                </div>
+                <div>
+                  <label style={{ fontSize: 11, color: '#A8B8D8', textTransform: 'uppercase',
+                    letterSpacing: 1, display: 'block', marginBottom: 4 }}>Jam</label>
+                  <input type="time" value={followUpTime}
+                    onChange={e => setFollowUpTime(e.target.value)}
+                    style={{ width: '100%', padding: '8px 10px', borderRadius: 8,
+                      background: '#0f1923', border: '1px solid rgba(255,255,255,0.12)',
+                      color: '#F0F4FF', fontSize: 13, boxSizing: 'border-box' as const }} />
+                </div>
+              </div>
+
+              {/* Pilih Layanan */}
+              <div>
+                <label style={{ fontSize: 11, color: '#A8B8D8', textTransform: 'uppercase',
+                  letterSpacing: 1, display: 'block', marginBottom: 6 }}>Layanan *</label>
+                <select
+                  onChange={e => {
+                    const svc = allServices?.find((s: any) => s.id === e.target.value)
+                    if (svc && !followUpServices.some(fs => fs.service_id === svc.id)) {
+                      setFollowUpServices(prev => [...prev, {
+                        service_id: svc.id,
+                        service_name: svc.name,
+                        price: svc.price,
+                      }])
+                    }
+                    e.target.value = ''
+                  }}
+                  style={{ width: '100%', padding: '8px 10px', borderRadius: 8,
+                    background: '#0f1923', border: '1px solid rgba(255,255,255,0.12)',
+                    color: '#F0F4FF', fontSize: 13 }}
+                >
+                  <option value="">— Pilih layanan —</option>
+                  {allServices?.filter((s: any) => !followUpServices.some(fs => fs.service_id === s.id))
+                    .map((s: any) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name} — Rp {s.price.toLocaleString('id-ID')}
+                      </option>
+                    ))}
+                </select>
+
+                {followUpServices.length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+                    {followUpServices.map(s => (
+                      <span key={s.service_id} style={{
+                        padding: '3px 10px', borderRadius: 999,
+                        background: '#243352', border: '1px solid rgba(255,255,255,0.1)',
+                        color: '#F0F4FF', fontSize: 12,
+                        display: 'flex', alignItems: 'center', gap: 6,
+                      }}>
+                        {s.service_name}
+                        <button
+                          onClick={() => setFollowUpServices(prev =>
+                            prev.filter(fs => fs.service_id !== s.service_id))}
+                          style={{ background: 'none', border: 'none', color: '#FC8181',
+                            cursor: 'pointer', padding: 0, fontSize: 14, lineHeight: 1 }}
+                        >×</button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="modal-footer">
