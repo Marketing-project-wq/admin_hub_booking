@@ -71,7 +71,7 @@ export default function ClinicKasir() {
           id, visit_code, visit_date, visit_time, status, payment_status,
           patient:clinic_patients(id, full_name, patient_code, phone),
           services:clinic_visit_services(id, service_id, service_name, price),
-          bookings:clinic_bookings(payment_method, status)
+          bookings:clinic_bookings!clinic_bookings_visit_id_fkey(payment_method, status)
         `)
         .eq('payment_status', 'unpaid')
         .in('status', ['in_progress', 'completed'])
