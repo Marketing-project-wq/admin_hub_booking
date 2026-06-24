@@ -178,6 +178,26 @@ export default function ClinicCloseBillModal({
               sort_order: i,
             })))
           if (followUpSvcErr) throw followUpSvcErr
+
+          // Cari slot yang cocok untuk follow-up dan increment booked_count
+          if (followUpTime) {
+            const { data: matchSlot } = await supabase
+              .from('clinic_slots')
+              .select('id')
+              .eq('slot_date', followUpDate)
+              .eq('start_time', followUpTime + ':00')
+              .eq('is_active', true)
+              .maybeSingle()
+
+            if (matchSlot) {
+              await supabase
+                .from('clinic_visits')
+                .update({ slot_id: matchSlot.id })
+                .eq('id', newVisit.id)
+
+              await supabase.rpc('increment_clinic_slot_booked', { p_slot_id: matchSlot.id })
+            }
+          }
         } catch (followUpErr) {
           // Pembayaran sudah berhasil — jangan blokir/biarkan retry (risiko double-charge).
           // Log saja; kunjungan berikutnya bisa dijadwalkan manual jika gagal.

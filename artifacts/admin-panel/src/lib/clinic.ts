@@ -696,6 +696,21 @@ export async function createVisitFromBooking(bookingId: string, payload: VisitFr
   if (vErr) throw vErr
   const visitId = (vRow as { id: string }).id
 
+  // Link slot_id ke visit (best-effort — jangan gagalkan pembuatan visit kalau slot error)
+  if (b.slot_id) {
+    try {
+      await supabase
+        .from('clinic_visits')
+        .update({ slot_id: b.slot_id })
+        .eq('id', visitId)
+
+      // Increment booked_count di clinic_slots
+      await supabase.rpc('increment_clinic_slot_booked', { p_slot_id: b.slot_id })
+    } catch (slotErr) {
+      console.error('Gagal link/increment slot:', slotErr)
+    }
+  }
+
   // Carry the booking's service over as a clinic_visit_services row.
   if (b.service_id) {
     const { data: svc } = await supabase.from('clinic_services').select('name, price').eq('id', b.service_id).maybeSingle()
@@ -1662,6 +1677,30 @@ export async function createManualVisit(payload: {
         sort_order: i,
       })))
     if (svcErr) throw svcErr
+  }
+
+  // Cari slot berdasarkan tanggal + waktu dan increment
+  if (payload.visit_time) {
+    const { data: matchSlot } = await supabase
+      .from('clinic_slots')
+      .select('id')
+      .eq('slot_date', payload.visit_date)
+      .eq('start_time', payload.visit_time + ':00')
+      .eq('is_active', true)
+      .maybeSingle()
+
+    if (matchSlot) {
+      try {
+        await supabase
+          .from('clinic_visits')
+          .update({ slot_id: matchSlot.id })
+          .eq('id', visit.id)
+
+        await supabase.rpc('increment_clinic_slot_booked', { p_slot_id: matchSlot.id })
+      } catch (slotErr) {
+        console.error('Gagal link/increment slot:', slotErr)
+      }
+    }
   }
 
   return { visit_id: visit.id, visit_code: visit.visit_code }
