@@ -767,13 +767,11 @@ export async function createVisitFromBooking(bookingId: string, payload: VisitFr
   if (b.service_id) {
     const { data: svc } = await supabase.from('clinic_services').select('name, price').eq('id', b.service_id).maybeSingle()
     const s = svc as { name: string; price: number } | null
-    // Jika booking price = 0 (voucher/gratis), semua service price = 0
-    const servicePrice = (b.price === 0) ? 0 : (s?.price ?? b.price ?? 0)
     await supabase.from('clinic_visit_services').insert({
       visit_id: visitId,
       service_id: b.service_id,
       service_name: s?.name ?? '-',
-      price: servicePrice,
+      price: s?.price ?? b.price ?? 0,
       notes: null,
       sort_order: 0,
     })
