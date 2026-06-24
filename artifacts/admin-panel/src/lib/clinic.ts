@@ -338,7 +338,7 @@ export async function cancelBooking(id: string): Promise<void> {
 export async function listServices(): Promise<ClinicService[]> {
   const { data, error } = await supabase
     .from('clinic_services')
-    .select('id, name, price, duration_minutes, is_active, requires_doctor')
+    .select('id, name, price, duration_minutes, is_active, requires_doctor, package_category')
     .order('name', { ascending: true })
   console.log('services fetch:', data, error)
   if (error) throw error
@@ -1629,6 +1629,7 @@ export async function createManualVisit(payload: {
   visit_time: string | null
   chief_complaint: string
   services: { service_id: string; service_name: string; price: number }[]
+  patient_package_id?: string | null
   created_by: string
 }): Promise<{ visit_id: string; visit_code: string }> {
   // 1. Insert clinic_visits
@@ -1639,8 +1640,9 @@ export async function createManualVisit(payload: {
       visit_date: payload.visit_date,
       visit_time: payload.visit_time || null,
       status: 'scheduled',
-      payment_status: 'unpaid',
+      payment_status: payload.patient_package_id ? 'package' : 'unpaid',
       chief_complaint: payload.chief_complaint,
+      patient_package_id: payload.patient_package_id ?? null,
       created_by: payload.created_by,
     })
     .select('id, visit_code')

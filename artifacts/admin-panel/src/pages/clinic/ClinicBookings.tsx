@@ -47,6 +47,13 @@ export default function ClinicBookings() {
     full_name: '', phone: '', gender: 'male', date_of_birth: '',
     id_type: 'KTP', id_number: '',
   })
+  const [patientActivePackages, setPatientActivePackages] = useState<{
+    id: string
+    remaining_sessions: number
+    package: { id: string; name: string; category: string }
+  }[]>([])
+  const [usePackageId, setUsePackageId] = useState<string | null>(null)
+  const [packageServiceId, setPackageServiceId] = useState<string | null>(null)
 
   const [selected, setSelected] = useState<ClinicBooking | null>(null)
   const [confirmConfirm, setConfirmConfirm] = useState<ClinicBooking | null>(null)
@@ -81,6 +88,23 @@ export default function ClinicBookings() {
     return () => window.clearTimeout(t)
   }, [toast])
 
+  // Fetch paket aktif pasien saat selectedPatient berubah.
+  useEffect(() => {
+    if (!selectedPatient) {
+      setPatientActivePackages([])
+      setUsePackageId(null)
+      setPackageServiceId(null)
+      return
+    }
+    supabase
+      .from('clinic_patient_packages')
+      .select('id, remaining_sessions, package:clinic_packages(id, name, category)')
+      .eq('patient_id', selectedPatient.id)
+      .eq('is_active', true)
+      .gt('remaining_sessions', 0)
+      .then(({ data }) => setPatientActivePackages((data ?? []) as any))
+  }, [selectedPatient])
+
   const searchPatients = async () => {
     if (!patientSearch.trim()) return
     setSearchLoading(true)
@@ -97,21 +121,35 @@ export default function ClinicBookings() {
   }
 
   const handleManualSubmit = async () => {
-    if (!selectedPatient || manualServices.length === 0) return
+    if (!selectedPatient || manualServices.length === 0 && !packageServiceId) return
     setManualLoading(true)
     setManualError(null)
     try {
+      // Build services list
+      const allServices = [
+        ...manualServices,
+        ...(packageServiceId && !manualServices.some(s => s.service_id === packageServiceId)
+          ? [{
+              service_id: packageServiceId,
+              service_name: services.find(s => s.id === packageServiceId)?.name ?? '',
+              price: 0,
+            }]
+          : []
+        ),
+      ]
+
       const { visit_code } = await createManualVisit({
         patient_id: selectedPatient.id,
         visit_date: manualDate,
         visit_time: manualTime || null,
         chief_complaint: manualComplaint,
-        services: manualServices,
+        services: allServices,
+        patient_package_id: usePackageId ?? undefined,
         created_by: user?.full_name ?? 'Admin',
       })
       setManualStep(3)
       setToast(`Visit ${visit_code} berhasil dibuat`)
-    } catch (e) {
+    } catch {
       setManualError('Gagal membuat kunjungan. Coba lagi.')
     } finally {
       setManualLoading(false)
@@ -170,6 +208,9 @@ export default function ClinicBookings() {
     setManualPatientMode('search')
     setNewPatientForm({ full_name: '', phone: '', gender: 'male',
       date_of_birth: '', id_type: 'KTP', id_number: '' })
+    setPatientActivePackages([])
+    setUsePackageId(null)
+    setPackageServiceId(null)
     setShowManualModal(false)
   }
 
@@ -534,6 +575,78 @@ export default function ClinicBookings() {
                   )}
                 </div>
 
+                {patientActivePackages.length > 0 && (
+                  <div style={{ marginBottom: 14 }}>
+                    <label style={{ fontSize: 11, color: '#A8B8D8', textTransform: 'uppercase',
+                      letterSpacing: 1, display: 'block', marginBottom: 8 }}>
+                      Paket Aktif Pasien
+                    </label>
+
+                    {/* Opsi tidak pakai paket */}
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 8,
+                      fontSize: 13, cursor: 'pointer', marginBottom: 6, color: '#A8B8D8' }}>
+                      <input
+                        type="radio"
+                        checked={usePackageId === null}
+                        onChange={() => { setUsePackageId(null); setPackageServiceId(null) }}
+                        style={{ accentColor: '#C0392B' }}
+                      />
+                      Tidak menggunakan paket
+                    </label>
+
+                    {patientActivePackages.map(pp => (
+                      <div key={pp.id}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 8,
+                          fontSize: 13, cursor: 'pointer', marginBottom: 6 }}>
+                          <input
+                            type="radio"
+                            checked={usePackageId === pp.id}
+                            onChange={() => { setUsePackageId(pp.id); setPackageServiceId(null) }}
+                            style={{ accentColor: '#C0392B' }}
+                          />
+                          <span style={{ color: '#F0F4FF', fontWeight: 600 }}>
+                            📦 {pp.package.name}
+                          </span>
+                          <span style={{ color: '#A8B8D8', fontSize: 11 }}>
+                            · Sisa {pp.remaining_sessions} sesi
+                          </span>
+                        </label>
+
+                        {/* Sub-pilihan layanan dari paket */}
+                        {usePackageId === pp.id && (() => {
+                          const pkgCategory = pp.package.category.toLowerCase()
+                          const coverableServices = services.filter(s =>
+                            (s as any).package_category === pkgCategory
+                          )
+                          return coverableServices.length > 0 ? (
+                            <div style={{ marginLeft: 24, padding: '10px 12px',
+                              background: 'rgba(5,150,105,0.08)', borderRadius: 8,
+                              border: '1px solid rgba(5,150,105,0.2)', marginBottom: 8 }}>
+                              <div style={{ fontSize: 11, color: '#34D399', fontWeight: 600,
+                                marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 }}>
+                                Pilih layanan dari paket:
+                              </div>
+                              {coverableServices.map(s => (
+                                <label key={s.id} style={{ display: 'flex', alignItems: 'center',
+                                  gap: 8, fontSize: 13, cursor: 'pointer', marginBottom: 4, color: '#A8B8D8' }}>
+                                  <input
+                                    type="radio"
+                                    checked={packageServiceId === s.id}
+                                    onChange={() => setPackageServiceId(s.id)}
+                                    style={{ accentColor: '#C0392B' }}
+                                  />
+                                  {s.name}
+                                  <span style={{ color: '#34D399', fontSize: 11, fontWeight: 600 }}>GRATIS</span>
+                                </label>
+                              ))}
+                            </div>
+                          ) : null
+                        })()}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
                 {/* Tanggal & Jam */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
                   <div>
@@ -582,11 +695,11 @@ export default function ClinicBookings() {
                   </button>
                   <button
                     onClick={handleManualSubmit}
-                    disabled={manualServices.length === 0 || manualLoading}
+                    disabled={(manualServices.length === 0 && !packageServiceId) || manualLoading}
                     style={{ flex: 2, padding: 12, borderRadius: 8,
-                      background: manualServices.length > 0 ? '#C0392B' : '#243352',
-                      color: manualServices.length > 0 ? '#fff' : '#6B7A99',
-                      border: 'none', cursor: manualServices.length > 0 ? 'pointer' : 'not-allowed',
+                      background: (manualServices.length > 0 || packageServiceId) ? '#C0392B' : '#243352',
+                      color: (manualServices.length > 0 || packageServiceId) ? '#fff' : '#6B7A99',
+                      border: 'none', cursor: (manualServices.length > 0 || packageServiceId) ? 'pointer' : 'not-allowed',
                       fontWeight: 600, fontSize: 14 }}>
                     {manualLoading ? 'Menyimpan...' : 'Buat Kunjungan →'}
                   </button>
