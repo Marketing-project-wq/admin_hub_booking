@@ -117,6 +117,16 @@ export default function ClinicBookings() {
       // Buat visit dari booking
       await createVisitFromBooking(checkinBooking.id)
 
+      // Update status booking dari arrived ke checked_in
+      await supabase
+        .from('clinic_bookings')
+        .update({
+          status: 'checked_in',
+          check_in_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', checkinBooking.id)
+
       setShowCheckinModal(false)
       setCheckinBooking(null)
       setCheckinKtp('')
@@ -366,8 +376,11 @@ export default function ClinicBookings() {
                 </div>
                 <button
                   onClick={() => { setCheckinBooking(b); setShowCheckinModal(true) }}
+                  disabled={checkinLoading && checkinBooking?.id === b.id}
                   style={{ padding: '8px 16px', borderRadius: 8, background: RED,
-                    color: '#fff', border: 'none', cursor: 'pointer',
+                    color: '#fff', border: 'none',
+                    cursor: checkinLoading && checkinBooking?.id === b.id ? 'not-allowed' : 'pointer',
+                    opacity: checkinLoading && checkinBooking?.id === b.id ? 0.6 : 1,
                     fontWeight: 600, fontSize: 13, whiteSpace: 'nowrap' }}
                 >
                   Check-in →
