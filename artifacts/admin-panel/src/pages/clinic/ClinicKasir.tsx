@@ -65,7 +65,6 @@ export default function ClinicKasir() {
   const fetchPending = useCallback(async () => {
     setLoadingPending(true)
     try {
-      const today = todayISO()
       const { data, error: err } = await supabase
         .from('clinic_visits')
         .select(`
@@ -74,9 +73,9 @@ export default function ClinicKasir() {
           services:clinic_visit_services(id, service_id, service_name, price),
           bookings:clinic_bookings(payment_method, status)
         `)
-        .eq('visit_date', today)
         .eq('payment_status', 'unpaid')
         .in('status', ['in_progress', 'completed'])
+        .order('visit_date', { ascending: false })
         .order('visit_time', { ascending: true })
       if (err) throw err
       const visits = (data ?? []).map((v: any) => ({
