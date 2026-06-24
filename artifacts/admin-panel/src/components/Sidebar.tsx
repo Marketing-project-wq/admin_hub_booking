@@ -119,7 +119,7 @@ export default function Sidebar({ currentUnit, open, onClose }: SidebarProps) {
 
             // Admin (kasir) hanya bisa akses Kasir dan Visits
             if (role === 'admin' && m.path &&
-                !(['/clinic/kasir', '/clinic/visits'].includes(m.path))) return null
+                !(['/clinic/kasir', '/clinic/visits', '/clinic/bookings', '/clinic/slots'].includes(m.path))) return null
           }
 
           if (m.divider) {
