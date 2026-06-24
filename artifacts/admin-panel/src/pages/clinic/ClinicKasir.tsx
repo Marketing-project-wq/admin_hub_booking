@@ -34,7 +34,7 @@ interface PendingVisit {
   visit_time: string | null
   status: string
   payment_status: string
-  patient: { id: string; full_name: string; patient_code: string } | null
+  patient: { id: string; full_name: string; patient_code: string; phone: string } | null
   services: { id: string; service_id: string; service_name: string; price: number }[]
 }
 
@@ -68,7 +68,7 @@ export default function ClinicKasir() {
         .from('clinic_visits')
         .select(`
           id, visit_code, visit_date, visit_time, status, payment_status,
-          patient:clinic_patients(id, full_name, patient_code),
+          patient:clinic_patients(id, full_name, patient_code, phone),
           services:clinic_visit_services(id, service_id, service_name, price)
         `)
         .eq('visit_date', today)
@@ -283,6 +283,7 @@ export default function ClinicKasir() {
           patientId={closeBillVisit.patient.id}
           patientName={closeBillVisit.patient.full_name}
           patientCode={closeBillVisit.patient.patient_code}
+          patientPhone={closeBillVisit.patient.phone}
           services={closeBillVisit.services.map(s => ({ service_id: s.service_id, service_name: s.service_name, price: s.price }))}
           onClose={() => setCloseBillVisit(null)}
           onSuccess={() => { setCloseBillVisit(null); fetchPending(); fetchData() }}

@@ -6,9 +6,10 @@ import {
   listVisitsLog, addVisit, updateVisit,
   listPatientsPaged, listServicesFull, listStaff, getPatient, getPatientPackage, listPatientActivePackages, getVisitRow,
   getBookingByCode, createVisitFromBooking, todayISO,
+  getAvailableClinicSlots, assignVisitSlot,
   type ClinicVisitRow, type VisitPayload, type ClinicPatient,
   type ClinicServiceFull, type ClinicStaff, type BookingWithDetails,
-  type ClinicPatientPackage,
+  type ClinicPatientPackage, type AvailableSlot,
 } from '../../lib/clinic'
 
 const PAGE_SIZE = 20
@@ -62,6 +63,15 @@ export default function ClinicVisits() {
   const [checkinMsg, setCheckinMsg] = useState('')
   const [checkingIn, setCheckingIn] = useState(false)
 
+  // Assign Jam (slot) untuk visit tanpa visit_time
+  const [showAssignSlotModal, setShowAssignSlotModal] = useState(false)
+  const [assignSlotVisit, setAssignSlotVisit] = useState<ClinicVisitRow | null>(null)
+  const [availableSlots, setAvailableSlots] = useState<AvailableSlot[]>([])
+  const [selectedSlotId, setSelectedSlotId] = useState<string>('')
+  const [assignSlotLoading, setAssignSlotLoading] = useState(false)
+  const [assignSlotError, setAssignSlotError] = useState<string | null>(null)
+  const [slotsLoading, setSlotsLoading] = useState(false)
+
   const fetchData = useCallback(async () => {
     setLoading(true)
     try {
@@ -83,6 +93,40 @@ export default function ClinicVisits() {
   }, [patientFilterId, statusFilter, dateFrom, dateTo, search, page])
 
   useEffect(() => { fetchData() }, [fetchData])
+
+  const openAssignSlotModal = async (visit: ClinicVisitRow) => {
+    setAssignSlotVisit(visit)
+    setSelectedSlotId('')
+    setAssignSlotError(null)
+    setSlotsLoading(true)
+    setShowAssignSlotModal(true)
+    try {
+      const slots = await getAvailableClinicSlots(visit.visit_date)
+      setAvailableSlots(slots)
+    } catch {
+      setAssignSlotError('Gagal memuat slot tersedia.')
+    } finally {
+      setSlotsLoading(false)
+    }
+  }
+
+  const handleAssignSlot = async () => {
+    if (!assignSlotVisit || !selectedSlotId) return
+    setAssignSlotLoading(true)
+    setAssignSlotError(null)
+    try {
+      const slot = availableSlots.find(s => s.id === selectedSlotId)
+      if (!slot) throw new Error('Slot tidak ditemukan')
+      await assignVisitSlot(assignSlotVisit.id, selectedSlotId, slot.start_time)
+      setShowAssignSlotModal(false)
+      setAssignSlotVisit(null)
+      fetchData()
+    } catch (e) {
+      setAssignSlotError(e instanceof Error ? e.message : 'Gagal assign slot')
+    } finally {
+      setAssignSlotLoading(false)
+    }
+  }
 
   // Resolve the patient name for the banner when filtering by ?patient_id.
   useEffect(() => {
@@ -253,7 +297,25 @@ export default function ClinicVisits() {
                     : '-'}
                 </td>
                 <td style={{ whiteSpace: 'nowrap', fontSize: 12 }}>
-                  {fmtDate(v.visit_date)}{v.visit_time ? ` · ${fmtTime(v.visit_time)}` : ''}
+                  {v.visit_time ? (
+                    <span>{fmtDate(v.visit_date)} · {fmtTime(v.visit_time)}</span>
+                  ) : (
+                    <div>
+                      <div>{fmtDate(v.visit_date)}</div>
+                      <button
+                        onClick={e => { e.stopPropagation(); openAssignSlotModal(v) }}
+                        style={{
+                          marginTop: 4, padding: '3px 8px', borderRadius: 6,
+                          background: 'rgba(245,158,11,0.15)',
+                          border: '1px solid rgba(245,158,11,0.3)',
+                          color: '#F59E0B', fontSize: 11, fontWeight: 600,
+                          cursor: 'pointer', whiteSpace: 'nowrap',
+                        }}
+                      >
+                        + Assign Jam
+                      </button>
+                    </div>
+                  )}
                 </td>
                 <td><StatusBadge status={v.status} /></td>
                 <td style={{ whiteSpace: 'nowrap' }}>{fmtRp(v.payment_amount ?? 0)}</td>
@@ -306,6 +368,97 @@ export default function ClinicVisits() {
           onClose={() => setEditVisit(null)}
           onSaved={() => { setEditVisit(null); setPage(0); fetchData() }}
         />
+      )}
+
+      {showAssignSlotModal && assignSlotVisit && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 1000, padding: 16 }}>
+          <div style={{ background: '#1a2740', border: '1px solid rgba(255,255,255,0.1)',
+            borderRadius: 16, padding: 24, width: '100%', maxWidth: 400 }}>
+
+            {/* Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between',
+              alignItems: 'center', marginBottom: 20 }}>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 16, color: '#F0F4FF' }}>
+                  Assign Jam Kunjungan
+                </div>
+                <div style={{ fontSize: 12, color: '#A8B8D8', marginTop: 2 }}>
+                  {assignSlotVisit.patient?.full_name} · {fmtDate(assignSlotVisit.visit_date)}
+                </div>
+              </div>
+              <button
+                onClick={() => { setShowAssignSlotModal(false); setAssignSlotVisit(null) }}
+                style={{ background: 'none', border: 'none', color: '#6B7A99',
+                  cursor: 'pointer', fontSize: 20 }}>×</button>
+            </div>
+
+            {/* Slot list */}
+            {slotsLoading ? (
+              <div style={{ textAlign: 'center', padding: 24, color: '#A8B8D8' }}>
+                Memuat slot tersedia...
+              </div>
+            ) : availableSlots.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: 24, color: '#FC8181' }}>
+                Tidak ada slot tersedia untuk tanggal ini.
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)',
+                gap: 8, marginBottom: 20, maxHeight: 240, overflowY: 'auto' }}>
+                {availableSlots.map(slot => (
+                  <button
+                    key={slot.id}
+                    onClick={() => setSelectedSlotId(slot.id)}
+                    style={{
+                      padding: '10px 8px', borderRadius: 8, textAlign: 'center',
+                      border: `1px solid ${selectedSlotId === slot.id ? '#C0392B' : 'rgba(255,255,255,0.1)'}`,
+                      background: selectedSlotId === slot.id ? 'rgba(192,57,43,0.15)' : '#243352',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <div style={{ fontSize: 14, fontWeight: 700, color: '#F0F4FF',
+                      fontFamily: "'JetBrains Mono', monospace" }}>
+                      {slot.start_time.slice(0, 5)}
+                    </div>
+                    <div style={{ fontSize: 10, color: '#6B7A99', marginTop: 2 }}>
+                      {slot.remaining}/{slot.quota} sisa
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {assignSlotError && (
+              <div style={{ color: '#FC8181', fontSize: 13, marginBottom: 12 }}>
+                {assignSlotError}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                onClick={() => { setShowAssignSlotModal(false); setAssignSlotVisit(null) }}
+                style={{ flex: 1, padding: 12, borderRadius: 8, background: '#243352',
+                  border: '1px solid rgba(255,255,255,0.1)', color: '#A8B8D8',
+                  cursor: 'pointer', fontWeight: 600 }}>
+                Batal
+              </button>
+              <button
+                onClick={handleAssignSlot}
+                disabled={!selectedSlotId || assignSlotLoading}
+                style={{
+                  flex: 2, padding: 12, borderRadius: 8,
+                  background: selectedSlotId ? '#C0392B' : '#243352',
+                  border: 'none',
+                  color: selectedSlotId ? '#fff' : '#6B7A99',
+                  cursor: selectedSlotId ? 'pointer' : 'not-allowed',
+                  fontWeight: 700, fontSize: 14,
+                }}>
+                {assignSlotLoading ? 'Menyimpan...' : '✓ Simpan Jam'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

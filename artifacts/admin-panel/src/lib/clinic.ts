@@ -428,6 +428,58 @@ export async function getAvailableSlots(date: string): Promise<ClinicSlot[]> {
   return slots.filter(s => s.is_active && s.booked_count < s.quota)
 }
 
+export interface AvailableSlot {
+  id: string
+  start_time: string
+  end_time: string
+  quota: number
+  booked_count: number
+  remaining: number
+}
+
+export async function getAvailableClinicSlots(date: string): Promise<AvailableSlot[]> {
+  const { data, error } = await supabase
+    .from('clinic_slots')
+    .select('id, start_time, end_time, quota, booked_count')
+    .eq('slot_date', date)
+    .eq('is_active', true)
+    .order('start_time', { ascending: true })
+
+  if (error) throw error
+
+  // Filter client-side: only slots with remaining capacity
+  return ((data ?? []) as any[])
+    .filter(s => s.booked_count < s.quota)
+    .map(s => ({
+      id: s.id,
+      start_time: s.start_time,
+      end_time: s.end_time,
+      quota: s.quota,
+      booked_count: s.booked_count,
+      remaining: s.quota - s.booked_count,
+    }))
+}
+
+export async function assignVisitSlot(visitId: string, slotId: string, startTime: string): Promise<void> {
+  // Update visit dengan slot_id dan visit_time
+  const { error: visitErr } = await supabase
+    .from('clinic_visits')
+    .update({
+      slot_id: slotId,
+      visit_time: startTime,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', visitId)
+
+  if (visitErr) throw visitErr
+
+  // Increment booked_count
+  const { error: rpcErr } = await supabase
+    .rpc('increment_clinic_slot_booked', { p_slot_id: slotId })
+
+  if (rpcErr) throw rpcErr
+}
+
 async function nextBookingCode(): Promise<string> {
   const { data, error } = await supabase.rpc('generate_booking_code')
   if (!error && data) return data as string

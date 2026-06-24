@@ -14,6 +14,7 @@ interface Props {
   patientId: string
   patientName: string
   patientCode: string
+  patientPhone: string
   services: { service_id: string; service_name: string; price: number }[]
   onClose: () => void
   onSuccess: (transaction: ClinicTransaction) => void
@@ -23,7 +24,7 @@ const METHODS = ['cash', 'transfer', 'qris', 'debit', 'kredit'] as const
 const METHOD_LABEL: Record<string, string> = { cash: 'Cash', transfer: 'Transfer', qris: 'QRIS', debit: 'Debit', kredit: 'Kredit' }
 
 export default function ClinicCloseBillModal({
-  visitId, patientId, patientName, patientCode, services, onClose, onSuccess,
+  visitId, patientId, patientName, patientCode, patientPhone, services, onClose, onSuccess,
 }: Props) {
   const { user } = useAuth()
   const [discount, setDiscount] = useState(0)
@@ -180,14 +181,16 @@ export default function ClinicCloseBillModal({
           if (followUpSvcErr) throw followUpSvcErr
 
           // Cari slot yang cocok untuk follow-up dan increment booked_count
+          let matchSlot: { id: string } | null = null
           if (followUpTime) {
-            const { data: matchSlot } = await supabase
+            const { data } = await supabase
               .from('clinic_slots')
               .select('id')
               .eq('slot_date', followUpDate)
               .eq('start_time', followUpTime + ':00')
               .eq('is_active', true)
               .maybeSingle()
+            matchSlot = data as { id: string } | null
 
             if (matchSlot) {
               await supabase
@@ -196,6 +199,30 @@ export default function ClinicCloseBillModal({
                 .eq('id', newVisit.id)
 
               await supabase.rpc('increment_clinic_slot_booked', { p_slot_id: matchSlot.id })
+            }
+          }
+
+          // Buat clinic_bookings untuk follow-up agar pasien bisa check-in (dengan / tanpa slot)
+          const followUpServiceId = followUpServices[0]?.service_id ?? null
+          if (followUpServiceId) {
+            const { data: newBooking, error: bookingErr } = await supabase
+              .from('clinic_bookings')
+              .insert({
+                patient_id: patientId,
+                service_id: followUpServiceId,
+                slot_id: matchSlot?.id ?? null,
+                full_name: patientName,
+                phone: patientPhone,
+                status: 'confirmed',
+                price: 0,
+                payment_method: 'follow_up',
+                visit_id: newVisit.id,
+              })
+              .select('id, booking_code')
+              .single()
+
+            if (bookingErr) {
+              console.error('Gagal buat booking follow-up:', bookingErr)
             }
           }
         } catch (followUpErr) {

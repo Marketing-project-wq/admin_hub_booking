@@ -143,6 +143,7 @@ export default function ClinicVisitDetail() {
           patientId={visit.patient_id!}
           patientName={visit.patient?.full_name || patient?.full_name || '-'}
           patientCode={visit.patient?.patient_code || patient?.patient_code || '-'}
+          patientPhone={visit.patient?.phone || patient?.phone || ''}
           services={visit.services.map(s => ({ service_id: s.service_id, service_name: s.service_name, price: s.price }))}
           onClose={() => setShowCloseBill(false)}
           onSuccess={(trx) => { setCurrentTransaction(trx); setShowCloseBill(false); setShowReceipt(true); loadCore() }}
