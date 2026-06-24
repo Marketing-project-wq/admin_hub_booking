@@ -1318,7 +1318,7 @@ export default function ClinicTriase() {
                     <button
                       className="btn-primary"
                       style={{ width: 'auto', padding: '8px 16px', background: '#059669' }}
-                      onClick={() => handleSelesaiTreatment(v.id)}
+                      onClick={() => openModal(v, 'assessment')}
                     >
                       ✓ Selesai Treatment
                     </button>
