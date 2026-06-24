@@ -1,16 +1,18 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { fmtRp, fmtDate, fmtTime, fmtDateTime, STATUS_LABEL, exportToCSV } from '../../lib/format'
 import ConfirmModal from '../../components/arena/ConfirmModal'
-import ManualBookingModal from '../../components/clinic/ManualBookingModal'
+import { supabase } from '../../lib/supabase'
+import { useAuth } from '../../context/AuthContext'
 import {
   getBookings, getAllBookings, confirmBooking, cancelBooking, serviceName,
-  todayISO, daysAgoISO,
-  type ClinicBooking, type BookingFilters,
+  todayISO, daysAgoISO, listServices, createManualVisit,
+  type ClinicBooking, type BookingFilters, type ClinicService,
 } from '../../lib/clinic'
 
 const PAGE_SIZE = 20
 
 export default function ClinicBookings() {
+  const { user } = useAuth()
   const [data, setData] = useState<ClinicBooking[]>([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -24,7 +26,23 @@ export default function ClinicBookings() {
   const [dateTo, setDateTo] = useState(todayISO)
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const [showManual, setShowManual] = useState(false)
+  const [services, setServices] = useState<ClinicService[]>([])
+  const [toast, setToast] = useState('')
+
+  // Manual visit modal (3-step)
+  const [showManualModal, setShowManualModal] = useState(false)
+  const [manualStep, setManualStep] = useState<1 | 2 | 3>(1)
+  const [manualLoading, setManualLoading] = useState(false)
+  const [manualError, setManualError] = useState<string | null>(null)
+  const [patientSearch, setPatientSearch] = useState('')
+  const [patientResults, setPatientResults] = useState<{ id: string; full_name: string; patient_code: string; phone: string }[]>([])
+  const [selectedPatient, setSelectedPatient] = useState<{ id: string; full_name: string; patient_code: string; phone: string } | null>(null)
+  const [searchLoading, setSearchLoading] = useState(false)
+  const [manualServices, setManualServices] = useState<{ service_id: string; service_name: string; price: number }[]>([])
+  const [manualDate, setManualDate] = useState(new Date().toISOString().slice(0, 10))
+  const [manualTime, setManualTime] = useState('')
+  const [manualComplaint, setManualComplaint] = useState('')
+
   const [selected, setSelected] = useState<ClinicBooking | null>(null)
   const [confirmConfirm, setConfirmConfirm] = useState<ClinicBooking | null>(null)
   const [confirmCancel, setConfirmCancel] = useState<ClinicBooking | null>(null)
@@ -48,6 +66,65 @@ export default function ClinicBookings() {
   }, [statusFilter, dateFrom, dateTo, search, page])
 
   useEffect(() => { fetchData() }, [fetchData])
+
+  useEffect(() => { listServices().then(setServices).catch(() => {}) }, [])
+
+  // Auto-clear toast.
+  useEffect(() => {
+    if (!toast) return
+    const t = window.setTimeout(() => setToast(''), 3000)
+    return () => window.clearTimeout(t)
+  }, [toast])
+
+  const searchPatients = async () => {
+    if (!patientSearch.trim()) return
+    setSearchLoading(true)
+    try {
+      const { data } = await supabase
+        .from('clinic_patients')
+        .select('id, full_name, patient_code, phone')
+        .or(`full_name.ilike.%${patientSearch}%,phone.ilike.%${patientSearch}%,patient_code.ilike.%${patientSearch}%`)
+        .eq('is_active', true)
+        .limit(5)
+      setPatientResults(data ?? [])
+    } catch { /* ignore */ }
+    finally { setSearchLoading(false) }
+  }
+
+  const handleManualSubmit = async () => {
+    if (!selectedPatient || manualServices.length === 0) return
+    setManualLoading(true)
+    setManualError(null)
+    try {
+      const { visit_code } = await createManualVisit({
+        patient_id: selectedPatient.id,
+        visit_date: manualDate,
+        visit_time: manualTime || null,
+        chief_complaint: manualComplaint,
+        services: manualServices,
+        created_by: user?.full_name ?? 'Admin',
+      })
+      setManualStep(3)
+      setToast(`Visit ${visit_code} berhasil dibuat`)
+    } catch (e) {
+      setManualError('Gagal membuat kunjungan. Coba lagi.')
+    } finally {
+      setManualLoading(false)
+    }
+  }
+
+  const resetManualModal = () => {
+    setManualStep(1)
+    setPatientSearch('')
+    setPatientResults([])
+    setSelectedPatient(null)
+    setManualServices([])
+    setManualDate(new Date().toISOString().slice(0, 10))
+    setManualTime('')
+    setManualComplaint('')
+    setManualError(null)
+    setShowManualModal(false)
+  }
 
   const handleSearchChange = (val: string) => {
     setSearchInput(val)
@@ -108,7 +185,7 @@ export default function ClinicBookings() {
         <h2 className="page-title">Clinic Bookings</h2>
         <div style={{ display: 'flex', gap: 8 }}>
           <button className="btn-secondary" onClick={handleExport}>Export CSV</button>
-          <button className="btn-primary" onClick={() => setShowManual(true)}>+ Tambah Booking Manual</button>
+          <button className="btn-primary" onClick={() => setShowManualModal(true)}>+ Tambah Booking Manual</button>
         </div>
       </div>
 
@@ -215,11 +292,209 @@ export default function ClinicBookings() {
         </div>
       )}
 
-      {showManual && (
-        <ManualBookingModal
-          onClose={() => setShowManual(false)}
-          onSuccess={fetchData}
-        />
+      {showManualModal && (
+        <div className="modal-overlay" onClick={resetManualModal}>
+          <div className="modal-box" style={{ maxWidth: 480 }} onClick={e => e.stopPropagation()}>
+
+            {manualStep === 1 && (
+              <div>
+                <h3 style={{ color: '#F0F4FF', marginBottom: 16 }}>Step 1: Pilih Pasien</h3>
+
+                <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                  <input
+                    value={patientSearch}
+                    onChange={e => setPatientSearch(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && searchPatients()}
+                    placeholder="Cari nama, HP, atau kode pasien..."
+                    style={{ flex: 1, padding: '10px 12px', borderRadius: 8,
+                      background: '#152034', border: '1px solid rgba(255,255,255,0.12)',
+                      color: '#F0F4FF', fontSize: 13 }}
+                  />
+                  <button onClick={searchPatients} disabled={searchLoading}
+                    style={{ padding: '10px 16px', borderRadius: 8, background: '#C0392B',
+                      color: '#fff', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
+                    {searchLoading ? '...' : 'Cari'}
+                  </button>
+                </div>
+
+                {patientResults.length > 0 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
+                    {patientResults.map(p => (
+                      <div key={p.id}
+                        onClick={() => { setSelectedPatient(p); setPatientResults([]) }}
+                        style={{
+                          padding: '10px 14px', borderRadius: 10, cursor: 'pointer',
+                          background: selectedPatient?.id === p.id ? 'rgba(192,57,43,0.15)' : '#243352',
+                          border: `1px solid ${selectedPatient?.id === p.id ? '#C0392B' : 'rgba(255,255,255,0.08)'}`,
+                        }}
+                      >
+                        <div style={{ color: '#F0F4FF', fontWeight: 600, fontSize: 13 }}>{p.full_name}</div>
+                        <div style={{ color: '#A8B8D8', fontSize: 11 }}>{p.patient_code} · {p.phone}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {selectedPatient && (
+                  <div style={{ padding: '12px 14px', borderRadius: 10,
+                    background: 'rgba(192,57,43,0.1)', border: '1px solid rgba(192,57,43,0.3)',
+                    marginBottom: 16 }}>
+                    <div style={{ color: '#F0F4FF', fontWeight: 600 }}>✓ {selectedPatient.full_name}</div>
+                    <div style={{ color: '#A8B8D8', fontSize: 12 }}>{selectedPatient.patient_code} · {selectedPatient.phone}</div>
+                  </div>
+                )}
+
+                <button
+                  onClick={() => setManualStep(2)}
+                  disabled={!selectedPatient}
+                  style={{ width: '100%', padding: 12, borderRadius: 8,
+                    background: selectedPatient ? '#C0392B' : '#243352',
+                    color: selectedPatient ? '#fff' : '#6B7A99',
+                    border: 'none', cursor: selectedPatient ? 'pointer' : 'not-allowed',
+                    fontWeight: 600, fontSize: 14 }}
+                >
+                  Lanjut →
+                </button>
+              </div>
+            )}
+
+            {manualStep === 2 && (
+              <div>
+                <h3 style={{ color: '#F0F4FF', marginBottom: 16 }}>Step 2: Layanan & Detail</h3>
+
+                {/* Pasien terpilih */}
+                <div style={{ padding: '8px 12px', borderRadius: 8, background: '#243352',
+                  marginBottom: 16, fontSize: 12, color: '#A8B8D8' }}>
+                  Pasien: <strong style={{ color: '#F0F4FF' }}>{selectedPatient?.full_name}</strong>
+                </div>
+
+                {/* Pilih Layanan */}
+                <div style={{ marginBottom: 14 }}>
+                  <label style={{ fontSize: 11, color: '#A8B8D8', textTransform: 'uppercase',
+                    letterSpacing: 1, display: 'block', marginBottom: 6 }}>
+                    Pilih Layanan *
+                  </label>
+                  <select
+                    onChange={e => {
+                      const svc = services.find(s => s.id === e.target.value)
+                      if (svc && !manualServices.some(ms => ms.service_id === svc.id)) {
+                        setManualServices(prev => [...prev, {
+                          service_id: svc.id, service_name: svc.name, price: svc.price
+                        }])
+                      }
+                      e.target.value = ''
+                    }}
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: 8,
+                      background: '#152034', border: '1px solid rgba(255,255,255,0.12)',
+                      color: '#F0F4FF', fontSize: 13 }}
+                  >
+                    <option value="">— Pilih layanan —</option>
+                    {services.filter(s => !manualServices.some(ms => ms.service_id === s.id)).map(s => (
+                      <option key={s.id} value={s.id}>{s.name} — Rp {s.price.toLocaleString('id-ID')}</option>
+                    ))}
+                  </select>
+
+                  {manualServices.length > 0 && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+                      {manualServices.map(s => (
+                        <span key={s.service_id} style={{
+                          padding: '4px 10px', borderRadius: 999,
+                          background: '#243352', border: '1px solid rgba(255,255,255,0.1)',
+                          color: '#F0F4FF', fontSize: 12, display: 'flex', alignItems: 'center', gap: 6
+                        }}>
+                          {s.service_name}
+                          <button onClick={() => setManualServices(prev => prev.filter(ms => ms.service_id !== s.service_id))}
+                            style={{ background: 'none', border: 'none', color: '#FC8181', cursor: 'pointer',
+                              padding: 0, fontSize: 14, lineHeight: 1 }}>×</button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Tanggal & Jam */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
+                  <div>
+                    <label style={{ fontSize: 11, color: '#A8B8D8', textTransform: 'uppercase',
+                      letterSpacing: 1, display: 'block', marginBottom: 6 }}>Tanggal *</label>
+                    <input type="date" value={manualDate}
+                      onChange={e => setManualDate(e.target.value)}
+                      style={{ width: '100%', padding: '10px 12px', borderRadius: 8,
+                        background: '#152034', border: '1px solid rgba(255,255,255,0.12)',
+                        color: '#F0F4FF', fontSize: 13, boxSizing: 'border-box' }} />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 11, color: '#A8B8D8', textTransform: 'uppercase',
+                      letterSpacing: 1, display: 'block', marginBottom: 6 }}>Jam</label>
+                    <input type="time" value={manualTime}
+                      onChange={e => setManualTime(e.target.value)}
+                      style={{ width: '100%', padding: '10px 12px', borderRadius: 8,
+                        background: '#152034', border: '1px solid rgba(255,255,255,0.12)',
+                        color: '#F0F4FF', fontSize: 13, boxSizing: 'border-box' }} />
+                  </div>
+                </div>
+
+                {/* Keluhan */}
+                <div style={{ marginBottom: 16 }}>
+                  <label style={{ fontSize: 11, color: '#A8B8D8', textTransform: 'uppercase',
+                    letterSpacing: 1, display: 'block', marginBottom: 6 }}>Keluhan Utama</label>
+                  <textarea value={manualComplaint}
+                    onChange={e => setManualComplaint(e.target.value)}
+                    rows={3}
+                    placeholder="Deskripsikan keluhan pasien..."
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: 8,
+                      background: '#152034', border: '1px solid rgba(255,255,255,0.12)',
+                      color: '#F0F4FF', fontSize: 13, resize: 'vertical', boxSizing: 'border-box' }} />
+                </div>
+
+                {manualError && (
+                  <div style={{ color: '#FC8181', fontSize: 13, marginBottom: 12 }}>{manualError}</div>
+                )}
+
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <button onClick={() => setManualStep(1)}
+                    style={{ flex: 1, padding: 12, borderRadius: 8,
+                      background: '#243352', border: '1px solid rgba(255,255,255,0.1)',
+                      color: '#A8B8D8', cursor: 'pointer', fontWeight: 600 }}>
+                    ← Kembali
+                  </button>
+                  <button
+                    onClick={handleManualSubmit}
+                    disabled={manualServices.length === 0 || manualLoading}
+                    style={{ flex: 2, padding: 12, borderRadius: 8,
+                      background: manualServices.length > 0 ? '#C0392B' : '#243352',
+                      color: manualServices.length > 0 ? '#fff' : '#6B7A99',
+                      border: 'none', cursor: manualServices.length > 0 ? 'pointer' : 'not-allowed',
+                      fontWeight: 600, fontSize: 14 }}>
+                    {manualLoading ? 'Menyimpan...' : 'Buat Kunjungan →'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {manualStep === 3 && (
+              <div style={{ textAlign: 'center', padding: '20px 0' }}>
+                <div style={{ fontSize: 48, marginBottom: 12 }}>✅</div>
+                <h3 style={{ color: '#F0F4FF', marginBottom: 8 }}>Kunjungan Berhasil Dibuat!</h3>
+                <p style={{ color: '#A8B8D8', fontSize: 13, marginBottom: 8 }}>
+                  Pasien: <strong style={{ color: '#F0F4FF' }}>{selectedPatient?.full_name}</strong>
+                </p>
+                <p style={{ color: '#A8B8D8', fontSize: 13, marginBottom: 24 }}>
+                  Layanan: {manualServices.map(s => s.service_name).join(', ')}
+                </p>
+                <p style={{ color: '#6B7A99', fontSize: 12, marginBottom: 24 }}>
+                  Kunjungan sudah masuk ke menu Visits dan Triase.
+                </p>
+                <button onClick={resetManualModal}
+                  style={{ padding: '12px 32px', borderRadius: 8, background: '#C0392B',
+                    color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 14 }}>
+                  Selesai
+                </button>
+              </div>
+            )}
+
+          </div>
+        </div>
       )}
 
       {confirmConfirm && (
@@ -240,6 +515,14 @@ export default function ClinicBookings() {
           danger
           loading={acting}
         />
+      )}
+
+      {toast && (
+        <div style={{
+          position: 'fixed', bottom: 24, right: 24, zIndex: 1100,
+          background: '#080808', color: '#fff', padding: '12px 20px', borderRadius: 10,
+          fontSize: 14, boxShadow: '0 4px 12px rgba(0,0,0,.2)',
+        }}>{toast}</div>
       )}
     </div>
   )

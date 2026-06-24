@@ -573,10 +573,10 @@ function VisitFormModal({ mode, visit, defaultPatientId, onClose, onSaved }: {
             {selectedServices.length > 0 && (
               <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {selectedServices.map(s => (
-                  <div key={s.service_id} style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#F9FAFB', border: '1px solid var(--border, #E5E7EB)', borderRadius: 8, padding: '6px 10px' }}>
+                  <div key={s.service_id} style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#243352', color: '#F0F4FF', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, padding: '6px 10px' }}>
                     <span style={{ flex: 1, fontSize: 13 }}>{s.service_name}</span>
                     <span style={{ fontSize: 13, fontWeight: 600 }}>{fmtRp(s.price)}</span>
-                    <button type="button" className="action-btn cancel" onClick={() => removeService(s.service_id)}>×</button>
+                    <button type="button" className="action-btn cancel" style={{ color: '#FC8181', background: 'transparent' }} onClick={() => removeService(s.service_id)}>×</button>
                   </div>
                 ))}
                 <div style={{ display: 'flex', justifyContent: 'flex-end', fontSize: 13, fontWeight: 600 }}>

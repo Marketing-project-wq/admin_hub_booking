@@ -1622,3 +1622,45 @@ export async function scheduleFollowUpVisit(input: {
 
   return { id: created.id, visit_code: created.visit_code }
 }
+
+export async function createManualVisit(payload: {
+  patient_id: string
+  visit_date: string
+  visit_time: string | null
+  chief_complaint: string
+  services: { service_id: string; service_name: string; price: number }[]
+  created_by: string
+}): Promise<{ visit_id: string; visit_code: string }> {
+  // 1. Insert clinic_visits
+  const { data: visit, error: visitErr } = await supabase
+    .from('clinic_visits')
+    .insert({
+      patient_id: payload.patient_id,
+      visit_date: payload.visit_date,
+      visit_time: payload.visit_time || null,
+      status: 'scheduled',
+      payment_status: 'unpaid',
+      chief_complaint: payload.chief_complaint,
+      created_by: payload.created_by,
+    })
+    .select('id, visit_code')
+    .single()
+
+  if (visitErr) throw visitErr
+
+  // 2. Insert clinic_visit_services
+  if (payload.services.length > 0) {
+    const { error: svcErr } = await supabase
+      .from('clinic_visit_services')
+      .insert(payload.services.map((s, i) => ({
+        visit_id: visit.id,
+        service_id: s.service_id,
+        service_name: s.service_name,
+        price: s.price,
+        sort_order: i,
+      })))
+    if (svcErr) throw svcErr
+  }
+
+  return { visit_id: visit.id, visit_code: visit.visit_code }
+}
