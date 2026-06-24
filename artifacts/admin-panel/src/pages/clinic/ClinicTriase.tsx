@@ -1360,7 +1360,16 @@ export default function ClinicTriase() {
                     marginBottom: -2, textTransform: 'capitalize',
                   }}>{t === 'screening' ? 'Screening' : 'Consent'}</button>
               ))}
-              {screeningStatus[selectedVisit.id] && consentStatus[selectedVisit.id] && (
+              {(() => {
+                console.log('[Assessment Tab Debug]', {
+                  visitId: selectedVisit.id,
+                  screening: screeningStatus[selectedVisit.id],
+                  consent: consentStatus[selectedVisit.id],
+                  allScreeningKeys: Object.keys(screeningStatus),
+                  allConsentKeys: Object.keys(consentStatus),
+                })
+                return screeningStatus[selectedVisit.id] && consentStatus[selectedVisit.id]
+              })() && (
                 <button onClick={() => setModalTab('assessment')}
                   style={{
                     padding: '12px 20px', border: 'none', background: 'none', cursor: 'pointer', fontSize: 13,
