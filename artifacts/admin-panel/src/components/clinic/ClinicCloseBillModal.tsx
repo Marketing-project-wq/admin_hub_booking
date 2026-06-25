@@ -366,8 +366,8 @@ export default function ClinicCloseBillModal({
           )}
         </div>
 
-        {/* Section beli paket baru — disembunyikan untuk pembayaran online & voucher */}
-        {!paidOnline && !paidWithVoucher && (
+        {/* Section beli paket baru — disembunyikan untuk pembayaran online */}
+        {!paidOnline && (
         <div style={{ marginBottom: 16, padding: 14, background: '#243352', borderRadius: 10, border: '1px solid rgba(255,255,255,0.1)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
             <input type="checkbox" id="buyPkg" checked={buyingPackage} onChange={e => setBuyingPackage(e.target.checked)} />
