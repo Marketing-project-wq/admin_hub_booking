@@ -17,6 +17,7 @@ interface Props {
   patientPhone: string
   services: { service_id: string; service_name: string; price: number }[]
   paidOnline?: boolean
+  paidWithVoucher?: boolean
   onClose: () => void
   onSuccess: (transaction: ClinicTransaction) => void
 }
@@ -25,7 +26,7 @@ const METHODS = ['cash', 'transfer', 'qris', 'debit', 'kredit'] as const
 const METHOD_LABEL: Record<string, string> = { cash: 'Cash', transfer: 'Transfer', qris: 'QRIS', debit: 'Debit', kredit: 'Kredit' }
 
 export default function ClinicCloseBillModal({
-  visitId, patientId, patientName, patientCode, patientPhone, services, paidOnline, onClose, onSuccess,
+  visitId, patientId, patientName, patientCode, patientPhone, services, paidOnline, paidWithVoucher, onClose, onSuccess,
 }: Props) {
   const { user } = useAuth()
   const [discount, setDiscount] = useState(0)
@@ -105,7 +106,7 @@ export default function ClinicCloseBillModal({
 
   const handleConfirm = async () => {
     setError('')
-    if (!paidOnline && !method) { setError('Pilih metode pembayaran.'); return }
+    if (!paidOnline && !paidWithVoucher && !method) { setError('Pilih metode pembayaran.'); return }
     setSaving(true)
     try {
       const payment_detail: Record<string, string> = {}
@@ -119,12 +120,15 @@ export default function ClinicCloseBillModal({
         selectedNewPkg ? `Paket ${selectedNewPkg.name}` : null,
       ].filter(Boolean).join(' + ') || '-'
 
-      // Booking yang sudah dibayar online (Mayar): metode 'mayar', tanpa diskon, total penuh.
-      const finalPaymentMethod = paidOnline ? 'mayar' : method
-      const finalDiscount = paidOnline ? 0 : (Number(discount) || 0)
+      // Booking sudah dibayar online (Mayar) → metode 'mayar', total penuh.
+      // Booking dibayar voucher 100% → metode 'voucher', total 0, diskon penuh.
+      const finalPaymentMethod = paidOnline ? 'mayar' : paidWithVoucher ? 'voucher' : method
       const finalTotal = paidOnline
         ? services.reduce((sum, s) => sum + s.price, 0)
-        : grandTotal
+        : paidWithVoucher ? 0 : grandTotal
+      const finalDiscount = paidWithVoucher
+        ? services.reduce((sum, s) => sum + s.price, 0)
+        : paidOnline ? 0 : (Number(discount) || 0)
 
       const trx = await createTransaction({
         visit_id: visitId,
@@ -143,10 +147,11 @@ export default function ClinicCloseBillModal({
       await completeVisitPayment(visitId, finalPaymentMethod, finalTotal)
 
       // 1. Potong sesi paket aktif yang meng-cover layanan kunjungan ini (1 sesi per paket).
-      if (activePerformancePackage && coveredServices.some(s => isPerformanceService(s.service_name))) {
+      //    Lewati jika dibayar voucher 100% — jangan potong sesi paket.
+      if (!paidWithVoucher && activePerformancePackage && coveredServices.some(s => isPerformanceService(s.service_name))) {
         await usePackageSession(activePerformancePackage.id)
       }
-      if (activeMedicPackage && coveredServices.some(s => isMedicService(s.service_name))) {
+      if (!paidWithVoucher && activeMedicPackage && coveredServices.some(s => isMedicService(s.service_name))) {
         await usePackageSession(activeMedicPackage.id)
       }
 
@@ -297,24 +302,37 @@ export default function ClinicCloseBillModal({
         <div style={{ marginBottom: 16 }}>
           <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8 }}>Rincian Biaya</div>
 
-          {coveredServices.length > 0 && (
-            <div style={{ marginBottom: 8 }}>
-              <div style={{ fontSize: 11, color: '#34D399', fontWeight: 600, marginBottom: 4 }}>✓ Ter-cover Paket</div>
-              {coveredServices.map(s => (
-                <div key={s.service_name} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#A8B8D8', textDecoration: 'line-through' }}>
+          {paidWithVoucher ? (
+            services.map(s => (
+              <div key={s.service_name} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 }}>
+                <span style={{ textDecoration: 'line-through', color: '#6B7A99' }}>
+                  {s.service_name} — Rp {s.price.toLocaleString('id-ID')}
+                </span>
+                <span style={{ color: '#FCD34D', fontWeight: 600 }}>VOUCHER</span>
+              </div>
+            ))
+          ) : (
+            <>
+              {coveredServices.length > 0 && (
+                <div style={{ marginBottom: 8 }}>
+                  <div style={{ fontSize: 11, color: '#34D399', fontWeight: 600, marginBottom: 4 }}>✓ Ter-cover Paket</div>
+                  {coveredServices.map(s => (
+                    <div key={s.service_name} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#A8B8D8', textDecoration: 'line-through' }}>
+                      <span>{s.service_name}</span>
+                      <span>{fmtRp(s.price)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {uncoveredServices.map(s => (
+                <div key={s.service_name} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 4 }}>
                   <span>{s.service_name}</span>
                   <span>{fmtRp(s.price)}</span>
                 </div>
               ))}
-            </div>
+            </>
           )}
-
-          {uncoveredServices.map(s => (
-            <div key={s.service_name} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 4 }}>
-              <span>{s.service_name}</span>
-              <span>{fmtRp(s.price)}</span>
-            </div>
-          ))}
 
           {selectedNewPkg && (
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 4, color: '#93C5FD' }}>
@@ -330,14 +348,26 @@ export default function ClinicCloseBillModal({
             </div>
           )}
 
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 15, borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 8, marginTop: 4 }}>
-            <span>Total</span>
-            <span style={{ color: '#C0392B' }}>{fmtRp(grandTotal)}</span>
-          </div>
+          {paidWithVoucher ? (
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 8, marginTop: 4 }}>
+              <span>Total</span>
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ textDecoration: 'line-through', color: '#6B7A99', fontSize: 12 }}>
+                  Rp {services.reduce((s, i) => s + i.price, 0).toLocaleString('id-ID')}
+                </div>
+                <div style={{ color: '#FCD34D', fontSize: 16 }}>Rp 0</div>
+              </div>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 15, borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 8, marginTop: 4 }}>
+              <span>Total</span>
+              <span style={{ color: '#C0392B' }}>{fmtRp(grandTotal)}</span>
+            </div>
+          )}
         </div>
 
-        {/* Section beli paket baru — disembunyikan untuk pembayaran online */}
-        {!paidOnline && (
+        {/* Section beli paket baru — disembunyikan untuk pembayaran online & voucher */}
+        {!paidOnline && !paidWithVoucher && (
         <div style={{ marginBottom: 16, padding: 14, background: '#243352', borderRadius: 10, border: '1px solid rgba(255,255,255,0.1)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
             <input type="checkbox" id="buyPkg" checked={buyingPackage} onChange={e => setBuyingPackage(e.target.checked)} />
@@ -401,8 +431,25 @@ export default function ClinicCloseBillModal({
           </div>
         )}
 
+        {/* Banner: sudah dibayar dengan voucher */}
+        {paidWithVoucher && (
+          <div style={{ padding: '12px 14px', borderRadius: 10,
+            background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)',
+            marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 18 }}>🎟️</span>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: '#FCD34D' }}>
+                Sudah Dibayar dengan Voucher
+              </div>
+              <div style={{ fontSize: 11, color: '#A8B8D8' }}>
+                Pasien menggunakan voucher 100% — tidak ada biaya tambahan
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Discount */}
-        {!paidOnline && (
+        {!paidOnline && !paidWithVoucher && (
           <div className="form-group">
             <label>Diskon (Rp)</label>
             <input type="number" min={0} value={discount} onChange={e => setDiscount(Math.max(0, Number(e.target.value)))} />
@@ -410,7 +457,7 @@ export default function ClinicCloseBillModal({
         )}
 
         {/* Payment method */}
-        {!paidOnline && (
+        {!paidOnline && !paidWithVoucher && (
           <>
             <label style={{ fontSize: 11, fontWeight: 600, display: 'block', marginBottom: 8, color: '#A8B8D8', textTransform: 'uppercase', letterSpacing: 1 }}>Metode Pembayaran</label>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
@@ -575,8 +622,8 @@ export default function ClinicCloseBillModal({
 
         <div className="modal-footer">
           <button className="btn-secondary" onClick={onClose}>Batal</button>
-          <button className="btn-primary" onClick={handleConfirm} disabled={saving || (!paidOnline && !method)}>
-            {saving ? 'Memproses...' : (paidOnline ? 'Konfirmasi & Selesai →' : 'Konfirmasi Pembayaran →')}
+          <button className="btn-primary" onClick={handleConfirm} disabled={saving || (!paidOnline && !paidWithVoucher && !method)}>
+            {saving ? 'Memproses...' : (paidOnline ? 'Konfirmasi & Selesai →' : paidWithVoucher ? 'Konfirmasi Voucher & Selesai →' : 'Konfirmasi Pembayaran →')}
           </button>
         </div>
       </div>
