@@ -106,7 +106,7 @@ export default function ClinicCloseBillModal({
 
   const handleConfirm = async () => {
     setError('')
-    if (!paidOnline && !paidWithVoucher && !method) { setError('Pilih metode pembayaran.'); return }
+    if (!paidOnline && !((paidWithVoucher && !buyingPackage) || method)) { setError('Pilih metode pembayaran.'); return }
     setSaving(true)
     try {
       const payment_detail: Record<string, string> = {}
@@ -120,9 +120,14 @@ export default function ClinicCloseBillModal({
         selectedNewPkg ? `Paket ${selectedNewPkg.name}` : null,
       ].filter(Boolean).join(' + ') || '-'
 
-      // Booking sudah dibayar online (Mayar) → metode 'mayar', total penuh.
-      // Booking dibayar voucher 100% → metode 'voucher', total 0, diskon penuh.
-      const finalPaymentMethod = paidOnline ? 'mayar' : paidWithVoucher ? 'voucher' : method
+      // Booking online (Mayar) → metode 'mayar', total penuh.
+      // Voucher 100% tanpa paket → metode 'voucher', total 0, diskon penuh.
+      // Voucher + beli paket → metode terpilih (bayar paket), total = harga paket.
+      const finalPaymentMethod = paidOnline
+        ? 'mayar'
+        : paidWithVoucher
+          ? (buyingPackage ? method : 'voucher')
+          : method
       const finalTotal = paidOnline
         ? services.reduce((sum, s) => sum + s.price, 0)
         : paidWithVoucher
@@ -459,7 +464,7 @@ export default function ClinicCloseBillModal({
         )}
 
         {/* Payment method */}
-        {!paidOnline && !paidWithVoucher && (
+        {!paidOnline && (!paidWithVoucher || buyingPackage) && (
           <>
             <label style={{ fontSize: 11, fontWeight: 600, display: 'block', marginBottom: 8, color: '#A8B8D8', textTransform: 'uppercase', letterSpacing: 1 }}>Metode Pembayaran</label>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
@@ -624,7 +629,7 @@ export default function ClinicCloseBillModal({
 
         <div className="modal-footer">
           <button className="btn-secondary" onClick={onClose}>Batal</button>
-          <button className="btn-primary" onClick={handleConfirm} disabled={saving || (!paidOnline && !paidWithVoucher && !method)}>
+          <button className="btn-primary" onClick={handleConfirm} disabled={saving || (!paidOnline && !((paidWithVoucher && !buyingPackage) || method))}>
             {saving ? 'Memproses...' : (paidOnline ? 'Konfirmasi & Selesai →' : paidWithVoucher ? 'Konfirmasi Voucher & Selesai →' : 'Konfirmasi Pembayaran →')}
           </button>
         </div>
