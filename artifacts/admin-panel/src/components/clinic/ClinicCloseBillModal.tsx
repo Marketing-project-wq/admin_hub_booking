@@ -125,7 +125,9 @@ export default function ClinicCloseBillModal({
       const finalPaymentMethod = paidOnline ? 'mayar' : paidWithVoucher ? 'voucher' : method
       const finalTotal = paidOnline
         ? services.reduce((sum, s) => sum + s.price, 0)
-        : paidWithVoucher ? 0 : grandTotal
+        : paidWithVoucher
+          ? (buyingPackage ? packageSubtotal : 0)
+          : grandTotal
       const finalDiscount = paidWithVoucher
         ? services.reduce((sum, s) => sum + s.price, 0)
         : paidOnline ? 0 : (Number(discount) || 0)
@@ -355,7 +357,7 @@ export default function ClinicCloseBillModal({
                 <div style={{ textDecoration: 'line-through', color: '#6B7A99', fontSize: 12 }}>
                   Rp {services.reduce((s, i) => s + i.price, 0).toLocaleString('id-ID')}
                 </div>
-                <div style={{ color: '#FCD34D', fontSize: 16 }}>Rp 0</div>
+                <div style={{ color: '#FCD34D', fontSize: 16 }}>{fmtRp(buyingPackage ? packageSubtotal : 0)}</div>
               </div>
             </div>
           ) : (
