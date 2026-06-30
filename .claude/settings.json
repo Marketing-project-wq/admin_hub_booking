@@ -1,7 +1,16 @@
 {
   "permissions": {
     "allow": [
-      "mcp__claude_ai_Supabase__list_tables"
+      "mcp__claude_ai_Supabase__list_tables",
+      "Bash(find src *)",
+      "Bash(ls src/index.css)",
+      "Bash(ls tsconfig*.json)",
+      "Bash(pnpm --filter @workspace/clinic-admin dev)",
+      "Bash(pnpm --filter @workspace/arena-admin dev)",
+      "Bash(break)",
+      "Bash(sed -i \"s#from '\\\\.\\\\./\\\\.\\\\./context/AuthContext'#from '@workspace/admin-shared'#g\" pages/gym/GymDashboard.tsx)",
+      "Bash(grep -rnE \"lib/supabase|lib/format|context/AuthContext|/ConfirmModal|hooks/use-mobile\" pages/gym)",
+      "Bash(PORT=4000 node server.js)"
     ]
   }
 }

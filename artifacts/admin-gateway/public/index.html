@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>20FIT Admin</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      body {
+        font-family: 'Inter', system-ui, sans-serif;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: radial-gradient(1200px 600px at 50% -10%, #1e2d4a 0%, #0f1923 55%, #0a0f17 100%);
+        color: #F0F4FF;
+        padding: 24px;
+      }
+      .wrap { width: 100%; max-width: 760px; text-align: center; }
+      .brand {
+        font-size: 40px;
+        font-weight: 700;
+        letter-spacing: 2px;
+        margin-bottom: 6px;
+      }
+      .brand span { color: #C0392B; }
+      .subtitle {
+        font-size: 13px;
+        text-transform: uppercase;
+        letter-spacing: 3px;
+        color: #8aa0c6;
+        margin-bottom: 40px;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 16px;
+      }
+      @media (max-width: 640px) { .grid { grid-template-columns: 1fr; } }
+      .card {
+        display: block;
+        text-decoration: none;
+        color: inherit;
+        background: rgba(26, 39, 64, 0.7);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 16px;
+        padding: 32px 20px;
+        transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+      }
+      .card:hover {
+        transform: translateY(-4px);
+        border-color: rgba(192, 57, 43, 0.6);
+        background: rgba(30, 45, 74, 0.9);
+      }
+      .icon { font-size: 40px; margin-bottom: 14px; }
+      .card h2 { font-size: 18px; font-weight: 600; margin-bottom: 6px; }
+      .card p { font-size: 12px; color: #8aa0c6; }
+      .footer { margin-top: 40px; font-size: 11px; color: #5a6b87; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="brand">20<span>FIT</span></div>
+      <div class="subtitle">Admin Portal</div>
+      <div class="grid">
+        <a class="card" href="/clinic">
+          <div class="icon">🏥</div>
+          <h2>20FIT Clinic</h2>
+          <p>Physiotherapy &amp; sports medicine</p>
+        </a>
+        <a class="card" href="/arena">
+          <div class="icon">🏟</div>
+          <h2>20FIT Arena</h2>
+          <p>Slot booking, kelas &amp; voucher</p>
+        </a>
+        <a class="card" href="/gym">
+          <div class="icon">🏋️</div>
+          <h2>20FIT Gym</h2>
+          <p>Gym &amp; fitness operations</p>
+        </a>
+      </div>
+      <div class="footer">© 2026 20FIT. All rights reserved.</div>
+    </div>
+  </body>
+</html>
