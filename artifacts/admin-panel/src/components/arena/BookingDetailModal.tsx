@@ -55,6 +55,19 @@ export default function BookingDetailModal({ type, booking, onClose, onRefresh }
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
+  const [isEditing, setIsEditing] = useState(false)
+  const [editForm, setEditForm] = useState({
+    booking_date: String(booking.booking_date || ''),
+    start_time: String(booking.start_time || ''),
+    end_time: String(booking.end_time || ''),
+    full_name: String(booking.full_name || ''),
+    email: String(booking.email || ''),
+    phone: String(booking.phone || ''),
+    price: Number(booking.price || 0),
+  })
+  const [editError, setEditError] = useState('')
+  const [editLoading, setEditLoading] = useState(false)
+
   const table = type === 'slot' ? 'arena_bookings' : 'arena_class_bookings'
   const status = booking.status as string
   const statusInfo = STATUS_LABEL[status] || { label: status, css: '' }
@@ -82,6 +95,51 @@ export default function BookingDetailModal({ type, booking, onClose, onRefresh }
     setConfirmAction(null); onRefresh(); onClose()
   }
 
+  const handleSaveEdit = async () => {
+    setEditLoading(true)
+    setEditError('')
+    try {
+      // Validasi slot availability jika tanggal/jam berubah
+      const dateChanged = editForm.booking_date !== String(booking.booking_date)
+      const timeChanged = editForm.start_time !== String(booking.start_time) || editForm.end_time !== String(booking.end_time)
+
+      if (dateChanged || timeChanged) {
+        const { data: isAvailable } = await supabase.rpc('check_slot_available', {
+          p_unit_id: booking.unit_id,
+          p_date: editForm.booking_date,
+          p_start_time: editForm.start_time,
+          p_end_time: editForm.end_time,
+          p_exclude_id: booking.id,
+        })
+        if (isAvailable === false) {
+          setEditError('Slot pada tanggal/jam tersebut tidak tersedia.')
+          setEditLoading(false)
+          return
+        }
+      }
+
+      const { error } = await supabase.from('arena_bookings').update({
+        booking_date: editForm.booking_date,
+        start_time: editForm.start_time,
+        end_time: editForm.end_time,
+        full_name: editForm.full_name.trim(),
+        email: editForm.email.trim() || null,
+        phone: editForm.phone.trim(),
+        price: editForm.price,
+        updated_at: new Date().toISOString(),
+      }).eq('id', booking.id)
+
+      if (error) throw error
+      setIsEditing(false)
+      onRefresh()
+      onClose()
+    } catch (e) {
+      setEditError(e instanceof Error ? e.message : 'Gagal menyimpan perubahan')
+    } finally {
+      setEditLoading(false)
+    }
+  }
+
   const schedule = booking.schedule as Record<string, unknown> | undefined
   const classType = schedule?.class_type as Record<string, unknown> | undefined
   const unit = booking.unit as Record<string, unknown> | undefined
@@ -105,23 +163,87 @@ export default function BookingDetailModal({ type, booking, onClose, onRefresh }
             <span className="detail-value" style={{ fontWeight: 700 }}>{String(booking.booking_code || '')}</span>
           </div>
 
-          {type === 'slot' ? (
-            <>
-              <div className="detail-row"><span className="detail-label">Unit</span><span className="detail-value">{unit?.name as string || String(booking.unit_id || '')}</span></div>
-              <div className="detail-row"><span className="detail-label">Tanggal</span><span className="detail-value">{fmtDate(booking.booking_date as string)}</span></div>
-              <div className="detail-row"><span className="detail-label">Waktu</span><span className="detail-value">{fmtTime(booking.start_time as string)} – {fmtTime(booking.end_time as string)}</span></div>
-            </>
+          {type === 'slot' && isEditing ? (
+            <div className="modal-section">
+              <div style={{ marginBottom: 12 }}>
+                <label style={{ fontSize: 12, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Tanggal</label>
+                <input type="date" value={editForm.booking_date}
+                  onChange={e => setEditForm(prev => ({ ...prev, booking_date: e.target.value }))}
+                  style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid var(--border)' }} />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+                <div>
+                  <label style={{ fontSize: 12, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Jam Mulai</label>
+                  <input type="time" value={editForm.start_time}
+                    onChange={e => setEditForm(prev => ({ ...prev, start_time: e.target.value }))}
+                    style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid var(--border)' }} />
+                </div>
+                <div>
+                  <label style={{ fontSize: 12, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Jam Selesai</label>
+                  <input type="time" value={editForm.end_time}
+                    onChange={e => setEditForm(prev => ({ ...prev, end_time: e.target.value }))}
+                    style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid var(--border)' }} />
+                </div>
+              </div>
+              <div style={{ marginBottom: 12 }}>
+                <label style={{ fontSize: 12, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Nama Customer</label>
+                <input type="text" value={editForm.full_name}
+                  onChange={e => setEditForm(prev => ({ ...prev, full_name: e.target.value }))}
+                  style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid var(--border)' }} />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+                <div>
+                  <label style={{ fontSize: 12, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Email</label>
+                  <input type="email" value={editForm.email}
+                    onChange={e => setEditForm(prev => ({ ...prev, email: e.target.value }))}
+                    style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid var(--border)' }} />
+                </div>
+                <div>
+                  <label style={{ fontSize: 12, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Telp</label>
+                  <input type="text" value={editForm.phone}
+                    onChange={e => setEditForm(prev => ({ ...prev, phone: e.target.value }))}
+                    style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid var(--border)' }} />
+                </div>
+              </div>
+              <div style={{ marginBottom: 12 }}>
+                <label style={{ fontSize: 12, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Harga Final</label>
+                <input type="number" value={editForm.price}
+                  onChange={e => setEditForm(prev => ({ ...prev, price: Number(e.target.value) }))}
+                  style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid var(--border)' }} />
+              </div>
+
+              {editError && <p style={{ color: 'var(--red)', fontSize: 13, marginBottom: 12 }}>{editError}</p>}
+
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button className="btn-secondary" onClick={() => { setIsEditing(false); setEditError('') }} style={{ flex: 1 }}>
+                  Batal
+                </button>
+                <button className="btn-primary" disabled={editLoading} onClick={handleSaveEdit} style={{ flex: 1 }}>
+                  {editLoading ? 'Menyimpan...' : 'Simpan Perubahan'}
+                </button>
+              </div>
+            </div>
           ) : (
             <>
-              <div className="detail-row"><span className="detail-label">Kelas</span><span className="detail-value">{classType?.name as string || '-'}</span></div>
-              <div className="detail-row"><span className="detail-label">Jadwal</span><span className="detail-value">{fmtDate(schedule?.schedule_date as string)} {fmtTime(schedule?.start_time as string)}–{fmtTime(schedule?.end_time as string)}</span></div>
-              <div className="detail-row"><span className="detail-label">Instruktur</span><span className="detail-value">{schedule?.instructor as string || '-'}</span></div>
+              {type === 'slot' ? (
+                <>
+                  <div className="detail-row"><span className="detail-label">Unit</span><span className="detail-value">{unit?.name as string || String(booking.unit_id || '')}</span></div>
+                  <div className="detail-row"><span className="detail-label">Tanggal</span><span className="detail-value">{fmtDate(booking.booking_date as string)}</span></div>
+                  <div className="detail-row"><span className="detail-label">Waktu</span><span className="detail-value">{fmtTime(booking.start_time as string)} – {fmtTime(booking.end_time as string)}</span></div>
+                </>
+              ) : (
+                <>
+                  <div className="detail-row"><span className="detail-label">Kelas</span><span className="detail-value">{classType?.name as string || '-'}</span></div>
+                  <div className="detail-row"><span className="detail-label">Jadwal</span><span className="detail-value">{fmtDate(schedule?.schedule_date as string)} {fmtTime(schedule?.start_time as string)}–{fmtTime(schedule?.end_time as string)}</span></div>
+                  <div className="detail-row"><span className="detail-label">Instruktur</span><span className="detail-value">{schedule?.instructor as string || '-'}</span></div>
+                </>
+              )}
+
+              <div className="detail-row"><span className="detail-label">Customer</span><span className="detail-value">{String(booking.full_name || '')}</span></div>
+              <div className="detail-row"><span className="detail-label">Email</span><span className="detail-value">{String(booking.email || '-')}</span></div>
+              <div className="detail-row"><span className="detail-label">Telp</span><span className="detail-value">{String(booking.phone || '-')}</span></div>
             </>
           )}
-
-          <div className="detail-row"><span className="detail-label">Customer</span><span className="detail-value">{String(booking.full_name || '')}</span></div>
-          <div className="detail-row"><span className="detail-label">Email</span><span className="detail-value">{String(booking.email || '-')}</span></div>
-          <div className="detail-row"><span className="detail-label">Telp</span><span className="detail-value">{String(booking.phone || '-')}</span></div>
           <div className="detail-row"><span className="detail-label">Tipe</span><span className="detail-value">{String(booking.customer_type || '')} / {String(booking.booker_type || '')}</span></div>
           {!!booking.notes && <div className="detail-row"><span className="detail-label">Notes</span><span className="detail-value">{String(booking.notes)}</span></div>}
           {type === 'slot' && !!booking.voucher_code && <div className="detail-row"><span className="detail-label">Voucher</span><span className="detail-value">{String(booking.voucher_code)}</span></div>}
@@ -203,12 +325,17 @@ export default function BookingDetailModal({ type, booking, onClose, onRefresh }
 
           <div className="modal-footer">
             <button className="btn-secondary" onClick={onClose}>Tutup</button>
-            {status === 'pending_payment' && (
+            {type === 'slot' && status !== 'cancelled' && !isEditing && (
+              <button className="btn-secondary" onClick={() => setIsEditing(true)}>
+                ✏️ Edit
+              </button>
+            )}
+            {!isEditing && status === 'pending_payment' && (
               <button className="btn-primary" disabled={loading} onClick={() => setConfirmAction('confirm')}>
                 Konfirmasi
               </button>
             )}
-            {status !== 'cancelled' && (
+            {!isEditing && status !== 'cancelled' && (
               <button className="btn-danger" disabled={loading} onClick={() => setConfirmAction('cancel')}>
                 Cancel
               </button>
