@@ -72,7 +72,7 @@ artifacts/admin-panel/src/
   - Slot Bookings (BK-): list, filter, detail modal, manual walk-in, confirm/cancel, CSV export
   - Class Bookings (CL-): same + quota validation on manual booking
   - Package Orders (PKG-): list, detail with package voucher info, CSV export
-  - Vouchers: full CRUD with form modal, toggle active
+  - Vouchers: full CRUD with form modal, toggle active, per-schedule scoping (assign a voucher to specific class schedules)
   - Master Data: Units, Class Types, Schedules (+ bulk repeat), Coaches, Add-ons, Blocked Slots
 
 ## User preferences
@@ -90,6 +90,7 @@ artifacts/admin-panel/src/
 - RPC `generate_booking_code()` → BK- prefix; `generate_class_booking_code()` → CL- prefix
 - `arena_class_schedules.instructor` stores the coach name as a string (not a FK)
 - Supabase anon key stored as secret `VITE_SUPABASE_ANON_KEY`; URL in `.env` as `VITE_SUPABASE_URL`
+- `arena_voucher_schedules` (voucher_id, schedule_id) scopes a voucher to specific schedules. **Backward compatible: no rows for a voucher → berlaku semua jadwal.** The customer app (separate `ARENA-BOOKING` repo) must enforce this at checkout. Voucher code column is `code` (not `voucher_code`).
 
 ## Pointers
 
