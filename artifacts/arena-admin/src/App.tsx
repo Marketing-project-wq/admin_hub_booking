@@ -4,6 +4,7 @@ import { AuthProvider, ProtectedRoute, Layout } from '@workspace/admin-shared'
 import LandingPage from './pages/LandingPage'
 import LoginPage from './pages/LoginPage'
 import ArenaDashboard from './pages/arena/ArenaDashboard'
+import ArenaCalendar from './pages/arena/ArenaCalendar'
 import ArenaVenueBooking from './pages/arena/ArenaVenueBooking'
 import ArenaSlotBookings from './pages/arena/ArenaSlotBookings'
 import ArenaClassBookings from './pages/arena/ArenaClassBookings'
@@ -34,6 +35,7 @@ export default function App() {
             }
           >
             <Route index element={<ArenaDashboard />} />
+            <Route path="calendar" element={<ArenaCalendar />} />
             <Route path="venue-booking" element={<ArenaVenueBooking />} />
             <Route path="slot-bookings" element={<ArenaSlotBookings />} />
             <Route path="class-bookings" element={<ArenaClassBookings />} />

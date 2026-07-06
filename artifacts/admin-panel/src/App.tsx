@@ -6,6 +6,7 @@ import Layout from './components/Layout'
 import LandingPage from './pages/LandingPage'
 import LoginPage from './pages/LoginPage'
 import ArenaDashboard from './pages/arena/ArenaDashboard'
+import ArenaCalendar from './pages/arena/ArenaCalendar'
 import ArenaSlotBookings from './pages/arena/ArenaSlotBookings'
 import ArenaClassBookings from './pages/arena/ArenaClassBookings'
 import ArenaPackageOrders from './pages/arena/ArenaPackageOrders'
@@ -75,6 +76,7 @@ export default function App() {
             }
           >
             <Route index element={<ArenaDashboard />} />
+            <Route path="calendar" element={<ArenaCalendar />} />
             <Route path="venue-booking" element={<ArenaVenueBooking />} />
             <Route path="slot-bookings" element={<ArenaSlotBookings />} />
             <Route path="class-bookings" element={<ArenaClassBookings />} />

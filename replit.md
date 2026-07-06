@@ -39,6 +39,7 @@ artifacts/admin-panel/src/
 │   ├── LoginPage.tsx              # "/login/:unit" — unit-specific login
 │   └── arena/
 │       ├── ArenaDashboard.tsx     # KPIs (4), bar chart 6mo, recent bookings, status summary
+│       ├── ArenaCalendar.tsx      # Month grid: kelas + venue booking dalam satu view, detail modal per event
 │       ├── ArenaVenueBooking.tsx  # BK- venue bookings dari komunitas/event, full CRUD + export
 │       ├── ArenaSlotBookings.tsx  # BK- bookings CRUD, manual booking, export
 │       ├── ArenaClassBookings.tsx # CL- bookings CRUD, manual booking, export
@@ -68,6 +69,7 @@ artifacts/admin-panel/src/
 - **Batch 1 v2:** Public landing → unit-specific login → protected dashboards
 - **Batch 2 (Arena Full):**
   - Dashboard with period-filtered KPIs, 6-month revenue bar chart, recent bookings
+  - Kalender: month grid semua aktivitas arena (kelas + venue booking) dalam satu view, navigasi bulan, klik event → detail modal (peserta kelas / detail venue)
   - Venue Booking: create booking dari admin (komunitas/event eksternal), detail modal, tandai lunas, cancel, filter (search/status/date range), CSV export
   - Slot Bookings (BK-): list, filter, detail modal, manual walk-in, confirm/cancel, CSV export
   - Class Bookings (CL-): same + quota validation on manual booking
