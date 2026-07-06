@@ -93,6 +93,7 @@ artifacts/admin-panel/src/
 - RPC `generate_booking_code()` → BK- prefix; `generate_class_booking_code()` → CL- prefix
 - `arena_class_schedules.instructor` stores the coach name as a string (not a FK)
 - Supabase anon key stored as secret `VITE_SUPABASE_ANON_KEY`; URL in `.env` as `VITE_SUPABASE_URL`
+- `supabase/functions/mayar-webhook-arena/index.ts` di-mirror dari Supabase Edge Function (v33) sebagai source-of-truth manual — edit di sini lalu **deploy ulang ke Supabase** (repo ini tidak auto-deploy edge functions). Fungsi ini memanggil `send-meta-capi` (event `Purchase`) setelah `arena_class_bookings` confirmed.
 - `arena_voucher_schedules` (voucher_id, schedule_id) scopes a voucher to specific schedules. **Backward compatible: no rows for a voucher → berlaku semua jadwal.** The customer app (separate `ARENA-BOOKING` repo) must enforce this at checkout. Voucher code column is `code` (not `voucher_code`).
 
 ## Pointers
