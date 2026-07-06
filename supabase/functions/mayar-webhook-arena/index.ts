@@ -1,3 +1,10 @@
+// ───────────────────────────────────────────────────────────────────────────
+// ⚠️  MIRROR dari Supabase Edge Function "mayar-webhook-arena" (project cpvzwqptzcxnwzfzgrmt, verify_jwt=false).
+// Snapshot untuk git. Repo ini TIDAK auto-deploy edge functions — kalau ada
+// perubahan, WAJIB deploy ulang manual ke Supabase (supabase functions deploy mayar-webhook-arena,
+// atau Supabase MCP deploy_edge_function). Jangan edit lalu lupa deploy.
+// ───────────────────────────────────────────────────────────────────────────
+
 // supabase/functions/mayar-webhook-arena/index.ts
 // v9 — tambah group booking support: semua member group di-confirm sekaligus
 import { createClient } from "jsr:@supabase/supabase-js@2"
