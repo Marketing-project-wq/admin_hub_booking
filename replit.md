@@ -75,7 +75,7 @@ artifacts/admin-panel/src/
   - Class Bookings (CL-): same + quota validation on manual booking
   - Package Orders (PKG-): list, detail with package voucher info, CSV export
   - Vouchers: full CRUD with form modal, toggle active, per-schedule scoping (assign a voucher to specific class schedules)
-  - Analytics: kelola tracking pixel (Meta Pixel, GTM, TikTok Pixel) via `arena_tracking_config` — toggle aktif + input ID per tracker (untuk customer booking app)
+  - Analytics: kelola tracking pixel (Meta Pixel + CAPI access token/test event code, GTM, TikTok Pixel) via `arena_tracking_config` — toggle aktif + input per tracker; card Meta gabung 3 row (1 tombol Simpan)
   - Master Data: Units, Class Types, Schedules (+ bulk repeat), Coaches, Add-ons, Blocked Slots
 
 ## User preferences
