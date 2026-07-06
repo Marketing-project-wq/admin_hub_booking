@@ -34,7 +34,7 @@ export default function ArenaClassBookings() {
       .select(`
         id, booking_code, schedule_id, booker_type, customer_type,
         full_name, email, phone, notes, price, discount, price_before_disc,
-        status, payment_method, payment_ref, paid_at, created_at, updated_at,
+        status, payment_method, payment_ref, voucher_code, paid_at, created_at, updated_at,
         group_id,
         addons:arena_class_booking_addons(
           id, addon_name, addon_price, qty, subtotal
@@ -291,21 +291,26 @@ export default function ArenaClassBookings() {
                   <td><span className={`badge ${s.css}`}>{s.label}</span></td>
                   <td>{row.payment_method as string || '-'}</td>
                   <td style={{ fontSize: 11, fontFamily: 'monospace', color: 'var(--text-muted)' }}>
-                    {row.payment_ref ? (
-                      <span
-                        title={`Mayar ID: ${row.payment_ref as string}`}
-                        style={{
-                          display: 'inline-block',
-                          maxWidth: 80,
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                          cursor: 'help',
-                        }}
-                      >
-                        {row.payment_ref as string}
-                      </span>
-                    ) : '-'}
+                    {(() => {
+                      const isVoucher = row.payment_method === 'voucher'
+                      const refValue = (isVoucher ? row.voucher_code : row.payment_ref) as string | null
+                      if (!refValue) return '-'
+                      return (
+                        <span
+                          title={isVoucher ? `Voucher: ${refValue}` : `Mayar ID: ${refValue}`}
+                          style={{
+                            display: 'inline-block',
+                            maxWidth: 80,
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                            cursor: 'help',
+                          }}
+                        >
+                          {refValue}
+                        </span>
+                      )
+                    })()}
                   </td>
                   <td style={{ fontSize: 12, whiteSpace: 'nowrap', color: 'var(--text-muted)' }}>
                     {row.paid_at ? fmtDate(row.paid_at as string) : '-'}
