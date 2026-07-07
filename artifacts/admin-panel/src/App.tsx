@@ -20,6 +20,7 @@ import ArenaAddons from './pages/arena/master/ArenaAddons'
 import ArenaBlockedSlots from './pages/arena/master/ArenaBlockedSlots'
 import ArenaUserManagement from './pages/arena/ArenaUserManagement'
 import ArenaAnalytics from './pages/arena/ArenaAnalytics'
+import ArenaApiKeys from './pages/arena/ArenaApiKeys'
 import GymDashboard from './pages/gym/GymDashboard'
 import ClinicDashboard from './pages/clinic/ClinicDashboard'
 import ClinicBookings from './pages/clinic/ClinicBookings'
@@ -84,6 +85,7 @@ export default function App() {
             <Route path="vouchers" element={<ArenaVouchers />} />
             <Route path="users" element={<ArenaUserManagement />} />
             <Route path="analytics" element={<ArenaAnalytics />} />
+            <Route path="api-keys" element={<ArenaApiKeys />} />
             <Route path="master/units" element={<ArenaUnits />} />
             <Route path="master/class-types" element={<ArenaClassTypes />} />
             <Route path="master/schedules" element={<ArenaSchedules />} />
