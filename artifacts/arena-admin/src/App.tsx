@@ -12,6 +12,7 @@ import ArenaPackageOrders from './pages/arena/ArenaPackageOrders'
 import ArenaVouchers from './pages/arena/ArenaVouchers'
 import ArenaUserManagement from './pages/arena/ArenaUserManagement'
 import ArenaAnalytics from './pages/arena/ArenaAnalytics'
+import ArenaApiKeys from './pages/arena/ArenaApiKeys'
 import ArenaUnits from './pages/arena/master/ArenaUnits'
 import ArenaClassTypes from './pages/arena/master/ArenaClassTypes'
 import ArenaSchedules from './pages/arena/master/ArenaSchedules'
@@ -43,6 +44,7 @@ export default function App() {
             <Route path="vouchers" element={<ArenaVouchers />} />
             <Route path="users" element={<ArenaUserManagement />} />
             <Route path="analytics" element={<ArenaAnalytics />} />
+            <Route path="api-keys" element={<ArenaApiKeys />} />
             <Route path="master/units" element={<ArenaUnits />} />
             <Route path="master/class-types" element={<ArenaClassTypes />} />
             <Route path="master/schedules" element={<ArenaSchedules />} />

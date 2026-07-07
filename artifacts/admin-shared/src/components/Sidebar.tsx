@@ -25,6 +25,7 @@ const UNIT_MENUS: Record<string, MenuItem[]> = {
     { label: 'Package Orders', path: '/arena/packages',           icon: '◻' },
     { label: 'Vouchers',       path: '/arena/vouchers',           icon: '◻' },
     { label: 'Analytics',      path: '/arena/analytics',          icon: '◻' },
+    { label: 'API Keys',       path: '/arena/api-keys',           icon: '◻' },
     { label: 'User Management', path: '/arena/users',             icon: '◻' },
     { label: '— Master Data',  path: null,                        divider: true },
     { label: 'Units',          path: '/arena/master/units',       icon: '◻' },
