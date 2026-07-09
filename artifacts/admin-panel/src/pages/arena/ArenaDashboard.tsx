@@ -329,8 +329,8 @@ export default function ArenaDashboard() {
             }}
             style={{
               padding: '6px 14px', borderRadius: 20, cursor: 'pointer',
-              border: `1.5px solid ${activePreset === p.label ? 'var(--text-primary)' : 'var(--border)'}`,
-              background: activePreset === p.label ? 'var(--text-primary)' : '#fff',
+              border: `1.5px solid ${activePreset === p.label ? 'var(--red)' : 'var(--border-strong)'}`,
+              background: activePreset === p.label ? 'var(--red)' : 'var(--bg-input)',
               color: activePreset === p.label ? '#fff' : 'var(--text-primary)',
               fontSize: 13, fontWeight: 500, transition: 'all 0.15s',
             }}
@@ -342,8 +342,8 @@ export default function ArenaDashboard() {
           onClick={() => { setShowCustom(!showCustom); setActivePreset('') }}
           style={{
             padding: '6px 14px', borderRadius: 20, cursor: 'pointer',
-            border: `1.5px solid ${showCustom ? 'var(--text-primary)' : 'var(--border)'}`,
-            background: showCustom ? 'var(--text-primary)' : '#fff',
+            border: `1.5px solid ${showCustom ? 'var(--red)' : 'var(--border-strong)'}`,
+            background: showCustom ? 'var(--red)' : 'var(--bg-input)',
             color: showCustom ? '#fff' : 'var(--text-muted)',
             fontSize: 13,
           }}
@@ -369,8 +369,8 @@ export default function ArenaDashboard() {
       </div>
 
       {/* ── SALES — dark theme ────────────────────────────────────────────── */}
-      <div style={{ borderRadius: 12, overflow: 'hidden', marginBottom: 24 }}>
-        <div style={{ background: 'var(--text-primary)', padding: '16px 24px', display: 'flex', alignItems: 'center', gap: 10 }}>
+      <div className="panel-dark" style={{ borderRadius: 12, overflow: 'hidden', marginBottom: 24 }}>
+        <div style={{ background: '#111', padding: '16px 24px', display: 'flex', alignItems: 'center', gap: 10 }}>
           <span style={{ fontSize: 18 }}>💰</span>
           <div>
             <div style={{ fontWeight: 700, fontSize: 16, color: '#fff' }}>Sales</div>
@@ -403,7 +403,7 @@ export default function ArenaDashboard() {
       </div>
 
       {/* ── REVENUE — red/light theme ─────────────────────────────────────── */}
-      <div style={{ borderRadius: 12, overflow: 'hidden', marginBottom: 24 }}>
+      <div className="panel-light" style={{ borderRadius: 12, overflow: 'hidden', marginBottom: 24 }}>
         <div style={{
           background: 'linear-gradient(135deg, var(--red) 0%, #922B21 100%)',
           padding: '16px 24px', display: 'flex', alignItems: 'center', gap: 10,

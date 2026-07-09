@@ -1,5 +1,6 @@
 import React from 'react'
 import { useNavigate } from 'react-router-dom'
+import ThemeToggle from '../components/ThemeToggle'
 
 const units = [
   {
@@ -30,6 +31,7 @@ export default function LandingPage() {
 
   return (
     <div className="landing-page">
+      <ThemeToggle />
       <header className="landing-header">
         <h1 className="brand">20FIT</h1>
         <p className="brand-sub">Admin Panel</p>

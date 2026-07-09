@@ -1,6 +1,7 @@
 import React from 'react'
 import { NavLink, Link, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { useTheme } from '../context/ThemeContext'
 
 interface SidebarProps {
   currentUnit: 'arena' | 'gym' | 'clinic'
@@ -57,6 +58,7 @@ const UNIT_MENUS: Record<string, MenuItem[]> = {
 
 export default function Sidebar({ currentUnit, open, onClose }: SidebarProps) {
   const { user, logout } = useAuth()
+  const { theme, toggleTheme } = useTheme()
   const navigate = useNavigate()
   const location = useLocation()
   const menus = UNIT_MENUS[currentUnit] || []
@@ -171,13 +173,28 @@ export default function Sidebar({ currentUnit, open, onClose }: SidebarProps) {
           </div>
         )}
 
+        <button
+          type="button"
+          className="theme-toggle"
+          onClick={toggleTheme}
+          aria-label={theme === 'dark' ? 'Aktifkan mode terang' : 'Aktifkan mode gelap'}
+          title={theme === 'dark' ? 'Mode Terang' : 'Mode Gelap'}
+        >
+          <span className={`theme-toggle-track${theme === 'dark' ? ' on' : ''}`}>
+            <span className="theme-toggle-icon sun" aria-hidden="true">☀</span>
+            <span className="theme-toggle-icon moon" aria-hidden="true">☾</span>
+            <span className="theme-toggle-thumb" />
+          </span>
+          <span className="theme-toggle-label">{theme === 'dark' ? 'Mode Gelap' : 'Mode Terang'}</span>
+        </button>
+
         <div className="sidebar-user">
           <div className="sidebar-user-name">{user?.full_name}</div>
           <div className="sidebar-user-role">
             {user?.role === 'super_admin' ? 'SUPER ADMIN' : user?.role?.toUpperCase()}
           </div>
         </div>
-        <button onClick={handleLogout}>Logout</button>
+        <button className="logout-btn" onClick={handleLogout}>Logout</button>
       </div>
     </aside>
   )

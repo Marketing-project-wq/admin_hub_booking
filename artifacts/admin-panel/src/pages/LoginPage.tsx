@@ -1,6 +1,7 @@
 import React, { useState, FormEvent } from 'react'
 import { useNavigate, useParams, Link, Navigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import ThemeToggle from '../components/ThemeToggle'
 
 const UNIT_LABELS: Record<string, string> = { arena: 'Arena', gym: 'Gym', clinic: 'Clinic' }
 
@@ -38,6 +39,7 @@ export default function LoginPage() {
 
   return (
     <div className="login-page">
+      <ThemeToggle />
       <div className="login-card">
         <Link to="/" className="back-link">← Kembali</Link>
         <h1 className="brand">20FIT</h1>
