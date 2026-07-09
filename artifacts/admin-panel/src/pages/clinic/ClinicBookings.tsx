@@ -10,7 +10,7 @@ import {
 } from '../../lib/clinic'
 
 const PAGE_SIZE = 20
-const RED = '#C0392B'
+const RED = 'var(--red)'
 
 export default function ClinicBookings() {
   const { user } = useAuth()
@@ -357,7 +357,7 @@ export default function ClinicBookings() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
             <div style={{ width: 10, height: 10, borderRadius: '50%',
               background: RED, animation: 'pulse 1.5s infinite' }} />
-            <span style={{ fontWeight: 700, fontSize: 14, color: '#F0F4FF' }}>
+            <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>
               Pasien Menunggu Check-in ({arrivedBookings.length})
             </span>
           </div>
@@ -365,12 +365,12 @@ export default function ClinicBookings() {
             {arrivedBookings.map(b => (
               <div key={b.id} style={{ display: 'flex', justifyContent: 'space-between',
                 alignItems: 'center', padding: '10px 14px', borderRadius: 10,
-                background: '#1a2740', border: '1px solid rgba(255,255,255,0.08)' }}>
+                background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
                 <div>
-                  <div style={{ fontWeight: 600, fontSize: 14, color: '#F0F4FF' }}>
+                  <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)' }}>
                     {(b as any).full_name}
                   </div>
-                  <div style={{ fontSize: 12, color: '#A8B8D8' }}>
+                  <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
                     {(b as any).service?.name ?? '-'} · {(b as any).slot?.start_time?.slice(0, 5) ?? '-'} WIB
                   </div>
                 </div>
@@ -498,7 +498,7 @@ export default function ClinicBookings() {
 
             {manualStep === 1 && (
               <div>
-                <h3 style={{ color: '#F0F4FF', marginBottom: 16 }}>Step 1: Pilih Pasien</h3>
+                <h3 style={{ color: 'var(--text-primary)', marginBottom: 16 }}>Step 1: Pilih Pasien</h3>
 
                 {/* Toggle: Pasien Lama / Baru */}
                 <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
@@ -506,8 +506,8 @@ export default function ClinicBookings() {
                     onClick={() => setManualPatientMode('search')}
                     style={{
                       flex: 1, padding: '8px 0', borderRadius: 8, fontSize: 13, fontWeight: 600,
-                      background: manualPatientMode === 'search' ? '#C0392B' : '#243352',
-                      color: manualPatientMode === 'search' ? '#fff' : '#A8B8D8',
+                      background: manualPatientMode === 'search' ? 'var(--red)' : 'var(--bg-elevated)',
+                      color: manualPatientMode === 'search' ? '#fff' : 'var(--text-secondary)',
                       border: 'none', cursor: 'pointer',
                     }}
                   >
@@ -517,8 +517,8 @@ export default function ClinicBookings() {
                     onClick={() => setManualPatientMode('new')}
                     style={{
                       flex: 1, padding: '8px 0', borderRadius: 8, fontSize: 13, fontWeight: 600,
-                      background: manualPatientMode === 'new' ? '#C0392B' : '#243352',
-                      color: manualPatientMode === 'new' ? '#fff' : '#A8B8D8',
+                      background: manualPatientMode === 'new' ? 'var(--red)' : 'var(--bg-elevated)',
+                      color: manualPatientMode === 'new' ? '#fff' : 'var(--text-secondary)',
                       border: 'none', cursor: 'pointer',
                     }}
                   >
@@ -535,11 +535,11 @@ export default function ClinicBookings() {
                         onKeyDown={e => e.key === 'Enter' && searchPatients()}
                         placeholder="Cari nama, HP, atau kode pasien..."
                         style={{ flex: 1, padding: '10px 12px', borderRadius: 8,
-                          background: '#152034', border: '1px solid rgba(255,255,255,0.12)',
-                          color: '#F0F4FF', fontSize: 13 }}
+                          background: 'var(--bg-input)', border: '1px solid var(--border-strong)',
+                          color: 'var(--text-primary)', fontSize: 13 }}
                       />
                       <button onClick={searchPatients} disabled={searchLoading}
-                        style={{ padding: '10px 16px', borderRadius: 8, background: '#C0392B',
+                        style={{ padding: '10px 16px', borderRadius: 8, background: 'var(--red)',
                           color: '#fff', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
                         {searchLoading ? '...' : 'Cari'}
                       </button>
@@ -552,12 +552,12 @@ export default function ClinicBookings() {
                             onClick={() => { setSelectedPatient(p); setPatientResults([]) }}
                             style={{
                               padding: '10px 14px', borderRadius: 10, cursor: 'pointer',
-                              background: selectedPatient?.id === p.id ? 'rgba(192,57,43,0.15)' : '#243352',
-                              border: `1px solid ${selectedPatient?.id === p.id ? '#C0392B' : 'rgba(255,255,255,0.08)'}`,
+                              background: selectedPatient?.id === p.id ? 'rgba(192,57,43,0.15)' : 'var(--bg-elevated)',
+                              border: `1px solid ${selectedPatient?.id === p.id ? 'var(--red)' : 'var(--border)'}`,
                             }}
                           >
-                            <div style={{ color: '#F0F4FF', fontWeight: 600, fontSize: 13 }}>{p.full_name}</div>
-                            <div style={{ color: '#A8B8D8', fontSize: 11 }}>{p.patient_code} · {p.phone}</div>
+                            <div style={{ color: 'var(--text-primary)', fontWeight: 600, fontSize: 13 }}>{p.full_name}</div>
+                            <div style={{ color: 'var(--text-secondary)', fontSize: 11 }}>{p.patient_code} · {p.phone}</div>
                           </div>
                         ))}
                       </div>
@@ -574,7 +574,7 @@ export default function ClinicBookings() {
                       { key: 'id_number', label: 'Nomor KTP *', type: 'text', placeholder: '16 digit' },
                     ].map(field => (
                       <div key={field.key}>
-                        <label style={{ fontSize: 11, color: '#A8B8D8', textTransform: 'uppercase', letterSpacing: 1, display: 'block', marginBottom: 4 }}>
+                        <label style={{ fontSize: 11, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: 1, display: 'block', marginBottom: 4 }}>
                           {field.label}
                         </label>
                         <input
@@ -583,21 +583,21 @@ export default function ClinicBookings() {
                           value={newPatientForm[field.key as keyof typeof newPatientForm]}
                           onChange={e => setNewPatientForm(prev => ({ ...prev, [field.key]: e.target.value }))}
                           style={{ width: '100%', padding: '10px 12px', borderRadius: 8,
-                            background: '#152034', border: '1px solid rgba(255,255,255,0.12)',
-                            color: '#F0F4FF', fontSize: 13, boxSizing: 'border-box' as const }}
+                            background: 'var(--bg-input)', border: '1px solid var(--border-strong)',
+                            color: 'var(--text-primary)', fontSize: 13, boxSizing: 'border-box' as const }}
                         />
                       </div>
                     ))}
                     <div>
-                      <label style={{ fontSize: 11, color: '#A8B8D8', textTransform: 'uppercase', letterSpacing: 1, display: 'block', marginBottom: 4 }}>
+                      <label style={{ fontSize: 11, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: 1, display: 'block', marginBottom: 4 }}>
                         Jenis Kelamin *
                       </label>
                       <select
                         value={newPatientForm.gender}
                         onChange={e => setNewPatientForm(prev => ({ ...prev, gender: e.target.value }))}
                         style={{ width: '100%', padding: '10px 12px', borderRadius: 8,
-                          background: '#152034', border: '1px solid rgba(255,255,255,0.12)',
-                          color: '#F0F4FF', fontSize: 13 }}
+                          background: 'var(--bg-input)', border: '1px solid var(--border-strong)',
+                          color: 'var(--text-primary)', fontSize: 13 }}
                       >
                         <option value="male">Laki-laki</option>
                         <option value="female">Perempuan</option>
@@ -610,8 +610,8 @@ export default function ClinicBookings() {
                   <div style={{ padding: '12px 14px', borderRadius: 10,
                     background: 'rgba(192,57,43,0.1)', border: '1px solid rgba(192,57,43,0.3)',
                     marginBottom: 16 }}>
-                    <div style={{ color: '#F0F4FF', fontWeight: 600 }}>✓ {selectedPatient.full_name}</div>
-                    <div style={{ color: '#A8B8D8', fontSize: 12 }}>{selectedPatient.patient_code} · {selectedPatient.phone}</div>
+                    <div style={{ color: 'var(--text-primary)', fontWeight: 600 }}>✓ {selectedPatient.full_name}</div>
+                    <div style={{ color: 'var(--text-secondary)', fontSize: 12 }}>{selectedPatient.patient_code} · {selectedPatient.phone}</div>
                   </div>
                 )}
 
@@ -623,8 +623,8 @@ export default function ClinicBookings() {
                   onClick={handleStep1Continue}
                   disabled={!step1Ready || manualLoading}
                   style={{ width: '100%', padding: 12, borderRadius: 8,
-                    background: step1Ready ? '#C0392B' : '#243352',
-                    color: step1Ready ? '#fff' : '#6B7A99',
+                    background: step1Ready ? 'var(--red)' : 'var(--bg-elevated)',
+                    color: step1Ready ? '#fff' : 'var(--text-muted)',
                     border: 'none', cursor: step1Ready ? 'pointer' : 'not-allowed',
                     fontWeight: 600, fontSize: 14 }}
                 >
@@ -635,17 +635,17 @@ export default function ClinicBookings() {
 
             {manualStep === 2 && (
               <div>
-                <h3 style={{ color: '#F0F4FF', marginBottom: 16 }}>Step 2: Layanan & Detail</h3>
+                <h3 style={{ color: 'var(--text-primary)', marginBottom: 16 }}>Step 2: Layanan & Detail</h3>
 
                 {/* Pasien terpilih */}
-                <div style={{ padding: '8px 12px', borderRadius: 8, background: '#243352',
-                  marginBottom: 16, fontSize: 12, color: '#A8B8D8' }}>
-                  Pasien: <strong style={{ color: '#F0F4FF' }}>{selectedPatient?.full_name}</strong>
+                <div style={{ padding: '8px 12px', borderRadius: 8, background: 'var(--bg-elevated)',
+                  marginBottom: 16, fontSize: 12, color: 'var(--text-secondary)' }}>
+                  Pasien: <strong style={{ color: 'var(--text-primary)' }}>{selectedPatient?.full_name}</strong>
                 </div>
 
                 {/* Pilih Layanan */}
                 <div style={{ marginBottom: 14 }}>
-                  <label style={{ fontSize: 11, color: '#A8B8D8', textTransform: 'uppercase',
+                  <label style={{ fontSize: 11, color: 'var(--text-secondary)', textTransform: 'uppercase',
                     letterSpacing: 1, display: 'block', marginBottom: 6 }}>
                     Pilih Layanan *
                   </label>
@@ -660,8 +660,8 @@ export default function ClinicBookings() {
                       e.target.value = ''
                     }}
                     style={{ width: '100%', padding: '10px 12px', borderRadius: 8,
-                      background: '#152034', border: '1px solid rgba(255,255,255,0.12)',
-                      color: '#F0F4FF', fontSize: 13 }}
+                      background: 'var(--bg-input)', border: '1px solid var(--border-strong)',
+                      color: 'var(--text-primary)', fontSize: 13 }}
                   >
                     <option value="">— Pilih layanan —</option>
                     {services.filter(s => !manualServices.some(ms => ms.service_id === s.id)).map(s => (
@@ -674,8 +674,8 @@ export default function ClinicBookings() {
                       {manualServices.map(s => (
                         <span key={s.service_id} style={{
                           padding: '4px 10px', borderRadius: 999,
-                          background: '#243352', border: '1px solid rgba(255,255,255,0.1)',
-                          color: '#F0F4FF', fontSize: 12, display: 'flex', alignItems: 'center', gap: 6
+                          background: 'var(--bg-elevated)', border: '1px solid var(--border)',
+                          color: 'var(--text-primary)', fontSize: 12, display: 'flex', alignItems: 'center', gap: 6
                         }}>
                           {s.service_name}
                           <button onClick={() => setManualServices(prev => prev.filter(ms => ms.service_id !== s.service_id))}
@@ -689,19 +689,19 @@ export default function ClinicBookings() {
 
                 {patientActivePackages.length > 0 && (
                   <div style={{ marginBottom: 14 }}>
-                    <label style={{ fontSize: 11, color: '#A8B8D8', textTransform: 'uppercase',
+                    <label style={{ fontSize: 11, color: 'var(--text-secondary)', textTransform: 'uppercase',
                       letterSpacing: 1, display: 'block', marginBottom: 8 }}>
                       Paket Aktif Pasien
                     </label>
 
                     {/* Opsi tidak pakai paket */}
                     <label style={{ display: 'flex', alignItems: 'center', gap: 8,
-                      fontSize: 13, cursor: 'pointer', marginBottom: 6, color: '#A8B8D8' }}>
+                      fontSize: 13, cursor: 'pointer', marginBottom: 6, color: 'var(--text-secondary)' }}>
                       <input
                         type="radio"
                         checked={usePackageId === null}
                         onChange={() => { setUsePackageId(null); setPackageServiceId(null) }}
-                        style={{ accentColor: '#C0392B' }}
+                        style={{ accentColor: 'var(--red)' }}
                       />
                       Tidak menggunakan paket
                     </label>
@@ -714,12 +714,12 @@ export default function ClinicBookings() {
                             type="radio"
                             checked={usePackageId === pp.id}
                             onChange={() => { setUsePackageId(pp.id); setPackageServiceId(null) }}
-                            style={{ accentColor: '#C0392B' }}
+                            style={{ accentColor: 'var(--red)' }}
                           />
-                          <span style={{ color: '#F0F4FF', fontWeight: 600 }}>
+                          <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>
                             📦 {pp.package.name}
                           </span>
-                          <span style={{ color: '#A8B8D8', fontSize: 11 }}>
+                          <span style={{ color: 'var(--text-secondary)', fontSize: 11 }}>
                             · Sisa {pp.remaining_sessions} sesi
                           </span>
                         </label>
@@ -740,12 +740,12 @@ export default function ClinicBookings() {
                               </div>
                               {coverableServices.map(s => (
                                 <label key={s.id} style={{ display: 'flex', alignItems: 'center',
-                                  gap: 8, fontSize: 13, cursor: 'pointer', marginBottom: 4, color: '#A8B8D8' }}>
+                                  gap: 8, fontSize: 13, cursor: 'pointer', marginBottom: 4, color: 'var(--text-secondary)' }}>
                                   <input
                                     type="radio"
                                     checked={packageServiceId === s.id}
                                     onChange={() => setPackageServiceId(s.id)}
-                                    style={{ accentColor: '#C0392B' }}
+                                    style={{ accentColor: 'var(--red)' }}
                                   />
                                   {s.name}
                                   <span style={{ color: '#34D399', fontSize: 11, fontWeight: 600 }}>GRATIS</span>
@@ -762,36 +762,36 @@ export default function ClinicBookings() {
                 {/* Tanggal & Jam */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
                   <div>
-                    <label style={{ fontSize: 11, color: '#A8B8D8', textTransform: 'uppercase',
+                    <label style={{ fontSize: 11, color: 'var(--text-secondary)', textTransform: 'uppercase',
                       letterSpacing: 1, display: 'block', marginBottom: 6 }}>Tanggal *</label>
                     <input type="date" value={manualDate}
                       onChange={e => setManualDate(e.target.value)}
                       style={{ width: '100%', padding: '10px 12px', borderRadius: 8,
-                        background: '#152034', border: '1px solid rgba(255,255,255,0.12)',
-                        color: '#F0F4FF', fontSize: 13, boxSizing: 'border-box' }} />
+                        background: 'var(--bg-input)', border: '1px solid var(--border-strong)',
+                        color: 'var(--text-primary)', fontSize: 13, boxSizing: 'border-box' }} />
                   </div>
                   <div>
-                    <label style={{ fontSize: 11, color: '#A8B8D8', textTransform: 'uppercase',
+                    <label style={{ fontSize: 11, color: 'var(--text-secondary)', textTransform: 'uppercase',
                       letterSpacing: 1, display: 'block', marginBottom: 6 }}>Jam</label>
                     <input type="time" value={manualTime}
                       onChange={e => setManualTime(e.target.value)}
                       style={{ width: '100%', padding: '10px 12px', borderRadius: 8,
-                        background: '#152034', border: '1px solid rgba(255,255,255,0.12)',
-                        color: '#F0F4FF', fontSize: 13, boxSizing: 'border-box' }} />
+                        background: 'var(--bg-input)', border: '1px solid var(--border-strong)',
+                        color: 'var(--text-primary)', fontSize: 13, boxSizing: 'border-box' }} />
                   </div>
                 </div>
 
                 {/* Keluhan */}
                 <div style={{ marginBottom: 16 }}>
-                  <label style={{ fontSize: 11, color: '#A8B8D8', textTransform: 'uppercase',
+                  <label style={{ fontSize: 11, color: 'var(--text-secondary)', textTransform: 'uppercase',
                     letterSpacing: 1, display: 'block', marginBottom: 6 }}>Keluhan Utama</label>
                   <textarea value={manualComplaint}
                     onChange={e => setManualComplaint(e.target.value)}
                     rows={3}
                     placeholder="Deskripsikan keluhan pasien..."
                     style={{ width: '100%', padding: '10px 12px', borderRadius: 8,
-                      background: '#152034', border: '1px solid rgba(255,255,255,0.12)',
-                      color: '#F0F4FF', fontSize: 13, resize: 'vertical', boxSizing: 'border-box' }} />
+                      background: 'var(--bg-input)', border: '1px solid var(--border-strong)',
+                      color: 'var(--text-primary)', fontSize: 13, resize: 'vertical', boxSizing: 'border-box' }} />
                 </div>
 
                 {manualError && (
@@ -801,16 +801,16 @@ export default function ClinicBookings() {
                 <div style={{ display: 'flex', gap: 10 }}>
                   <button onClick={() => setManualStep(1)}
                     style={{ flex: 1, padding: 12, borderRadius: 8,
-                      background: '#243352', border: '1px solid rgba(255,255,255,0.1)',
-                      color: '#A8B8D8', cursor: 'pointer', fontWeight: 600 }}>
+                      background: 'var(--bg-elevated)', border: '1px solid var(--border)',
+                      color: 'var(--text-secondary)', cursor: 'pointer', fontWeight: 600 }}>
                     ← Kembali
                   </button>
                   <button
                     onClick={handleManualSubmit}
                     disabled={(manualServices.length === 0 && !packageServiceId) || manualLoading}
                     style={{ flex: 2, padding: 12, borderRadius: 8,
-                      background: (manualServices.length > 0 || packageServiceId) ? '#C0392B' : '#243352',
-                      color: (manualServices.length > 0 || packageServiceId) ? '#fff' : '#6B7A99',
+                      background: (manualServices.length > 0 || packageServiceId) ? 'var(--red)' : 'var(--bg-elevated)',
+                      color: (manualServices.length > 0 || packageServiceId) ? '#fff' : 'var(--text-muted)',
                       border: 'none', cursor: (manualServices.length > 0 || packageServiceId) ? 'pointer' : 'not-allowed',
                       fontWeight: 600, fontSize: 14 }}>
                     {manualLoading ? 'Menyimpan...' : 'Buat Kunjungan →'}
@@ -822,18 +822,18 @@ export default function ClinicBookings() {
             {manualStep === 3 && (
               <div style={{ textAlign: 'center', padding: '20px 0' }}>
                 <div style={{ fontSize: 48, marginBottom: 12 }}>✅</div>
-                <h3 style={{ color: '#F0F4FF', marginBottom: 8 }}>Kunjungan Berhasil Dibuat!</h3>
-                <p style={{ color: '#A8B8D8', fontSize: 13, marginBottom: 8 }}>
-                  Pasien: <strong style={{ color: '#F0F4FF' }}>{selectedPatient?.full_name}</strong>
+                <h3 style={{ color: 'var(--text-primary)', marginBottom: 8 }}>Kunjungan Berhasil Dibuat!</h3>
+                <p style={{ color: 'var(--text-secondary)', fontSize: 13, marginBottom: 8 }}>
+                  Pasien: <strong style={{ color: 'var(--text-primary)' }}>{selectedPatient?.full_name}</strong>
                 </p>
-                <p style={{ color: '#A8B8D8', fontSize: 13, marginBottom: 24 }}>
+                <p style={{ color: 'var(--text-secondary)', fontSize: 13, marginBottom: 24 }}>
                   Layanan: {manualServices.map(s => s.service_name).join(', ')}
                 </p>
-                <p style={{ color: '#6B7A99', fontSize: 12, marginBottom: 24 }}>
+                <p style={{ color: 'var(--text-muted)', fontSize: 12, marginBottom: 24 }}>
                   Kunjungan sudah masuk ke menu Visits dan Triase.
                 </p>
                 <button onClick={resetManualModal}
-                  style={{ padding: '12px 32px', borderRadius: 8, background: '#C0392B',
+                  style={{ padding: '12px 32px', borderRadius: 8, background: 'var(--red)',
                     color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 14 }}>
                   Selesai
                 </button>
@@ -868,42 +868,42 @@ export default function ClinicBookings() {
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)',
           display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
           padding: 16 }}>
-          <div style={{ background: '#1a2740', border: '1px solid rgba(255,255,255,0.1)',
+          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)',
             borderRadius: 16, padding: 24, width: '100%', maxWidth: 440 }}>
 
             {/* Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between',
               alignItems: 'center', marginBottom: 20 }}>
               <div>
-                <div style={{ fontWeight: 700, fontSize: 16, color: '#F0F4FF' }}>
+                <div style={{ fontWeight: 700, fontSize: 16, color: 'var(--text-primary)' }}>
                   Check-in Pasien
                 </div>
-                <div style={{ fontSize: 12, color: '#A8B8D8', marginTop: 2 }}>
+                <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>
                   {(checkinBooking as any).booking_code}
                 </div>
               </div>
               <button onClick={() => { setShowCheckinModal(false); setCheckinKtp(''); setCheckinError(null) }}
-                style={{ background: 'none', border: 'none', color: '#6B7A99',
+                style={{ background: 'none', border: 'none', color: 'var(--text-muted)',
                   cursor: 'pointer', fontSize: 20 }}>×</button>
             </div>
 
             {/* Info pasien */}
-            <div style={{ padding: '12px 14px', borderRadius: 10, background: '#243352',
+            <div style={{ padding: '12px 14px', borderRadius: 10, background: 'var(--bg-elevated)',
               marginBottom: 20 }}>
-              <div style={{ fontWeight: 600, fontSize: 15, color: '#F0F4FF', marginBottom: 4 }}>
+              <div style={{ fontWeight: 600, fontSize: 15, color: 'var(--text-primary)', marginBottom: 4 }}>
                 {(checkinBooking as any).full_name}
               </div>
-              <div style={{ fontSize: 12, color: '#A8B8D8' }}>
+              <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
                 {(checkinBooking as any).service?.name ?? '-'} · {(checkinBooking as any).slot?.start_time?.slice(0, 5) ?? '-'} WIB
               </div>
-              <div style={{ fontSize: 12, color: '#6B7A99', marginTop: 4 }}>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
                 {(checkinBooking as any).phone}
               </div>
             </div>
 
             {/* Input KTP */}
             <div style={{ marginBottom: 20 }}>
-              <label style={{ fontSize: 11, color: '#A8B8D8', textTransform: 'uppercase',
+              <label style={{ fontSize: 11, color: 'var(--text-secondary)', textTransform: 'uppercase',
                 letterSpacing: 1, display: 'block', marginBottom: 6 }}>
                 Nomor KTP / NIK
               </label>
@@ -914,11 +914,11 @@ export default function ClinicBookings() {
                 placeholder="16 digit NIK"
                 maxLength={16}
                 style={{ width: '100%', padding: '10px 12px', borderRadius: 8,
-                  background: '#152034', border: '1px solid rgba(255,255,255,0.12)',
-                  color: '#F0F4FF', fontSize: 14, fontFamily: "'JetBrains Mono', monospace",
+                  background: 'var(--bg-input)', border: '1px solid var(--border-strong)',
+                  color: 'var(--text-primary)', fontSize: 14, fontFamily: "'JetBrains Mono', monospace",
                   boxSizing: 'border-box' as const }}
               />
-              <div style={{ fontSize: 11, color: '#6B7A99', marginTop: 4 }}>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
                 Opsional — bisa diisi untuk melengkapi data rekam medis
               </div>
             </div>
@@ -931,8 +931,8 @@ export default function ClinicBookings() {
             <div style={{ display: 'flex', gap: 10 }}>
               <button
                 onClick={() => { setShowCheckinModal(false); setCheckinKtp(''); setCheckinError(null) }}
-                style={{ flex: 1, padding: 12, borderRadius: 8, background: '#243352',
-                  border: '1px solid rgba(255,255,255,0.1)', color: '#A8B8D8',
+                style={{ flex: 1, padding: 12, borderRadius: 8, background: 'var(--bg-elevated)',
+                  border: '1px solid var(--border)', color: 'var(--text-secondary)',
                   cursor: 'pointer', fontWeight: 600 }}>
                 Batal
               </button>

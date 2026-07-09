@@ -159,8 +159,8 @@ export default function ClinicVisitDetail() {
 function Info({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div>
-      <div style={{ color: '#6B7A99', fontSize: 10, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase' }}>{label}</div>
-      <div style={{ color: '#F0F4FF', fontWeight: 500, fontSize: 14, marginTop: 2 }}>{value}</div>
+      <div style={{ color: 'var(--text-muted)', fontSize: 10, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase' }}>{label}</div>
+      <div style={{ color: 'var(--text-primary)', fontWeight: 500, fontSize: 14, marginTop: 2 }}>{value}</div>
     </div>
   )
 }
@@ -176,7 +176,7 @@ function InfoTab({ visit, patient, transaction, onCloseBill, onViewReceipt }: {
     <div>
       {/* Ringkasan Kunjungan */}
       <h3 style={{ margin: '0 0 10px', fontSize: 15, fontWeight: 700 }}>Ringkasan Kunjungan</h3>
-      <div style={{ background: '#1a2740', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: 20, marginBottom: 16 }}>
+      <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, padding: 20, marginBottom: 16 }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '16px 20px' }}>
           <Info label="Visit Code" value={<span style={{ fontFamily: 'monospace' }}>{visit.visit_code}</span>} />
           <Info label="Tanggal" value={fmtDate(visit.visit_date)} />
@@ -201,7 +201,7 @@ function InfoTab({ visit, patient, transaction, onCloseBill, onViewReceipt }: {
         <div style={{ background: 'rgba(5,150,105,0.1)', border: '1px solid rgba(5,150,105,0.2)', borderRadius: 10, padding: 16, marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
           <div>
             <div style={{ fontWeight: 700, color: '#34D399', fontSize: 15 }}>✓ Lunas</div>
-            <div style={{ fontSize: 13, color: '#A8B8D8', marginTop: 4 }}>
+            <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>
               {fmtRp(transaction?.total_amount ?? visit.payment_amount ?? 0)} · {(transaction?.payment_method || visit.payment_method || '-').toUpperCase()}
             </div>
           </div>

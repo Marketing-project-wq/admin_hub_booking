@@ -56,7 +56,7 @@ export default function ClinicDashboard() {
       {error && <p style={{ color: 'var(--red)', fontSize: 13, marginBottom: 12 }}>{error}</p>}
 
       {/* ── KPI cards ────────────────────────────────────────────────────────── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 24 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12, marginBottom: 24 }}>
         {KPI.map(k => (
           <div key={k.key} className="card" style={{ borderTop: `3px solid ${k.color}`, display: 'flex', alignItems: 'center', gap: 14 }}>
             <span style={{ fontSize: 26 }}>{k.icon}</span>

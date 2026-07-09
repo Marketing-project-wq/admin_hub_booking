@@ -378,7 +378,7 @@ export default function ArenaDashboard() {
           </div>
         </div>
 
-        <div style={{ background: '#1a1a1a', padding: '20px 24px', display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12 }}>
+        <div style={{ background: '#1a1a1a', padding: '20px 24px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12 }}>
           {([
             { label: 'Total Sales', value: sales.total,   sub: `${salesCount} transaksi`,  color: '#fff' },
             { label: 'Class',       value: sales.class,   sub: 'Class booking',            color: '#60A5FA' },
@@ -415,7 +415,7 @@ export default function ArenaDashboard() {
           </div>
         </div>
 
-        <div style={{ background: '#FEF3F2', padding: '20px 24px', display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12 }}>
+        <div style={{ background: '#FEF3F2', padding: '20px 24px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12 }}>
           {([
             { label: 'Total Revenue', value: revenue.total,   sub: `${revenueCount} layanan`,  color: 'var(--text-primary)' },
             { label: 'Class',         value: revenue.class,   sub: 'Kelas berjalan',           color: '#2563EB' },

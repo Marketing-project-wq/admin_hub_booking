@@ -278,15 +278,15 @@ function VisitCard({ visit, queue = false, onStatusChange, onOpen, busy }: {
   const cardStyle: React.CSSProperties = {
     display: 'flex', gap: 14, alignItems: 'center',
     background: queue && s === 'in_progress' ? 'rgba(192,57,43,0.12)' : 'var(--bg-card)',
-    border: '1px solid rgba(255,255,255,0.08)',
-    borderLeft: `4px solid ${queue && s === 'in_progress' ? '#C0392B' : leftColor}`,
+    border: '1px solid var(--border)',
+    borderLeft: `4px solid ${queue && s === 'in_progress' ? 'var(--red)' : leftColor}`,
     borderRadius: 12, padding: 16, marginBottom: 8,
     opacity: s === 'completed' ? 0.8 : 1,
   }
   const timeBox: React.CSSProperties = {
     minWidth: 64, textAlign: 'center', padding: '8px 6px', borderRadius: 8, fontWeight: 700, fontSize: 14,
-    background: s === 'in_progress' ? 'rgba(192,57,43,0.2)' : '#243352',
-    color: s === 'in_progress' ? '#C0392B' : '#A8B8D8',
+    background: s === 'in_progress' ? 'rgba(192,57,43,0.2)' : 'var(--bg-elevated)',
+    color: s === 'in_progress' ? 'var(--red)' : 'var(--text-secondary)',
   }
 
   return (
@@ -327,7 +327,7 @@ function VisitCard({ visit, queue = false, onStatusChange, onOpen, busy }: {
 }
 
 const EmptyState = ({ children }: { children: React.ReactNode }) => (
-  <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)', background: 'var(--bg-card)', border: '1px dashed rgba(255,255,255,0.08)', borderRadius: 12 }}>{children}</div>
+  <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)', background: 'var(--bg-card)', border: '1px dashed var(--border)', borderRadius: 12 }}>{children}</div>
 )
 
 const SCREENING_SECTION_TITLE: React.CSSProperties = { fontWeight: 700, fontSize: 12, color: '#374151', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }
@@ -336,7 +336,7 @@ const SCREENING_SECTION_TITLE: React.CSSProperties = { fontWeight: 700, fontSize
 function ChipRow({ label, items, tone = 'gray' }: { label: string; items: string[]; tone?: 'gray' | 'red' }) {
   if (!items || items.length === 0) return null
   const chip: React.CSSProperties = tone === 'red'
-    ? { padding: '2px 8px', background: '#FEE2E2', color: '#C0392B', borderRadius: 999, fontSize: 11 }
+    ? { padding: '2px 8px', background: '#FEE2E2', color: 'var(--red)', borderRadius: 999, fontSize: 11 }
     : { padding: '2px 8px', background: '#F3F4F6', color: '#374151', borderRadius: 999, fontSize: 11 }
   return (
     <div style={{ marginBottom: 8 }}>
@@ -561,8 +561,8 @@ export default function ClinicDokter() {
             style={{
               padding: '10px 18px', border: 'none', background: 'none', cursor: 'pointer',
               fontWeight: tab === t ? 700 : 500, fontSize: 14,
-              color: tab === t ? '#C0392B' : 'var(--text-muted)',
-              borderBottom: tab === t ? '2px solid #C0392B' : '2px solid transparent',
+              color: tab === t ? 'var(--red)' : 'var(--text-muted)',
+              borderBottom: tab === t ? '2px solid var(--red)' : '2px solid transparent',
               marginBottom: -2,
             }}>{TAB_LABEL[t]}</button>
         ))}
@@ -613,13 +613,13 @@ export default function ClinicDokter() {
             onClick={e => e.stopPropagation()}
           >
             {/* Modal Header */}
-            <div style={{ background: '#0a1628', padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+            <div style={{ background: 'var(--bg-deep)', padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
               <div>
-                <div style={{ color: '#A8B8D8', fontSize: 11, letterSpacing: 1 }}>KUNJUNGAN</div>
-                <div style={{ color: '#F0F4FF', fontWeight: 700, fontSize: 15 }}>
+                <div style={{ color: 'var(--text-secondary)', fontSize: 11, letterSpacing: 1 }}>KUNJUNGAN</div>
+                <div style={{ color: 'var(--text-primary)', fontWeight: 700, fontSize: 15 }}>
                   {selectedVisit.patient?.full_name} · {selectedVisit.patient?.patient_code}
                 </div>
-                <div style={{ color: '#A8B8D8', fontSize: 12, marginTop: 2 }}>
+                <div style={{ color: 'var(--text-secondary)', fontSize: 12, marginTop: 2 }}>
                   {selectedVisit.services.map(s => s.service_name).join(' · ') || '-'} · {fmtTime(selectedVisit.visit_time ?? '')}
                 </div>
               </div>
@@ -627,7 +627,7 @@ export default function ClinicDokter() {
             </div>
 
             {/* Tab Bar */}
-            <div style={{ display: 'flex', borderBottom: '2px solid rgba(255,255,255,0.08)', background: '#0a1628', flexShrink: 0 }}>
+            <div style={{ display: 'flex', borderBottom: '2px solid var(--border)', background: 'var(--bg-deep)', flexShrink: 0 }}>
               {(['screening', 'consent', 'assessment', 'riwayat'] as const).map(t => (
                 <button
                   key={t}
@@ -635,8 +635,8 @@ export default function ClinicDokter() {
                   style={{
                     padding: '12px 20px', border: 'none', background: 'none', cursor: 'pointer', fontSize: 13,
                     fontWeight: modalTab === t ? 700 : 400,
-                    color: modalTab === t ? '#C0392B' : '#6B7A99',
-                    borderBottom: modalTab === t ? '2px solid #C0392B' : '2px solid transparent',
+                    color: modalTab === t ? 'var(--red)' : 'var(--text-muted)',
+                    borderBottom: modalTab === t ? '2px solid var(--red)' : '2px solid transparent',
                     marginBottom: -2, textTransform: 'capitalize',
                   }}
                 >
@@ -677,7 +677,7 @@ export default function ClinicDokter() {
 
                     {/* Chief Complaint */}
                     {screeningData.chief_complaint && (
-                      <div style={{ marginBottom: 12, padding: 12, background: '#FFF5F5', borderRadius: 8, borderLeft: '3px solid #C0392B' }}>
+                      <div style={{ marginBottom: 12, padding: 12, background: '#FFF5F5', borderRadius: 8, borderLeft: '3px solid var(--red)' }}>
                         <div style={{ fontSize: 11, color: '#9CA3AF', textTransform: 'uppercase', marginBottom: 4 }}>Keluhan Utama</div>
                         <div style={{ fontSize: 14, color: '#111' }}>{screeningData.chief_complaint}</div>
                       </div>
@@ -690,7 +690,7 @@ export default function ClinicDokter() {
                         {Object.entries(screeningData.par_q).map(([q, val]) => (
                           <div key={q} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid #F3F4F6', fontSize: 13 }}>
                             <span style={{ color: '#374151' }}>{q}</span>
-                            <span style={{ fontWeight: 700, color: val ? '#C0392B' : '#065F46' }}>{val ? 'Ya' : 'Tidak'}</span>
+                            <span style={{ fontWeight: 700, color: val ? 'var(--red)' : '#065F46' }}>{val ? 'Ya' : 'Tidak'}</span>
                           </div>
                         ))}
                       </div>
@@ -708,7 +708,7 @@ export default function ClinicDokter() {
                         <ChipRow label="Waktu Timbul" items={screeningData.msk_timing} />
                         {screeningData.msk_intensity !== null && (
                           <div style={{ fontSize: 13, color: '#374151', marginBottom: 8 }}>
-                            Intensitas Nyeri: <strong style={{ color: screeningData.msk_intensity >= 7 ? '#C0392B' : screeningData.msk_intensity >= 4 ? '#F59E0B' : '#065F46' }}>{screeningData.msk_intensity}/10</strong>
+                            Intensitas Nyeri: <strong style={{ color: screeningData.msk_intensity >= 7 ? 'var(--red)' : screeningData.msk_intensity >= 4 ? '#F59E0B' : '#065F46' }}>{screeningData.msk_intensity}/10</strong>
                           </div>
                         )}
                         <ChipRow label="Fungsi & Mobilitas" items={screeningData.msk_function} />
@@ -809,14 +809,14 @@ export default function ClinicDokter() {
                     ))}
 
                     <div style={{ marginBottom: 14 }}>
-                      <label style={{ fontSize: 12, fontWeight: 600, color: '#A8B8D8', display: 'block', marginBottom: 4 }}>Ditangani oleh</label>
+                      <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>Ditangani oleh</label>
                       <div style={{
                         padding: '10px 12px',
-                        background: '#243352',
-                        border: '1px solid rgba(255,255,255,0.08)',
+                        background: 'var(--bg-elevated)',
+                        border: '1px solid var(--border)',
                         borderRadius: 8,
                         fontSize: 14,
-                        color: '#A8B8D8',
+                        color: 'var(--text-secondary)',
                         fontWeight: 500,
                       }}>
                         {assessment.handled_by || user?.full_name || '-'}
@@ -824,7 +824,7 @@ export default function ClinicDokter() {
                     </div>
 
                     <div style={{ marginBottom: 14 }}>
-                      <label style={{ fontSize: 12, fontWeight: 600, color: '#A8B8D8', display: 'block', marginBottom: 4 }}>Catatan Tambahan</label>
+                      <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>Catatan Tambahan</label>
                       <textarea
                         value={assessment.notes}
                         onChange={e => setAssessment(prev => ({ ...prev, notes: e.target.value }))}
@@ -852,21 +852,21 @@ export default function ClinicDokter() {
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                       {medicalHistory.map((h, i) => (
                         <div key={h.visit_id} style={{
-                          background: '#1a2740',
-                          border: '1px solid rgba(255,255,255,0.08)',
+                          background: 'var(--bg-card)',
+                          border: '1px solid var(--border)',
                           borderRadius: 12,
                           overflow: 'hidden',
                         }}>
                           {/* Header kunjungan */}
                           <div style={{
-                            background: '#0a1628', padding: '10px 16px',
+                            background: 'var(--bg-deep)', padding: '10px 16px',
                             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                           }}>
                             <div>
                               <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 900, fontStyle: 'italic', fontSize: 11, color: '#9CA3AF', letterSpacing: 1, textTransform: 'uppercase' }}>
                                 Kunjungan #{medicalHistory.length - i}
                               </div>
-                              <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 13, color: '#F0F4FF', fontWeight: 600 }}>
+                              <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 13, color: 'var(--text-primary)', fontWeight: 600 }}>
                                 {new Date(h.visit_date).toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' })}
                                 {h.visit_time && ` · ${h.visit_time.slice(0, 5)}`}
                               </div>
@@ -881,7 +881,7 @@ export default function ClinicDokter() {
                             {h.chief_complaint && (
                               <div>
                                 <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: '#9CA3AF', marginBottom: 4 }}>Keluhan</div>
-                                <div style={{ fontSize: 13, color: '#A8B8D8', lineHeight: 1.6 }}>{h.chief_complaint}</div>
+                                <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6 }}>{h.chief_complaint}</div>
                               </div>
                             )}
 
@@ -893,7 +893,7 @@ export default function ClinicDokter() {
                                   {h.services.map(s => (
                                     <span key={s.service_name} style={{
                                       padding: '3px 10px', borderRadius: 999,
-                                      background: '#243352', fontSize: 12, color: '#A8B8D8',
+                                      background: 'var(--bg-elevated)', fontSize: 12, color: 'var(--text-secondary)',
                                       fontWeight: 500,
                                     }}>
                                       {s.service_name}
@@ -905,25 +905,25 @@ export default function ClinicDokter() {
 
                             {/* Assessment dokter */}
                             {h.assessment && (
-                              <div style={{ background: '#243352', borderRadius: 8, padding: '10px 12px' }}>
+                              <div style={{ background: 'var(--bg-elevated)', borderRadius: 8, padding: '10px 12px' }}>
                                 <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: '#9CA3AF', marginBottom: 8 }}>Kesimpulan Dokter</div>
 
                                 {h.assessment.diagnosis && (
                                   <div style={{ marginBottom: 6 }}>
-                                    <span style={{ fontSize: 11, fontWeight: 600, color: '#C0392B' }}>Diagnosis: </span>
-                                    <span style={{ fontSize: 12, color: '#A8B8D8' }}>{h.assessment.diagnosis}</span>
+                                    <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--red)' }}>Diagnosis: </span>
+                                    <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{h.assessment.diagnosis}</span>
                                   </div>
                                 )}
                                 {h.assessment.assessment && (
                                   <div style={{ marginBottom: 6 }}>
-                                    <span style={{ fontSize: 11, fontWeight: 600, color: '#A8B8D8' }}>Assessment: </span>
-                                    <span style={{ fontSize: 12, color: '#A8B8D8' }}>{h.assessment.assessment}</span>
+                                    <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)' }}>Assessment: </span>
+                                    <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{h.assessment.assessment}</span>
                                   </div>
                                 )}
                                 {h.assessment.plan && (
                                   <div>
-                                    <span style={{ fontSize: 11, fontWeight: 600, color: '#A8B8D8' }}>Plan: </span>
-                                    <span style={{ fontSize: 12, color: '#A8B8D8' }}>{h.assessment.plan}</span>
+                                    <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)' }}>Plan: </span>
+                                    <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{h.assessment.plan}</span>
                                   </div>
                                 )}
                               </div>
@@ -938,7 +938,7 @@ export default function ClinicDokter() {
             </div>
 
             {/* Modal Footer */}
-            <div style={{ padding: '12px 20px', borderTop: '1px solid rgba(255,255,255,0.08)', background: '#1a2740', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+            <div style={{ padding: '12px 20px', borderTop: '1px solid var(--border)', background: 'var(--bg-card)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
               <button className="btn-secondary" onClick={() => setShowVisitModal(false)} style={{ width: 'auto' }}>Tutup</button>
               {modalTab === 'assessment' && !assessmentLocked && (
                 <div style={{ display: 'flex', gap: 8 }}>
@@ -1024,7 +1024,7 @@ function RiwayatTab({ onOpenVisit }: { onOpenVisit: (visit: DokterVisit) => void
             <div key={p.id} onClick={() => selectPatient(p)}
               style={{
                 background: selectedPatient?.id === p.id ? 'rgba(192,57,43,0.12)' : 'var(--bg-card)',
-                border: '1px solid rgba(255,255,255,0.08)', borderLeft: selectedPatient?.id === p.id ? '4px solid #C0392B' : '1px solid rgba(255,255,255,0.08)',
+                border: '1px solid var(--border)', borderLeft: selectedPatient?.id === p.id ? '4px solid var(--red)' : '1px solid var(--border)',
                 borderRadius: 10, padding: 12, marginBottom: 8, cursor: 'pointer',
               }}>
               <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{p.full_name}</div>
@@ -1040,7 +1040,7 @@ function RiwayatTab({ onOpenVisit }: { onOpenVisit: (visit: DokterVisit) => void
           {!selectedPatient ? (
             <EmptyState>Pilih pasien untuk melihat riwayat kunjungan</EmptyState>
           ) : (
-            <div style={{ background: 'var(--bg-card)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: 16 }}>
+            <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, padding: 16 }}>
               <div style={{ fontWeight: 700, fontSize: 16, color: 'var(--text-primary)' }}>{selectedPatient.full_name}</div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '6px 16px', fontSize: 13, marginTop: 8, marginBottom: 16 }}>
                 <div><span style={{ color: 'var(--text-muted)' }}>Kode: </span><span style={{ fontFamily: 'monospace' }}>{selectedPatient.patient_code}</span></div>
@@ -1054,7 +1054,7 @@ function RiwayatTab({ onOpenVisit }: { onOpenVisit: (visit: DokterVisit) => void
               ) : patientVisits.length === 0 ? (
                 <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>Belum ada riwayat kunjungan</p>
               ) : patientVisits.map(v => (
-                <div key={v.id} style={{ borderTop: '1px solid rgba(255,255,255,0.08)', padding: '10px 0', display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
+                <div key={v.id} style={{ borderTop: '1px solid var(--border)', padding: '10px 0', display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
                   <div style={{ minWidth: 0 }}>
                     <div style={{ fontSize: 13, fontWeight: 600 }}>{fmtDate(v.visit_date)}{v.visit_time ? ` · ${fmtTime(v.visit_time)}` : ''}</div>
                     <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{v.services.map(s => s.service_name).join(', ') || '-'}</div>

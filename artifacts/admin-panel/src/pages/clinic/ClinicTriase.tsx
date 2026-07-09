@@ -82,27 +82,27 @@ const CONSENT_TITLE: Record<string, string> = {
 function CSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div style={{ marginBottom: 12 }}>
-      <div style={{ fontWeight: 700, fontSize: 12, letterSpacing: 0.4, textTransform: 'uppercase', color: '#A8B8D8', marginBottom: 5 }}>{title}</div>
+      <div style={{ fontWeight: 700, fontSize: 12, letterSpacing: 0.4, textTransform: 'uppercase', color: 'var(--text-secondary)', marginBottom: 5 }}>{title}</div>
       {children}
     </div>
   )
 }
 function CPara({ children }: { children: React.ReactNode }) {
-  return <p style={{ fontSize: 13, lineHeight: 1.6, margin: '0 0 8px', color: '#A8B8D8' }}>{children}</p>
+  return <p style={{ fontSize: 13, lineHeight: 1.6, margin: '0 0 8px', color: 'var(--text-secondary)' }}>{children}</p>
 }
 function CList({ items, ordered = false }: { items: string[]; ordered?: boolean }) {
   if (ordered) {
     return (
-      <ol style={{ margin: '4px 0 0', paddingLeft: 20, fontSize: 13, lineHeight: 1.6, color: '#A8B8D8' }}>
+      <ol style={{ margin: '4px 0 0', paddingLeft: 20, fontSize: 13, lineHeight: 1.6, color: 'var(--text-secondary)' }}>
         {items.map((it, i) => <li key={i} style={{ marginBottom: 3 }}>{it}</li>)}
       </ol>
     )
   }
   return (
-    <ul style={{ listStyle: 'none', margin: '4px 0 0', padding: 0, fontSize: 13, lineHeight: 1.6, color: '#A8B8D8' }}>
+    <ul style={{ listStyle: 'none', margin: '4px 0 0', padding: 0, fontSize: 13, lineHeight: 1.6, color: 'var(--text-secondary)' }}>
       {items.map((it, i) => (
         <li key={i} style={{ display: 'flex', gap: 8, marginBottom: 3 }}>
-          <span style={{ color: '#C0392B', flexShrink: 0, marginTop: 1, fontSize: 9 }}>●</span>
+          <span style={{ color: 'var(--red)', flexShrink: 0, marginTop: 1, fontSize: 9 }}>●</span>
           <span>{it}</span>
         </li>
       ))}
@@ -354,10 +354,10 @@ function NoAccess({ children }: { children: React.ReactNode }) {
 function Collapsible({ title, defaultOpen = false, children }: { title: string; defaultOpen?: boolean; children: React.ReactNode }) {
   const [open, setOpen] = useState(defaultOpen)
   return (
-    <div style={{ background: '#1a2740', borderLeft: '3px solid #C0392B', borderRadius: 8, padding: 16, marginBottom: 12, boxShadow: '0 1px 2px rgba(0,0,0,.2)' }}>
+    <div style={{ background: 'var(--bg-card)', borderLeft: '3px solid var(--red)', borderRadius: 8, padding: 16, marginBottom: 12, boxShadow: '0 1px 2px rgba(0,0,0,.2)' }}>
       <div onClick={() => setOpen(o => !o)}
         style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}>
-        <span style={{ color: '#C0392B', fontSize: 12, fontWeight: 700, letterSpacing: 0.4, textTransform: 'uppercase' }}>{title}</span>
+        <span style={{ color: 'var(--red)', fontSize: 12, fontWeight: 700, letterSpacing: 0.4, textTransform: 'uppercase' }}>{title}</span>
         <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>{open ? '▲' : '▼'}</span>
       </div>
       {open && <div style={{ marginTop: 14 }}>{children}</div>}
@@ -371,7 +371,7 @@ function MultiCheck({ options, value, onChange }: { options: string[]; value: st
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
       {options.map(opt => (
         <label key={opt} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
-          <input type="checkbox" checked={value.includes(opt)} onChange={() => toggle(opt)} style={{ width: 'auto', accentColor: '#C0392B' }} />
+          <input type="checkbox" checked={value.includes(opt)} onChange={() => toggle(opt)} style={{ width: 'auto', accentColor: 'var(--red)' }} />
           {opt}
         </label>
       ))}
@@ -389,8 +389,8 @@ function ChipSelect({ options, value, onChange }: { options: string[]; value: st
           <button type="button" key={opt} onClick={() => toggle(opt)}
             style={{
               padding: '5px 12px', borderRadius: 999, cursor: 'pointer', fontSize: 12.5, border: '1px solid',
-              borderColor: on ? '#C0392B' : 'rgba(255,255,255,0.12)',
-              background: on ? 'rgba(192,57,43,0.2)' : '#243352', color: on ? '#fff' : '#A8B8D8', fontWeight: on ? 600 : 400,
+              borderColor: on ? 'var(--red)' : 'var(--border-strong)',
+              background: on ? 'rgba(192,57,43,0.2)' : 'var(--bg-elevated)', color: on ? '#fff' : 'var(--text-secondary)', fontWeight: on ? 600 : 400,
             }}>{opt}</button>
         )
       })}
@@ -421,7 +421,7 @@ function Sub({ label, children }: { label: string; children: React.ReactNode }) 
 
 function VitalField({ label, suffix, children }: { label: string; suffix?: string; children: React.ReactNode }) {
   return (
-    <div style={{ border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, padding: '8px 10px', background: '#243352' }}>
+    <div style={{ border: '1px solid var(--border)', borderRadius: 8, padding: '8px 10px', background: 'var(--bg-elevated)' }}>
       <div style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.3, marginBottom: 4 }}>{label}</div>
       <div style={{ position: 'relative' }}>
         {children}
@@ -660,7 +660,7 @@ function ScreeningTab({ visit, patient, onToast, onSaved, isLocked, recordId, lo
               <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
                 <button type="button" onClick={() => set('par_q', { ...form.par_q, [key]: true })}
                   style={{ padding: '5px 16px', borderRadius: 6, border: '1px solid', cursor: 'pointer',
-                    borderColor: val ? '#C0392B' : 'var(--border, #E5E7EB)', background: val ? '#C0392B' : 'transparent', color: val ? '#fff' : 'var(--text-muted)', fontWeight: val ? 700 : 400 }}>Ya</button>
+                    borderColor: val ? 'var(--red)' : 'var(--border, #E5E7EB)', background: val ? 'var(--red)' : 'transparent', color: val ? '#fff' : 'var(--text-muted)', fontWeight: val ? 700 : 400 }}>Ya</button>
                 <button type="button" onClick={() => set('par_q', { ...form.par_q, [key]: false })}
                   style={{ padding: '5px 16px', borderRadius: 6, border: '1px solid', cursor: 'pointer',
                     borderColor: answered && !val ? '#374151' : 'var(--border, #E5E7EB)', background: answered && !val ? '#374151' : 'transparent', color: answered && !val ? '#fff' : 'var(--text-muted)', fontWeight: answered && !val ? 700 : 400 }}>Tidak</button>
@@ -724,7 +724,7 @@ function ScreeningTab({ visit, patient, onToast, onSaved, isLocked, recordId, lo
             <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 10 }}>
               {ACTIVITY_LEVELS.map(lvl => (
                 <label key={lvl} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}>
-                  <input type="radio" name="activity_level" checked={form.physical_activity_level === lvl} onChange={() => set('physical_activity_level', lvl)} style={{ width: 'auto', accentColor: '#C0392B' }} />
+                  <input type="radio" name="activity_level" checked={form.physical_activity_level === lvl} onChange={() => set('physical_activity_level', lvl)} style={{ width: 'auto', accentColor: 'var(--red)' }} />
                   {lvl}
                 </label>
               ))}
@@ -836,9 +836,9 @@ function ConsentTab({ visit, onToast, onSaved, isLocked, recordId, lockedAt, loc
         <>
           {types.map(type => <ConsentCard key={type} type={type} />)}
 
-          <div style={{ background: '#152034', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 10, padding: 20, marginBottom: 16 }}>
-            <h3 style={{ margin: '0 0 8px', fontSize: 15, fontWeight: 700, color: '#F0F4FF' }}>✍ Tanda Tangan Persetujuan</h3>
-            <p style={{ fontSize: 13, lineHeight: 1.6, marginTop: 0, color: '#A8B8D8' }}>
+          <div style={{ background: 'var(--bg-input)', border: '1px solid var(--border-strong)', borderRadius: 10, padding: 20, marginBottom: 16 }}>
+            <h3 style={{ margin: '0 0 8px', fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>✍ Tanda Tangan Persetujuan</h3>
+            <p style={{ fontSize: 13, lineHeight: 1.6, marginTop: 0, color: 'var(--text-secondary)' }}>
               Dengan menandatangani di bawah ini, saya menyatakan telah membaca dan menyetujui seluruh persetujuan di atas.
             </p>
 
@@ -955,7 +955,7 @@ const SignaturePad = forwardRef<SignaturePadHandle, { initial?: string | null }>
   return (
     <canvas
       ref={canvasRef} width={300} height={150}
-      style={{ border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, background: '#fff', touchAction: 'none', maxWidth: '100%' }}
+      style={{ border: '1px solid var(--border-strong)', borderRadius: 8, background: '#fff', touchAction: 'none', maxWidth: '100%' }}
       onMouseDown={start} onMouseMove={move} onMouseUp={end} onMouseLeave={end}
       onTouchStart={start} onTouchMove={move} onTouchEnd={end}
     />
@@ -965,9 +965,9 @@ SignaturePad.displayName = 'SignaturePad'
 
 function ConsentCard({ type }: { type: string }) {
   return (
-    <div style={{ borderLeft: '4px solid #C0392B', background: '#243352', border: '1px solid rgba(255,255,255,0.08)', padding: 16, marginBottom: 12, borderRadius: 10 }}>
-      <h3 style={{ margin: '0 0 10px', fontSize: 14, fontWeight: 600, color: '#F0F4FF' }}>{CONSENT_TITLE[type] || type}</h3>
-      <div style={{ color: '#A8B8D8', maxHeight: 320, overflowY: 'auto' }}>
+    <div style={{ borderLeft: '4px solid var(--red)', background: 'var(--bg-elevated)', border: '1px solid var(--border)', padding: 16, marginBottom: 12, borderRadius: 10 }}>
+      <h3 style={{ margin: '0 0 10px', fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>{CONSENT_TITLE[type] || type}</h3>
+      <div style={{ color: 'var(--text-secondary)', maxHeight: 320, overflowY: 'auto' }}>
         <ConsentContent type={type} />
       </div>
     </div>
@@ -1021,7 +1021,7 @@ function StepChip({ label, state }: { label: string; state: StepState }) {
   const palette: Record<StepState, React.CSSProperties> = {
     done: { background: 'rgba(52,211,153,0.12)', color: '#34D399', border: '1px solid rgba(52,211,153,0.25)' },
     active: { background: 'rgba(59,130,246,0.12)', color: '#93C5FD', border: '1px solid rgba(59,130,246,0.25)' },
-    todo: { background: '#243352', color: '#A8B8D8', border: '1px solid rgba(255,255,255,0.08)' },
+    todo: { background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border)' },
   }
   return <span style={{ ...palette[state], fontSize: 11, padding: '3px 10px', borderRadius: 999, fontWeight: 600, whiteSpace: 'nowrap' }}>{label}</span>
 }
@@ -1253,7 +1253,7 @@ export default function ClinicTriase() {
         {!loading && visits.length > 0 && (
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             <span className="badge" style={{ background: '#EAF3DE', color: '#3B6D11' }}>{readyCount} siap dokter</span>
-            <span className="badge" style={{ background: '#FEE2E2', color: '#C0392B' }}>{needScreening} perlu screening</span>
+            <span className="badge" style={{ background: '#FEE2E2', color: 'var(--red)' }}>{needScreening} perlu screening</span>
             <span className="badge" style={{ background: '#E6F1FB', color: '#185FA5' }}>{needConsent} perlu consent</span>
           </div>
         )}
@@ -1276,8 +1276,8 @@ export default function ClinicTriase() {
               <div key={v.id}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 14,
-                  background: selected ? 'rgba(55,138,221,0.15)' : '#1a2740',
-                  border: selected ? '1.5px solid #378ADD' : '0.5px solid rgba(255,255,255,0.08)',
+                  background: selected ? 'rgba(55,138,221,0.15)' : 'var(--bg-card)',
+                  border: selected ? '1.5px solid #378ADD' : '0.5px solid var(--border)',
                   borderRadius: 12, padding: '14px 16px', marginBottom: 8,
                   opacity: v.status === 'completed' ? 0.7 : 1,
                 }}>
@@ -1289,10 +1289,10 @@ export default function ClinicTriase() {
                 {/* Tengah */}
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
-                    <span style={{ fontWeight: 600, color: '#F0F4FF', fontSize: 15 }}>{v.patient?.full_name || '-'}</span>
-                    <span style={{ fontSize: 12, color: '#A8B8D8', fontFamily: 'monospace' }}>{v.patient?.patient_code || '-'}</span>
+                    <span style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 15 }}>{v.patient?.full_name || '-'}</span>
+                    <span style={{ fontSize: 12, color: 'var(--text-secondary)', fontFamily: 'monospace' }}>{v.patient?.patient_code || '-'}</span>
                     {v.services.length > 0 && (
-                      <span style={{ fontSize: 11, padding: '1px 8px', borderRadius: 999, background: '#243352', color: '#A8B8D8' }}>{v.services.map(s => s.service_name).join(', ')}</span>
+                      <span style={{ fontSize: 11, padding: '1px 8px', borderRadius: 999, background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}>{v.services.map(s => s.service_name).join(', ')}</span>
                     )}
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
@@ -1337,12 +1337,12 @@ export default function ClinicTriase() {
             style={{ maxWidth: 680, width: isMobile ? '95vw' : '100%', maxHeight: '90vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', padding: 0 }}
             onClick={e => e.stopPropagation()}>
             {/* Header */}
-            <div style={{ background: '#0a1628', padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+            <div style={{ background: 'var(--bg-deep)', padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
               <div>
-                <div style={{ color: '#F0F4FF', fontWeight: 700, fontSize: 15 }}>
+                <div style={{ color: 'var(--text-primary)', fontWeight: 700, fontSize: 15 }}>
                   {selectedVisit.patient?.full_name} · {selectedVisit.patient?.patient_code}
                 </div>
-                <div style={{ color: '#A8B8D8', fontSize: 12, marginTop: 2 }}>
+                <div style={{ color: 'var(--text-secondary)', fontSize: 12, marginTop: 2 }}>
                   {selectedVisit.services.map(s => s.service_name).join(' · ') || '-'} · {selectedVisit.visit_time ? fmtTime(selectedVisit.visit_time) : '—'}
                 </div>
               </div>
@@ -1350,14 +1350,14 @@ export default function ClinicTriase() {
             </div>
 
             {/* Tab bar */}
-            <div style={{ display: 'flex', borderBottom: '2px solid rgba(255,255,255,0.08)', background: '#0a1628', flexShrink: 0 }}>
+            <div style={{ display: 'flex', borderBottom: '2px solid var(--border)', background: 'var(--bg-deep)', flexShrink: 0 }}>
               {(['screening', 'consent'] as const).map(t => (
                 <button key={t} onClick={() => setModalTab(t)}
                   style={{
                     padding: '12px 20px', border: 'none', background: 'none', cursor: 'pointer', fontSize: 13,
                     fontWeight: modalTab === t ? 700 : 400,
-                    color: modalTab === t ? '#C0392B' : '#6B7A99',
-                    borderBottom: modalTab === t ? '2px solid #C0392B' : '2px solid transparent',
+                    color: modalTab === t ? 'var(--red)' : 'var(--text-muted)',
+                    borderBottom: modalTab === t ? '2px solid var(--red)' : '2px solid transparent',
                     marginBottom: -2, textTransform: 'capitalize',
                   }}>{t === 'screening' ? 'Screening' : 'Consent'}</button>
               ))}
@@ -1375,8 +1375,8 @@ export default function ClinicTriase() {
                   style={{
                     padding: '12px 20px', border: 'none', background: 'none', cursor: 'pointer', fontSize: 13,
                     fontWeight: modalTab === 'assessment' ? 700 : 400,
-                    color: modalTab === 'assessment' ? '#C0392B' : '#6B7A99',
-                    borderBottom: modalTab === 'assessment' ? '2px solid #C0392B' : '2px solid transparent',
+                    color: modalTab === 'assessment' ? 'var(--red)' : 'var(--text-muted)',
+                    borderBottom: modalTab === 'assessment' ? '2px solid var(--red)' : '2px solid transparent',
                     marginBottom: -2, textTransform: 'capitalize',
                   }}>Assessment</button>
               )}
@@ -1511,7 +1511,7 @@ export default function ClinicTriase() {
             </div>
 
             {/* Footer */}
-            <div style={{ padding: '12px 20px', borderTop: '1px solid rgba(255,255,255,0.08)', background: '#1a2740', display: 'flex', justifyContent: 'flex-start', flexShrink: 0 }}>
+            <div style={{ padding: '12px 20px', borderTop: '1px solid var(--border)', background: 'var(--bg-card)', display: 'flex', justifyContent: 'flex-start', flexShrink: 0 }}>
               <button className="btn-secondary" style={{ width: 'auto', padding: '8px 16px' }} onClick={() => setShowModal(false)}>Tutup</button>
             </div>
           </div>

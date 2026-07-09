@@ -6,7 +6,8 @@
      · JetBrains Mono    → data             (numbers, dates, times, IDs, email, search)
      · Manrope           → body             (names, descriptions, paragraphs)
    Light is the default theme. Dark mode is toggled via [data-theme="dark"] on <html>.
-   Clinic keeps its own navy dark palette (its pages hard-code that palette inline).
+   Clinic is theme-aware: light = design-system glass, dark = its navy palette
+   (its inline navy hexes are mapped to tokens so it follows the global toggle).
    ============================================================================ */
 
 :root {
@@ -101,10 +102,22 @@
   --shadow-elevated: 0 24px 60px rgba(0, 0, 0, 0.60);
 }
 
-/* ---- Clinic: pinned navy dark (its pages hard-code this palette inline) ---- */
+/* ---- Clinic: theme-aware. Light mode = design-system glass (inherits :root);
+   Dark mode = the navy clinic palette. Clinic pages historically hard-code the
+   navy hexes inline — those are now mapped to these tokens (see the CLINIC DARK
+   OVERRIDES block + per-page inline vars) so clinic follows the global toggle.
+   --bg-deep is clinic's darkest surface (table/modal headers). ---- */
 .layout-clinic {
+  --bg-deep: var(--bg-elevated);
+  min-height: 100vh;
+  color: var(--text-primary);
+}
+.layout-clinic .main-content { color: var(--text-primary); }
+
+:root[data-theme="dark"] .layout-clinic {
   --bg-page:        #0f1923;
   --bg-sidebar:     #0a1628;
+  --bg-deep:        #0a1628;
   --bg-card:        #1a2740;
   --bg-card-hover:  #1e2d4a;
   --bg-input:       #152034;
@@ -120,15 +133,10 @@
   --text-faint:     #3D4F6B;
   --shadow-card:    0 4px 24px rgba(0,0,0,0.4), 0 1px 4px rgba(0,0,0,0.3);
   --shadow-elevated: 0 8px 32px rgba(0,0,0,0.5);
-
   background: var(--bg-page);
-  color: var(--text-primary);
-  min-height: 100vh;
 }
-
-.layout-clinic .main-content {
+:root[data-theme="dark"] .layout-clinic .main-content {
   background: var(--bg-page);
-  color: var(--text-primary);
 }
 
 /* ============================================================================
@@ -256,11 +264,12 @@ body {
   text-transform: uppercase;
   cursor: pointer;
   transition: background .15s ease, box-shadow .15s ease, transform .05s ease;
-  width: 100%;
 }
 .btn-primary:hover:not(:disabled) { background: var(--red-dark); box-shadow: 0 6px 20px var(--red-glow); }
 .btn-primary:active:not(:disabled) { transform: translateY(1px); }
 .btn-primary:disabled { opacity: 0.55; cursor: not-allowed; }
+/* Full-width only inside the login form (auth CTA); elsewhere buttons hug content. */
+.login-card .btn-primary { width: 100%; }
 
 .btn-secondary {
   background: var(--bg-elevated);
@@ -846,14 +855,22 @@ tr.row-selected { background: var(--red-soft) !important; }
   .sidebar { transform: translateX(-100%); transition: transform .22s ease; box-shadow: var(--shadow-elevated); }
   .sidebar.open { transform: translateX(0); }
   .main-content { margin-left: 0; padding: 16px; padding-top: 16px; }
+  /* Clinic's desktop overrides (.layout-clinic .main-content) are more specific
+     than the base rule above, so re-assert the mobile layout at equal specificity. */
+  .layout-clinic .main-content { margin-left: 0; padding: 16px; }
+  .layout-clinic .sidebar { transform: translateX(-100%); }
+  .layout-clinic .sidebar.open { transform: translateX(0); }
   .hamburger { display: inline-flex; align-items: center; }
   .sidebar-overlay {
     display: block; position: fixed; inset: 0;
     background: rgba(0,0,0,0.45); -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px); z-index: 99;
   }
   .unit-grid { grid-template-columns: 1fr; }
-  .page-header { align-items: flex-start; }
+  .page-header { flex-direction: column; align-items: stretch; gap: 12px; }
+  .page-header > div { display: flex; flex-wrap: wrap; gap: 8px; }
   .page-title { font-size: 24px; }
+  /* Keep content from ever forcing the viewport wider than the screen */
+  .main-content { min-width: 0; max-width: 100vw; overflow-x: hidden; }
   .filter-bar { flex-direction: column; align-items: stretch; }
   .filter-bar input, .filter-bar select { width: 100%; }
   .form-row { grid-template-columns: 1fr; }
@@ -1113,31 +1130,31 @@ tr.row-selected { background: var(--red-soft) !important; }
 /* Semua modal/dialog content */
 .layout-clinic .modal-content,
 .layout-clinic .modal {
-  background: #1a2740 !important;
+  background: var(--bg-card) !important;
   border: 1px solid rgba(255,255,255,0.1) !important;
-  color: #F0F4FF !important;
+  color: var(--text-primary) !important;
 }
 
 /* Modal header */
 .layout-clinic .modal-header,
 .layout-clinic [class*="modal-header"] {
-  background: #0a1628 !important;
+  background: var(--bg-deep) !important;
   border-bottom: 1px solid rgba(255,255,255,0.08) !important;
-  color: #F0F4FF !important;
+  color: var(--text-primary) !important;
 }
 
 /* Triase card pasien */
 .layout-clinic .visit-card,
 .layout-clinic [class*="visit-row"],
 .layout-clinic [class*="patient-card"] {
-  background: #1a2740 !important;
+  background: var(--bg-card) !important;
   border: 1px solid rgba(255,255,255,0.08) !important;
-  color: #F0F4FF !important;
+  color: var(--text-primary) !important;
 }
 
 /* Checkbox dark theme */
 .layout-clinic input[type="checkbox"] {
-  accent-color: #C0392B;
+  accent-color: var(--red);
   width: 16px;
   height: 16px;
 }
@@ -1147,9 +1164,9 @@ tr.row-selected { background: var(--red-soft) !important; }
 /* Section headers dalam screening */
 .layout-clinic [class*="section-title"],
 .layout-clinic [class*="section-header"] {
-  color: #F0F4FF !important;
-  background: #243352 !important;
-  border-left: 3px solid #C0392B;
+  color: var(--text-primary) !important;
+  background: var(--bg-elevated) !important;
+  border-left: 3px solid var(--red);
   padding: 8px 12px;
   border-radius: 6px;
 }
@@ -1157,7 +1174,7 @@ tr.row-selected { background: var(--red-soft) !important; }
 /* Consent items */
 .layout-clinic [class*="consent-item"],
 .layout-clinic [class*="consent-card"] {
-  background: #243352 !important;
+  background: var(--bg-elevated) !important;
   border: 1px solid rgba(255,255,255,0.08) !important;
   border-radius: 10px;
   padding: 12px 16px;
@@ -1167,9 +1184,9 @@ tr.row-selected { background: var(--red-soft) !important; }
 .layout-clinic [class*="payment-btn"],
 .layout-clinic [class*="method-btn"],
 .layout-clinic [class*="pay-method"] {
-  background: #243352 !important;
+  background: var(--bg-elevated) !important;
   border: 1px solid rgba(255,255,255,0.1) !important;
-  color: #A8B8D8 !important;
+  color: var(--text-secondary) !important;
   border-radius: 8px;
 }
 
@@ -1178,42 +1195,42 @@ tr.row-selected { background: var(--red-soft) !important; }
 .layout-clinic [class*="method-btn"].active,
 .layout-clinic [class*="pay-method"].active {
   background: rgba(192,57,43,0.2) !important;
-  border-color: #C0392B !important;
+  border-color: var(--red) !important;
   color: #fff !important;
 }
 
 /* Close bill rincian */
 .layout-clinic [class*="bill-item"],
 .layout-clinic [class*="rincian"] {
-  color: #F0F4FF !important;
+  color: var(--text-primary) !important;
   border-bottom: 1px solid rgba(255,255,255,0.06) !important;
 }
 
 /* Total amount */
 .layout-clinic [class*="total"] {
-  color: #C0392B !important;
+  color: var(--red) !important;
   font-weight: 700;
 }
 
 /* Tab navigation dalam modal */
 .layout-clinic [class*="tab-btn"],
 .layout-clinic [class*="modal-tab"] {
-  color: #6B7A99 !important;
+  color: var(--text-muted) !important;
   background: transparent !important;
   border-bottom: 2px solid transparent !important;
 }
 
 .layout-clinic [class*="tab-btn"].active,
 .layout-clinic [class*="modal-tab"].active {
-  color: #C0392B !important;
-  border-bottom-color: #C0392B !important;
+  color: var(--red) !important;
+  border-bottom-color: var(--red) !important;
 }
 
 /* Progress stepper chips */
 .layout-clinic [class*="step-chip"],
 .layout-clinic [class*="stepper"] {
-  background: #243352 !important;
-  color: #A8B8D8 !important;
+  background: var(--bg-elevated) !important;
+  color: var(--text-secondary) !important;
   border-radius: 999px;
   font-size: 11px;
   padding: 3px 10px;
@@ -1225,24 +1242,24 @@ tr.row-selected { background: var(--red-soft) !important; }
   height: 6px;
 }
 .layout-clinic ::-webkit-scrollbar-track {
-  background: #0f1923;
+  background: var(--bg-page);
 }
 .layout-clinic ::-webkit-scrollbar-thumb {
-  background: #243352;
+  background: var(--bg-elevated);
   border-radius: 3px;
 }
 .layout-clinic ::-webkit-scrollbar-thumb:hover {
-  background: #C0392B;
+  background: var(--red);
 }
 
 /* KPI cards */
 .layout-clinic .kpi-card,
 .layout-clinic [class*="kpi-card"],
 .layout-clinic [class*="stat-card"] {
-  background: #1a2740 !important;
+  background: var(--bg-card) !important;
   border: 1px solid rgba(255,255,255,0.08) !important;
   border-radius: 12px;
-  color: #F0F4FF !important;
+  color: var(--text-primary) !important;
 }
 
 /* (Removed broad table overrides — clinic tables are handled by the earlier
@@ -1271,29 +1288,29 @@ tr.row-selected { background: var(--red-soft) !important; }
 .layout-clinic .btn-secondary,
 .layout-clinic button[class*="secondary"],
 .layout-clinic button[class*="outline"] {
-  color: #A8B8D8 !important;
-  background: #243352 !important;
+  color: var(--text-secondary) !important;
+  background: var(--bg-elevated) !important;
   border: 1px solid rgba(255,255,255,0.12) !important;
 }
 
 /* Fix "Kwitansi" buttons */
 .layout-clinic button:not(.btn-primary):not([class*="btn-danger"]):not([class*="close"]) {
-  color: #A8B8D8;
+  color: var(--text-secondary);
 }
 
 /* Fix "Detail" buttons */
 .layout-clinic [class*="btn-detail"],
 .layout-clinic button[class*="detail"] {
-  color: #A8B8D8 !important;
-  background: #243352 !important;
+  color: var(--text-secondary) !important;
+  background: var(--bg-elevated) !important;
   border: 1px solid rgba(255,255,255,0.1) !important;
 }
 
 /* Fix "Edit" buttons */
 .layout-clinic button[class*="edit"],
 .layout-clinic [class*="btn-edit"] {
-  color: #A8B8D8 !important;
-  background: #243352 !important;
+  color: var(--text-secondary) !important;
+  background: var(--bg-elevated) !important;
   border: 1px solid rgba(255,255,255,0.1) !important;
 }
 
@@ -1307,8 +1324,8 @@ tr.row-selected { background: var(--red-soft) !important; }
 
 /* Fix date input */
 .layout-clinic input[type="date"] {
-  color: #F0F4FF !important;
-  background: #152034 !important;
+  color: var(--text-primary) !important;
+  background: var(--bg-input) !important;
   border: 1px solid rgba(255,255,255,0.12) !important;
   border-radius: 8px;
   padding: 6px 10px;
@@ -1316,8 +1333,8 @@ tr.row-selected { background: var(--red-soft) !important; }
 
 /* Fix select dropdown */
 .layout-clinic select {
-  color: #F0F4FF !important;
-  background: #152034 !important;
+  color: var(--text-primary) !important;
+  background: var(--bg-input) !important;
   border: 1px solid rgba(255,255,255,0.12) !important;
 }
 
@@ -1326,8 +1343,8 @@ tr.row-selected { background: var(--red-soft) !important; }
 .layout-clinic input[type="search"],
 .layout-clinic input[type="email"],
 .layout-clinic input[type="password"] {
-  color: #F0F4FF !important;
-  background: #152034 !important;
+  color: var(--text-primary) !important;
+  background: var(--bg-input) !important;
   border: 1px solid rgba(255,255,255,0.12) !important;
 }
 
@@ -1339,13 +1356,13 @@ tr.row-selected { background: var(--red-soft) !important; }
 
 /* Fix all anchor/link colors */
 .layout-clinic a:not(.menu-item):not(.switcher-item) {
-  color: #A8B8D8;
+  color: var(--text-secondary);
 }
 
 /* Fix column header AKSI text */
 .layout-clinic th {
-  color: #6B7A99 !important;
-  background: #0a1628 !important;
+  color: var(--text-muted) !important;
+  background: var(--bg-deep) !important;
   font-size: 11px;
   letter-spacing: 1px;
   text-transform: uppercase;
@@ -1353,14 +1370,14 @@ tr.row-selected { background: var(--red-soft) !important; }
 
 /* Fix all td text */
 .layout-clinic td {
-  color: #A8B8D8;
+  color: var(--text-secondary);
 }
 
 /* Fix pagination buttons */
 .layout-clinic [class*="pagination"] button,
 .layout-clinic button[class*="page"] {
-  color: #A8B8D8 !important;
-  background: #243352 !important;
+  color: var(--text-secondary) !important;
+  background: var(--bg-elevated) !important;
   border: 1px solid rgba(255,255,255,0.1) !important;
 }
 
@@ -1369,4 +1386,15 @@ tr.row-selected { background: var(--red-soft) !important; }
   0%   { opacity: 1;   transform: scale(1); }
   50%  { opacity: 0.4; transform: scale(1.35); }
   100% { opacity: 1;   transform: scale(1); }
+}
+
+/* ============================================================================
+   MOBILE OVERRIDES — appended last so they win over the clinic block above
+   (equal specificity → later source order wins). Keeps clinic responsive.
+   ============================================================================ */
+@media (max-width: 768px) {
+  .layout-clinic .main-content { margin-left: 0 !important; padding: 16px !important; }
+  .layout-clinic .sidebar { transform: translateX(-100%); }
+  .layout-clinic .sidebar.open { transform: translateX(0); }
+  .layout-clinic .page-container { padding: 16px !important; }
 }

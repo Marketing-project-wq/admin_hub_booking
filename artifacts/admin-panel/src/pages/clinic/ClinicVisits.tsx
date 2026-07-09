@@ -374,29 +374,29 @@ export default function ClinicVisits() {
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           zIndex: 1000, padding: 16 }}>
-          <div style={{ background: '#1a2740', border: '1px solid rgba(255,255,255,0.1)',
+          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)',
             borderRadius: 16, padding: 24, width: '100%', maxWidth: 400 }}>
 
             {/* Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between',
               alignItems: 'center', marginBottom: 20 }}>
               <div>
-                <div style={{ fontWeight: 700, fontSize: 16, color: '#F0F4FF' }}>
+                <div style={{ fontWeight: 700, fontSize: 16, color: 'var(--text-primary)' }}>
                   Assign Jam Kunjungan
                 </div>
-                <div style={{ fontSize: 12, color: '#A8B8D8', marginTop: 2 }}>
+                <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>
                   {assignSlotVisit.patient?.full_name} · {fmtDate(assignSlotVisit.visit_date)}
                 </div>
               </div>
               <button
                 onClick={() => { setShowAssignSlotModal(false); setAssignSlotVisit(null) }}
-                style={{ background: 'none', border: 'none', color: '#6B7A99',
+                style={{ background: 'none', border: 'none', color: 'var(--text-muted)',
                   cursor: 'pointer', fontSize: 20 }}>×</button>
             </div>
 
             {/* Slot list */}
             {slotsLoading ? (
-              <div style={{ textAlign: 'center', padding: 24, color: '#A8B8D8' }}>
+              <div style={{ textAlign: 'center', padding: 24, color: 'var(--text-secondary)' }}>
                 Memuat slot tersedia...
               </div>
             ) : availableSlots.length === 0 ? (
@@ -404,7 +404,7 @@ export default function ClinicVisits() {
                 Tidak ada slot tersedia untuk tanggal ini.
               </div>
             ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)',
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))',
                 gap: 8, marginBottom: 20, maxHeight: 240, overflowY: 'auto' }}>
                 {availableSlots.map(slot => (
                   <button
@@ -412,16 +412,16 @@ export default function ClinicVisits() {
                     onClick={() => setSelectedSlotId(slot.id)}
                     style={{
                       padding: '10px 8px', borderRadius: 8, textAlign: 'center',
-                      border: `1px solid ${selectedSlotId === slot.id ? '#C0392B' : 'rgba(255,255,255,0.1)'}`,
-                      background: selectedSlotId === slot.id ? 'rgba(192,57,43,0.15)' : '#243352',
+                      border: `1px solid ${selectedSlotId === slot.id ? 'var(--red)' : 'var(--border)'}`,
+                      background: selectedSlotId === slot.id ? 'rgba(192,57,43,0.15)' : 'var(--bg-elevated)',
                       cursor: 'pointer',
                     }}
                   >
-                    <div style={{ fontSize: 14, fontWeight: 700, color: '#F0F4FF',
+                    <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)',
                       fontFamily: "'JetBrains Mono', monospace" }}>
                       {slot.start_time.slice(0, 5)}
                     </div>
-                    <div style={{ fontSize: 10, color: '#6B7A99', marginTop: 2 }}>
+                    <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>
                       {slot.remaining}/{slot.quota} sisa
                     </div>
                   </button>
@@ -438,8 +438,8 @@ export default function ClinicVisits() {
             <div style={{ display: 'flex', gap: 10 }}>
               <button
                 onClick={() => { setShowAssignSlotModal(false); setAssignSlotVisit(null) }}
-                style={{ flex: 1, padding: 12, borderRadius: 8, background: '#243352',
-                  border: '1px solid rgba(255,255,255,0.1)', color: '#A8B8D8',
+                style={{ flex: 1, padding: 12, borderRadius: 8, background: 'var(--bg-elevated)',
+                  border: '1px solid var(--border)', color: 'var(--text-secondary)',
                   cursor: 'pointer', fontWeight: 600 }}>
                 Batal
               </button>
@@ -448,9 +448,9 @@ export default function ClinicVisits() {
                 disabled={!selectedSlotId || assignSlotLoading}
                 style={{
                   flex: 2, padding: 12, borderRadius: 8,
-                  background: selectedSlotId ? '#C0392B' : '#243352',
+                  background: selectedSlotId ? 'var(--red)' : 'var(--bg-elevated)',
                   border: 'none',
-                  color: selectedSlotId ? '#fff' : '#6B7A99',
+                  color: selectedSlotId ? '#fff' : 'var(--text-muted)',
                   cursor: selectedSlotId ? 'pointer' : 'not-allowed',
                   fontWeight: 700, fontSize: 14,
                 }}>
@@ -726,7 +726,7 @@ function VisitFormModal({ mode, visit, defaultPatientId, onClose, onSaved }: {
             {selectedServices.length > 0 && (
               <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {selectedServices.map(s => (
-                  <div key={s.service_id} style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#243352', color: '#F0F4FF', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, padding: '6px 10px' }}>
+                  <div key={s.service_id} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 8, padding: '6px 10px' }}>
                     <span style={{ flex: 1, fontSize: 13 }}>{s.service_name}</span>
                     <span style={{ fontSize: 13, fontWeight: 600 }}>{fmtRp(s.price)}</span>
                     <button type="button" className="action-btn cancel" style={{ color: '#FC8181', background: 'transparent' }} onClick={() => removeService(s.service_id)}>×</button>

@@ -208,7 +208,7 @@ export default function ClinicKasir() {
                     <td style={{ whiteSpace: 'nowrap', fontWeight: 600 }}>{fmtRp(vTotal)}</td>
                     <td style={{ whiteSpace: 'nowrap', fontSize: 12 }}>{v.visit_time ? fmtTime(v.visit_time) : '—'}</td>
                     <td style={{ whiteSpace: 'nowrap' }}>
-                      <button className="btn-primary" style={{ width: 'auto', padding: '6px 14px', background: '#C0392B' }} onClick={() => setCloseBillVisit(v)}>Close Bill</button>
+                      <button className="btn-primary" style={{ width: 'auto', padding: '6px 14px', background: 'var(--red)' }} onClick={() => setCloseBillVisit(v)}>Close Bill</button>
                     </td>
                   </tr>
                 )
