@@ -162,7 +162,17 @@ export default function ManualBookingModal({ type, onClose, onRefresh }: Props) 
       onRefresh()
       onClose()
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Terjadi kesalahan')
+      // Surface the real Supabase/Postgres error instead of a generic message.
+      // A PostgrestError carries { message, code, details, hint } — the code
+      // (e.g. 42501 = RLS, 23502 = not-null, 23503 = FK, PGRST204 = unknown
+      // column) is what actually pinpoints the root cause, so include it.
+      console.error('[ManualBookingModal] submit failed:', err)
+      const e = err as { message?: string; code?: string; details?: string; hint?: string }
+      const parts = [e?.message, e?.details, e?.hint].filter(Boolean)
+      const base = parts.length > 0
+        ? parts.join(' — ')
+        : (err instanceof Error ? err.message : 'Terjadi kesalahan')
+      setError(e?.code ? `${base} (code: ${e.code})` : base)
     } finally {
       setLoading(false)
     }
