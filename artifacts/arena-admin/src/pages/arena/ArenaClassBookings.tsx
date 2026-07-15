@@ -35,7 +35,7 @@ export default function ArenaClassBookings() {
         id, booking_code, schedule_id, booker_type, customer_type,
         full_name, email, phone, notes, price, discount, price_before_disc,
         status, payment_method, payment_ref, voucher_code, paid_at, created_at, updated_at,
-        group_id,
+        group_id, utm_source, utm_medium, utm_campaign,
         addons:arena_class_booking_addons(
           id, addon_name, addon_price, qty, subtotal
         ),
@@ -147,7 +147,8 @@ export default function ArenaClassBookings() {
         booking_code,
         schedule:arena_class_schedules(schedule_date, start_time, end_time, class_type:arena_class_types(name)),
         full_name, email, phone, customer_type, price_before_disc, discount, price,
-        status, payment_method, paid_at, created_at
+        status, payment_method, paid_at, created_at,
+        utm_source, utm_medium, utm_campaign
       `)
       .order('paid_at', { ascending: false, nullsFirst: false })
     if (all) {
@@ -171,6 +172,9 @@ export default function ArenaClassBookings() {
           payment_method: r.payment_method,
           paid_at: r.paid_at,
           created_at: r.created_at,
+          utm_source: r.utm_source || '',
+          utm_medium: r.utm_medium || '',
+          utm_campaign: r.utm_campaign || '',
         }
       })
       exportToCSV(flat as Record<string, unknown>[], 'class_bookings')
@@ -237,17 +241,22 @@ export default function ArenaClassBookings() {
         <table className="data-table">
           <thead>
             <tr>
-              <th>Booking Code</th><th>Grp</th><th>Kelas</th><th>Jadwal</th><th>Nama</th>
+              <th>Booking Code</th><th>Grp</th><th>Kelas</th>
+              <th>Tgl Bayar</th>
+              <th>Jadwal</th><th>Nama</th>
               <th>Telp</th><th>Amount</th><th>Status</th><th>Payment</th>
               <th style={{ fontSize: 11, color: '#9CA3AF' }}>Ref</th>
-              <th>Tgl Bayar</th><th>Aksi</th>
+              <th style={{ fontSize: 11, color: '#9CA3AF' }}>UTM Source</th>
+              <th style={{ fontSize: 11, color: '#9CA3AF' }}>UTM Medium</th>
+              <th style={{ fontSize: 11, color: '#9CA3AF' }}>UTM Campaign</th>
+              <th>Aksi</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr className="loading-row"><td colSpan={12}>Memuat data...</td></tr>
+              <tr className="loading-row"><td colSpan={15}>Memuat data...</td></tr>
             ) : data.length === 0 ? (
-              <tr><td colSpan={12} className="empty-state">Tidak ada data</td></tr>
+              <tr><td colSpan={15} className="empty-state">Tidak ada data</td></tr>
             ) : data.map((row: Record<string, unknown>) => {
               const s = STATUS_LABEL[row.status as string] || { label: row.status, css: '' }
               const sch = row.schedule as Record<string, unknown> | undefined
@@ -274,6 +283,9 @@ export default function ArenaClassBookings() {
                   <td>
                     {!!ct?.color && <span style={{ color: ct.color as string, marginRight: 4 }}>●</span>}
                     {ct?.name as string || '-'}
+                  </td>
+                  <td style={{ fontSize: 12, whiteSpace: 'nowrap', color: 'var(--text-muted)' }}>
+                    {row.paid_at ? fmtDate(row.paid_at as string) : '-'}
                   </td>
                   <td style={{ whiteSpace: 'nowrap', fontSize: 12 }}>
                     {fmtDate(sch?.schedule_date as string)} {fmtTime(sch?.start_time as string)}
@@ -312,9 +324,9 @@ export default function ArenaClassBookings() {
                       )
                     })()}
                   </td>
-                  <td style={{ fontSize: 12, whiteSpace: 'nowrap', color: 'var(--text-muted)' }}>
-                    {row.paid_at ? fmtDate(row.paid_at as string) : '-'}
-                  </td>
+                  <td style={{ fontSize: 11, whiteSpace: 'nowrap', color: 'var(--text-muted)' }} title={(row.utm_source as string) || ''}>{(row.utm_source as string) || '-'}</td>
+                  <td style={{ fontSize: 11, whiteSpace: 'nowrap', color: 'var(--text-muted)' }} title={(row.utm_medium as string) || ''}>{(row.utm_medium as string) || '-'}</td>
+                  <td style={{ fontSize: 11, whiteSpace: 'nowrap', color: 'var(--text-muted)' }} title={(row.utm_campaign as string) || ''}>{(row.utm_campaign as string) || '-'}</td>
                   <td style={{ whiteSpace: 'nowrap' }}>
                     <button className="action-btn detail" onClick={() => setSelectedBooking(row)}>Detail</button>
                     <button
