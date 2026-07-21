@@ -191,24 +191,24 @@ export default function ArenaCalendar() {
 
       {error && <p style={{ color: 'var(--red)', fontSize: 13, marginBottom: 12 }}>{error}</p>}
 
-      {/* Calendar grid (scrolls horizontally on small screens, like the data tables) */}
-      <div style={{ overflowX: 'auto', border: '1px solid var(--border)', borderRadius: 8 }}>
-        <div style={{ minWidth: 820 }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', background: 'var(--bg-page)', borderBottom: '1px solid var(--border)' }}>
-            {DAY_LABELS.map((d, i) => (
-              <div key={d} style={{ padding: '8px 10px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: i === 0 ? 'var(--red)' : 'var(--text-muted)' }}>{d}</div>
-            ))}
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 1, background: 'var(--border)' }}>
+      {/* Calendar grid — 7 equal columns that fit the viewport width (no horizontal scroll);
+          only grows vertically. minmax(0,1fr) lets columns shrink so cell text ellipsizes. */}
+      <div style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', background: 'var(--bg-page)', borderBottom: '1px solid var(--border)' }}>
+          {DAY_LABELS.map((d, i) => (
+            <div key={d} style={{ padding: '8px 10px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: i === 0 ? 'var(--red)' : 'var(--text-muted)' }}>{d}</div>
+          ))}
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: 1, background: 'var(--border)' }}>
             {cells.map((d, i) => {
-              if (d === null) return <div key={i} style={{ background: 'var(--bg-page)', minHeight: 110 }} />
+              if (d === null) return <div key={i} style={{ background: 'var(--bg-page)', minHeight: 'clamp(84px, 12vh, 120px)' }} />
               const dateStr = ymd(year, month, d)
               const isToday = dateStr === todayStr
               const isSunday = i % 7 === 0
               const cls = classByDate[dateStr] || []
               const ven = venueByDate[dateStr] || []
               return (
-                <div key={i} style={{ background: 'var(--bg-card)', minHeight: 110, padding: 6, display: 'flex', flexDirection: 'column', gap: 3 }}>
+                <div key={i} style={{ background: 'var(--bg-card)', minHeight: 'clamp(84px, 12vh, 120px)', minWidth: 0, padding: 6, display: 'flex', flexDirection: 'column', gap: 3 }}>
                   <div style={{ marginBottom: 2 }}>
                     <span style={{
                       fontSize: 12, fontWeight: 700,
@@ -234,7 +234,7 @@ export default function ArenaCalendar() {
                           alignItems: 'center', width: '100%', fontFamily: 'inherit', lineHeight: 1.3,
                         }}
                       >
-                        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'left' }}>
+                        <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'left' }}>
                           {fmtTime(s.start_time)} {name}
                         </span>
                         <span style={{ background: 'rgba(255,255,255,0.28)', borderRadius: 8, padding: '0 5px', fontWeight: 700, fontSize: 10 }}>{count}</span>
@@ -258,7 +258,6 @@ export default function ArenaCalendar() {
                 </div>
               )
             })}
-          </div>
         </div>
       </div>
 
