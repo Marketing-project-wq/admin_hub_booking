@@ -202,9 +202,15 @@ Deno.serve(async (req: Request) => {
       if (ref) updatePayload.payment_ref = String(ref)
     }
 
-    const selectFields = tableName === "clinic_bookings"
-      ? `id, ${codeField}, status, paid_at, slot_id, group_id`
-      : `id, ${codeField}, status, paid_at, group_id`
+    // Kolom opsional yang HANYA ada di sebagian tabel — jangan di-select untuk
+    // tabel yang tidak memilikinya, karena PostgREST akan error (kolom tak ada) →
+    // update rollback → 500 → Mayar retry selamanya (order stuck pending_payment).
+    // group_id: hanya arena_class_bookings. slot_id: hanya clinic_bookings.
+    const EXTRA_SELECT: Record<string, string> = {
+      arena_class_bookings: ", group_id",
+      clinic_bookings: ", slot_id",
+    }
+    const selectFields = `id, ${codeField}, status, paid_at${EXTRA_SELECT[tableName] ?? ""}`
 
     const { data: updated, error: updErr } = await supabase
       .from(tableName)
