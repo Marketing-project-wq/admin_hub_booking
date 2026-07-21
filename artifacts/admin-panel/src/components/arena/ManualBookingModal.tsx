@@ -24,7 +24,8 @@ export default function ManualBookingModal({ type, onClose, onRefresh }: Props) 
   const [bookingDate, setBookingDate] = useState('')
   const [startTime, setStartTime] = useState('')
   const [endTime, setEndTime] = useState('')
-  const [customerType, setCustomerType] = useState('guest')
+  const [bookerType, setBookerType] = useState('guest')          // tier harga + booker_type (member/guest)
+  const [customerType, setCustomerType] = useState('individual')  // individual/corporation
   const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
@@ -58,7 +59,7 @@ export default function ManualBookingModal({ type, onClose, onRefresh }: Props) 
     if (type === 'slot' && unitId) {
       const unit = units.find(u => u.id === unitId)
       if (unit) {
-        const priceVal = customerType === 'member'
+        const priceVal = bookerType === 'member'
           ? Number(unit.price_member)
           : Number(unit.price_guest)
         setPrice(priceVal)
@@ -71,13 +72,13 @@ export default function ManualBookingModal({ type, onClose, onRefresh }: Props) 
         }
       }
     }
-  }, [unitId, customerType, startTime, units, type])
+  }, [unitId, bookerType, startTime, units, type])
 
   useEffect(() => {
     if (type === 'class' && classTypeId) {
       const ct = classTypes.find(c => c.id === classTypeId)
       if (ct) {
-        setPrice(customerType === 'member' ? Number(ct.price_member) : Number(ct.price_guest))
+        setPrice(bookerType === 'member' ? Number(ct.price_member) : Number(ct.price_guest))
       }
       supabase.from('arena_class_schedules')
         .select('id, schedule_date, start_time, end_time, instructor, quota')
@@ -90,14 +91,14 @@ export default function ManualBookingModal({ type, onClose, onRefresh }: Props) 
       setSchedules([])
       setScheduleId('')
     }
-  }, [classTypeId, classTypes, customerType, type])
+  }, [classTypeId, classTypes, bookerType, type])
 
   useEffect(() => {
-    if (type === 'class' && classTypeId && customerType) {
+    if (type === 'class' && classTypeId && bookerType) {
       const ct = classTypes.find(c => c.id === classTypeId)
-      if (ct) setPrice(customerType === 'member' ? Number(ct.price_member) : Number(ct.price_guest))
+      if (ct) setPrice(bookerType === 'member' ? Number(ct.price_member) : Number(ct.price_guest))
     }
-  }, [customerType, classTypeId, classTypes, type])
+  }, [bookerType, classTypeId, classTypes, type])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -114,7 +115,7 @@ export default function ManualBookingModal({ type, onClose, onRefresh }: Props) 
           booking_date: bookingDate,
           start_time: startTime,
           end_time: endTime,
-          booker_type: 'walk_in',
+          booker_type: bookerType,
           customer_type: customerType,
           full_name: fullName,
           email,
@@ -144,7 +145,7 @@ export default function ManualBookingModal({ type, onClose, onRefresh }: Props) 
         const { error: insertErr } = await supabase.from('arena_class_bookings').insert({
           booking_code: codeData,
           schedule_id: scheduleId,
-          booker_type: 'walk_in',
+          booker_type: bookerType,
           customer_type: customerType,
           full_name: fullName,
           email,
@@ -202,16 +203,23 @@ export default function ManualBookingModal({ type, onClose, onRefresh }: Props) 
                   ))}
                 </select>
               </div>
+              <div className="form-group">
+                <label>Tanggal *</label>
+                <input type="date" value={bookingDate} onChange={e => setBookingDate(e.target.value)} required />
+              </div>
               <div className="form-row">
                 <div className="form-group">
-                  <label>Tanggal *</label>
-                  <input type="date" value={bookingDate} onChange={e => setBookingDate(e.target.value)} required />
-                </div>
-                <div className="form-group">
-                  <label>Customer Type *</label>
-                  <select value={customerType} onChange={e => setCustomerType(e.target.value)}>
+                  <label>Booker Type *</label>
+                  <select value={bookerType} onChange={e => setBookerType(e.target.value)}>
                     <option value="guest">Guest</option>
                     <option value="member">Member</option>
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label>Tipe Customer *</label>
+                  <select value={customerType} onChange={e => setCustomerType(e.target.value)}>
+                    <option value="individual">Individual</option>
+                    <option value="corporation">Corporation</option>
                   </select>
                 </div>
               </div>
@@ -248,12 +256,21 @@ export default function ManualBookingModal({ type, onClose, onRefresh }: Props) 
                   ))}
                 </select>
               </div>
-              <div className="form-group">
-                <label>Customer Type *</label>
-                <select value={customerType} onChange={e => setCustomerType(e.target.value)}>
-                  <option value="guest">Guest</option>
-                  <option value="member">Member</option>
-                </select>
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Booker Type *</label>
+                  <select value={bookerType} onChange={e => setBookerType(e.target.value)}>
+                    <option value="guest">Guest</option>
+                    <option value="member">Member</option>
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label>Tipe Customer *</label>
+                  <select value={customerType} onChange={e => setCustomerType(e.target.value)}>
+                    <option value="individual">Individual</option>
+                    <option value="corporation">Corporation</option>
+                  </select>
+                </div>
               </div>
             </>
           )}
