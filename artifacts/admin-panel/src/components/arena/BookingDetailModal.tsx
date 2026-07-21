@@ -61,9 +61,14 @@ export default function BookingDetailModal({ type, booking, onClose, onRefresh }
     start_time: String(booking.start_time || ''),
     end_time: String(booking.end_time || ''),
     full_name: String(booking.full_name || ''),
-    email: String(booking.email || ''),
-    phone: String(booking.phone || ''),
-    price: Number(booking.price || 0),
+    email: String(booking.email || '') === 'noemail@20fit.id' ? '' : String(booking.email || ''),
+    phone: String(booking.phone || '') === '0' ? '' : String(booking.phone || ''),
+    customer_type: String(booking.customer_type || 'individual'),
+    price_before_disc: String(booking.price_before_disc ?? booking.price ?? 0),
+    discount: String(booking.discount ?? 0),
+    notes: String(booking.notes || ''),
+    status: String(booking.status || ''),
+    payment_ref: String(booking.payment_ref || ''),
   })
   const [editError, setEditError] = useState('')
   const [editLoading, setEditLoading] = useState(false)
@@ -96,6 +101,11 @@ export default function BookingDetailModal({ type, booking, onClose, onRefresh }
   }
 
   const handleSaveEdit = async () => {
+    // Validasi field wajib
+    if (!editForm.full_name.trim()) { setEditError('Nama wajib diisi'); return }
+    if (!editForm.booking_date) { setEditError('Tanggal wajib diisi'); return }
+    if (!editForm.start_time || !editForm.end_time) { setEditError('Jam wajib diisi'); return }
+    if (editForm.start_time >= editForm.end_time) { setEditError('Jam selesai harus lebih dari jam mulai'); return }
     setEditLoading(true)
     setEditError('')
     try {
@@ -118,14 +128,28 @@ export default function BookingDetailModal({ type, booking, onClose, onRefresh }
         }
       }
 
+      const priceBefore = Number(editForm.price_before_disc) || 0
+      const discount = Number(editForm.discount) || 0
+      const finalPrice = Math.max(0, priceBefore - discount)
+      const isConfirmed = editForm.status === 'confirmed'
+
       const { error } = await supabase.from('arena_bookings').update({
         booking_date: editForm.booking_date,
         start_time: editForm.start_time,
         end_time: editForm.end_time,
         full_name: editForm.full_name.trim(),
-        email: editForm.email.trim() || null,
-        phone: editForm.phone.trim(),
-        price: editForm.price,
+        email: editForm.email.trim() || 'noemail@20fit.id',
+        phone: editForm.phone.trim() || '0',
+        customer_type: editForm.customer_type,
+        price_before_disc: priceBefore,
+        discount,
+        price: finalPrice,
+        notes: editForm.notes.trim() || null,
+        status: editForm.status,
+        payment_ref: editForm.payment_ref.trim() || null,
+        // Pertahankan metode bayar yang sudah ada (mis. cash) saat confirmed; default transfer.
+        payment_method: isConfirmed ? (String(booking.payment_method || '') || 'transfer') : null,
+        paid_at: isConfirmed ? (String(booking.paid_at || '') || new Date().toISOString()) : null,
         updated_at: new Date().toISOString(),
       }).eq('id', booking.id)
 
@@ -206,10 +230,57 @@ export default function BookingDetailModal({ type, booking, onClose, onRefresh }
                 </div>
               </div>
               <div style={{ marginBottom: 12 }}>
-                <label style={{ fontSize: 12, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Harga Final</label>
-                <input type="number" value={editForm.price}
-                  onChange={e => setEditForm(prev => ({ ...prev, price: Number(e.target.value) }))}
-                  style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid var(--border)' }} />
+                <label style={{ fontSize: 12, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Tipe Customer</label>
+                <select value={editForm.customer_type}
+                  onChange={e => setEditForm(prev => ({ ...prev, customer_type: e.target.value }))}
+                  style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid var(--border)' }}>
+                  <option value="individual">Individu</option>
+                  <option value="corporation">Korporasi</option>
+                </select>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+                <div>
+                  <label style={{ fontSize: 12, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Harga Normal (Rp)</label>
+                  <input type="number" min={0} value={editForm.price_before_disc}
+                    onChange={e => setEditForm(prev => ({ ...prev, price_before_disc: e.target.value }))}
+                    style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid var(--border)' }} />
+                </div>
+                <div>
+                  <label style={{ fontSize: 12, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Diskon (Rp)</label>
+                  <input type="number" min={0} value={editForm.discount}
+                    onChange={e => setEditForm(prev => ({ ...prev, discount: e.target.value }))}
+                    style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid var(--border)' }} />
+                </div>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderTop: '1px solid var(--border)', marginBottom: 12 }}>
+                <span style={{ color: 'var(--text-muted)', fontSize: 13 }}>Harga Final:</span>
+                <span style={{ fontWeight: 700, fontSize: 15 }}>{fmtRp(Math.max(0, (Number(editForm.price_before_disc) || 0) - (Number(editForm.discount) || 0)))}</span>
+              </div>
+              <div style={{ marginBottom: 12 }}>
+                <label style={{ fontSize: 12, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Catatan</label>
+                <textarea value={editForm.notes} rows={2}
+                  onChange={e => setEditForm(prev => ({ ...prev, notes: e.target.value }))}
+                  style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid var(--border)', resize: 'vertical' }} />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+                <div>
+                  <label style={{ fontSize: 12, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Status</label>
+                  <select value={editForm.status}
+                    onChange={e => setEditForm(prev => ({ ...prev, status: e.target.value }))}
+                    style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid var(--border)' }}>
+                    <option value="pending_payment">Belum Bayar</option>
+                    <option value="confirmed">Sudah Bayar</option>
+                    <option value="completed">Completed</option>
+                    <option value="no_show">No Show</option>
+                    <option value="cancelled">Cancelled</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={{ fontSize: 12, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Referensi Transfer</label>
+                  <input type="text" value={editForm.payment_ref}
+                    onChange={e => setEditForm(prev => ({ ...prev, payment_ref: e.target.value }))}
+                    style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid var(--border)' }} />
+                </div>
               </div>
 
               {editError && <p style={{ color: 'var(--red)', fontSize: 13, marginBottom: 12 }}>{editError}</p>}

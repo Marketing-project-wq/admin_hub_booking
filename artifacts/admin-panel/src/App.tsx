@@ -8,11 +8,10 @@ import LandingPage from './pages/LandingPage'
 import LoginPage from './pages/LoginPage'
 import ArenaDashboard from './pages/arena/ArenaDashboard'
 import ArenaCalendar from './pages/arena/ArenaCalendar'
-import ArenaSlotBookings from './pages/arena/ArenaSlotBookings'
+import ArenaBookings from './pages/arena/ArenaBookings'
 import ArenaClassBookings from './pages/arena/ArenaClassBookings'
 import ArenaPackageOrders from './pages/arena/ArenaPackageOrders'
 import ArenaVouchers from './pages/arena/ArenaVouchers'
-import ArenaVenueBooking from './pages/arena/ArenaVenueBooking'
 import ArenaUnits from './pages/arena/master/ArenaUnits'
 import ArenaClassTypes from './pages/arena/master/ArenaClassTypes'
 import ArenaSchedules from './pages/arena/master/ArenaSchedules'
@@ -80,8 +79,10 @@ export default function App() {
           >
             <Route index element={<ArenaDashboard />} />
             <Route path="calendar" element={<ArenaCalendar />} />
-            <Route path="venue-booking" element={<ArenaVenueBooking />} />
-            <Route path="slot-bookings" element={<ArenaSlotBookings />} />
+            <Route path="bookings" element={<ArenaBookings />} />
+            {/* Redirect rute lama ke halaman gabungan */}
+            <Route path="venue-booking" element={<Navigate to="/arena/bookings" replace />} />
+            <Route path="slot-bookings" element={<Navigate to="/arena/bookings" replace />} />
             <Route path="class-bookings" element={<ArenaClassBookings />} />
             <Route path="packages" element={<ArenaPackageOrders />} />
             <Route path="vouchers" element={<ArenaVouchers />} />
