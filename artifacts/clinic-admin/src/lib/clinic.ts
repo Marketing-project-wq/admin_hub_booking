@@ -209,7 +209,6 @@ export async function getSlotsByDate(date: string): Promise<ClinicSlot[]> {
     .select(SLOT_SELECT)
     .eq('slot_date', date)
     .order('start_time', { ascending: true })
-  console.log('slots fetch:', data, error)
   if (error) throw error
   return (data || []) as ClinicSlot[]
 }
@@ -251,7 +250,9 @@ export async function bulkAddSlots(input: BulkSlotInput): Promise<number> {
   const end = new Date(input.endDate + 'T00:00:00')
   for (const d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
     if (!input.daysOfWeek.includes(d.getDay())) continue
-    const dateStr = d.toISOString().slice(0, 10)
+    // Use the timezone-aware ymd() helper — toISOString() would convert local
+    // midnight to the previous UTC day in UTC+7 and shift every slot one day earlier.
+    const dateStr = ymd(d)
     for (const t of input.times) {
       rows.push({ slot_date: dateStr, start_time: t.start_time, end_time: t.end_time, quota: input.quota })
     }
@@ -262,6 +263,37 @@ export async function bulkAddSlots(input: BulkSlotInput): Promise<number> {
   )
   if (error) throw error
   return rows.length
+}
+
+// ─── Search helpers ──────────────────────────────────────────────────────────
+/**
+ * Build a safe PostgREST `.or()` ilike expression matching `term` across `columns`.
+ * The value is wrapped in double quotes so commas/parentheses in the search text are
+ * treated as literal characters rather than PostgREST filter grammar, and any
+ * double-quote/backslash is stripped so the value cannot break out of the quotes.
+ * Prevents filter injection / query breakage from free-text search input.
+ */
+function orIlike(columns: string[], term: string): string {
+  const safe = term.trim().replace(/["\\]/g, '')
+  return columns.map(c => `${c}.ilike."%${safe}%"`).join(',')
+}
+
+// ─── Slot claim / release ────────────────────────────────────────────────────
+// Replace the old non-atomic booked_count increments. Each physical seat is held
+// by exactly one claim keyed (slot_id, type, id): claiming is idempotent and
+// capacity-checked server-side (raises 'Slot penuh' when full); releasing frees it.
+async function claimSlot(slotId: string, byType: 'visit' | 'booking', byId: string): Promise<void> {
+  const { error } = await supabase.rpc('claim_clinic_slot', {
+    p_slot_id: slotId, p_claimed_by_type: byType, p_claimed_by_id: byId,
+  })
+  if (error) throw error
+}
+
+async function releaseSlot(slotId: string, byType: 'visit' | 'booking', byId: string): Promise<void> {
+  const { error } = await supabase.rpc('release_clinic_slot', {
+    p_slot_id: slotId, p_claimed_by_type: byType, p_claimed_by_id: byId,
+  })
+  if (error) throw error
 }
 
 // ─── Bookings ────────────────────────────────────────────────────────────────
@@ -285,8 +317,7 @@ function applyBookingFilters(query: any, filters: BookingFilters): any {
   if (filters.dateFrom) q = q.gte('created_at', filters.dateFrom + 'T00:00:00')
   if (filters.dateTo) q = q.lte('created_at', filters.dateTo + 'T23:59:59')
   if (filters.search) {
-    const s = filters.search
-    q = q.or(`full_name.ilike.%${s}%,booking_code.ilike.%${s}%,email.ilike.%${s}%,phone.ilike.%${s}%`)
+    q = q.or(orIlike(['full_name', 'booking_code', 'email', 'phone'], filters.search))
   }
   return q
 }
@@ -327,11 +358,21 @@ export async function confirmBooking(id: string): Promise<void> {
 }
 
 export async function cancelBooking(id: string): Promise<void> {
+  // Read the slot before cancelling so we can release its claim (previously the
+  // booked_count was never decremented on cancel and drifted upward over time).
+  const { data: bk } = await supabase.from('clinic_bookings').select('slot_id').eq('id', id).maybeSingle()
+  const slotId = (bk as { slot_id: string | null } | null)?.slot_id ?? null
+
   const { error } = await supabase.from('clinic_bookings').update({
     status: 'cancelled',
     updated_at: new Date().toISOString(),
   }).eq('id', id)
   if (error) throw error
+
+  // Best-effort — releasing a slot that was never claimed is a harmless no-op.
+  if (slotId) {
+    try { await releaseSlot(slotId, 'booking', id) } catch (e) { console.error('Gagal release slot:', e) }
+  }
 }
 
 // ─── Services ────────────────────────────────────────────────────────────────
@@ -340,7 +381,6 @@ export async function listServices(): Promise<ClinicService[]> {
     .from('clinic_services')
     .select('id, name, price, duration_minutes, is_active, requires_doctor, package_category')
     .order('name', { ascending: true })
-  console.log('services fetch:', data, error)
   if (error) throw error
   return (data || []) as ClinicService[]
 }
@@ -380,8 +420,7 @@ const PATIENT_FIELDS =
 export async function listPatients(search?: string): Promise<ClinicPatient[]> {
   let q = supabase.from('clinic_patients').select(PATIENT_FIELDS)
   if (search) {
-    const s = search.trim()
-    q = q.or(`full_name.ilike.%${s}%,id_number.ilike.%${s}%,phone.ilike.%${s}%`)
+    q = q.or(orIlike(['full_name', 'id_number', 'phone'], search))
   }
   q = q.order('created_at', { ascending: false })
   const { data, error } = await q
@@ -461,6 +500,13 @@ export async function getAvailableClinicSlots(date: string): Promise<AvailableSl
 }
 
 export async function assignVisitSlot(visitId: string, slotId: string, startTime: string): Promise<void> {
+  // Reassign: release the previously-claimed slot first so its booked_count is freed.
+  const { data: prev } = await supabase.from('clinic_visits').select('slot_id').eq('id', visitId).maybeSingle()
+  const prevSlotId = (prev as { slot_id: string | null } | null)?.slot_id ?? null
+  if (prevSlotId && prevSlotId !== slotId) {
+    await releaseSlot(prevSlotId, 'visit', visitId)
+  }
+
   // Update visit dengan slot_id dan visit_time
   const { error: visitErr } = await supabase
     .from('clinic_visits')
@@ -473,11 +519,8 @@ export async function assignVisitSlot(visitId: string, slotId: string, startTime
 
   if (visitErr) throw visitErr
 
-  // Increment booked_count
-  const { error: rpcErr } = await supabase
-    .rpc('increment_clinic_slot_booked', { p_slot_id: slotId })
-
-  if (rpcErr) throw rpcErr
+  // Claim the new slot (idempotent + capacity-checked). Re-claiming the same slot is a no-op.
+  await claimSlot(slotId, 'visit', visitId)
 }
 
 async function nextBookingCode(): Promise<string> {
@@ -756,10 +799,11 @@ export async function createVisitFromBooking(bookingId: string, payload: VisitFr
         .update({ slot_id: b.slot_id })
         .eq('id', visitId)
 
-      // Increment booked_count di clinic_slots
-      await supabase.rpc('increment_clinic_slot_booked', { p_slot_id: b.slot_id })
+      // Hand the slot claim over from the booking to the visit (net 0 for the same seat).
+      await releaseSlot(b.slot_id, 'booking', b.id)
+      await claimSlot(b.slot_id, 'visit', visitId)
     } catch (slotErr) {
-      console.error('Gagal link/increment slot:', slotErr)
+      console.error('Gagal link/claim slot:', slotErr)
     }
   }
 
@@ -900,8 +944,7 @@ export async function listPatientsPaged(params: {
 
   if (activeOnly) q = q.eq('is_active', true)
   if (search) {
-    const s = search.trim()
-    q = q.or(`full_name.ilike.%${s}%,patient_code.ilike.%${s}%,phone.ilike.%${s}%,email.ilike.%${s}%`)
+    q = q.or(orIlike(['full_name', 'patient_code', 'phone', 'email'], search))
   }
   q = q.range(page * pageSize, (page + 1) * pageSize - 1)
 
@@ -1051,10 +1094,13 @@ export async function listVisitsLog(params: {
   if (search.trim()) {
     // Cari lintas visit_code + pasien (nama/kode/HP) + nama layanan. Nama pasien dan
     // layanan ada di tabel join, jadi resolve dulu id-nya lalu gabungkan via .or().
-    const like = `%${search.trim()}%`
+    // Sanitasi input: buang kutip/backslash & bungkus nilai dalam kutip ganda agar
+    // koma/kurung pada teks pencarian tidak merusak grammar filter PostgREST.
+    const term = search.trim().replace(/["\\]/g, '')
+    const like = `%${term}%`
     const [patRes, svcRes] = await Promise.all([
       supabase.from('clinic_patients').select('id')
-        .or(`full_name.ilike."${like}",patient_code.ilike."${like}",phone.ilike."${like}"`),
+        .or(orIlike(['full_name', 'patient_code', 'phone'], term)),
       supabase.from('clinic_visit_services').select('visit_id').ilike('service_name', like),
     ])
     const patientIds = [...new Set(((patRes.data as { id: string }[] | null) ?? []).map(p => p.id))]
@@ -1504,10 +1550,13 @@ export async function relockRecord(
 export async function listAuditLogs(params: {
   recordType?: string
   recordId?: string
+  dateFrom?: string
+  dateTo?: string
+  search?: string
   page?: number
   pageSize?: number
 }): Promise<{ rows: AuditLog[]; count: number }> {
-  const { recordType, recordId, page = 0, pageSize = 20 } = params
+  const { recordType, recordId, dateFrom, dateTo, search, page = 0, pageSize = 20 } = params
   let q = supabase
     .from('clinic_audit_logs')
     .select('*', { count: 'exact' })
@@ -1515,6 +1564,11 @@ export async function listAuditLogs(params: {
 
   if (recordType) q = q.eq('record_type', recordType)
   if (recordId) q = q.eq('record_id', recordId)
+  if (dateFrom) q = q.gte('created_at', dateFrom + 'T00:00:00')
+  if (dateTo) q = q.lte('created_at', dateTo + 'T23:59:59')
+  // Single-column ilike: the value is sent as a filter value (not `.or()` grammar),
+  // so it needs no quoting/escaping to be injection-safe.
+  if (search && search.trim()) q = q.ilike('performed_by', `%${search.trim()}%`)
   q = q.range(page * pageSize, (page + 1) * pageSize - 1)
 
   const { data, error, count } = await q
@@ -1748,9 +1802,9 @@ export async function createManualVisit(payload: {
           .update({ slot_id: matchSlot.id })
           .eq('id', visit.id)
 
-        await supabase.rpc('increment_clinic_slot_booked', { p_slot_id: matchSlot.id })
+        await claimSlot(matchSlot.id, 'visit', visit.id)
       } catch (slotErr) {
-        console.error('Gagal link/increment slot:', slotErr)
+        console.error('Gagal link/claim slot:', slotErr)
       }
     }
   }

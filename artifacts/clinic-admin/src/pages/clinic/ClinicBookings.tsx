@@ -73,13 +73,10 @@ export default function ClinicBookings() {
 
   const fetchData = useCallback(async () => {
     setLoading(true)
-    console.log('date range:', dateFrom, dateTo)
     try {
       const { data: rows, count } = await getBookings({ status: statusFilter, dateFrom, dateTo, search }, page, PAGE_SIZE)
-      console.log('fetch result:', rows, count)
       setData(rows); setTotal(count); setError('')
     } catch (err) {
-      console.log('fetch result:', null, err)
       setError(err instanceof Error ? err.message : 'Gagal memuat data')
     } finally {
       setLoading(false)

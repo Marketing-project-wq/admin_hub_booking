@@ -2,9 +2,9 @@ import React, { useState, useEffect } from 'react'
 import { fmtRp } from '@workspace/admin-shared'
 import { supabase } from '@workspace/admin-shared'
 import { useAuth } from '@workspace/admin-shared'
-import { createTransaction, completeVisitPayment, type ClinicTransaction } from '../../lib/clinicBilling'
+import { type ClinicTransaction } from '../../lib/clinicBilling'
 import {
-  lockRecord, listPackages, listPatientActivePackages, purchasePatientPackage, usePackageSession,
+  listPackages, listPatientActivePackages,
   listServices,
   type ClinicPackage, type ClinicPatientPackage,
 } from '../../lib/clinic'
@@ -101,6 +101,8 @@ export default function ClinicCloseBillModal({
     : null
   const packageSubtotal = selectedNewPkg ? selectedNewPkg.package_price : 0
   const grandTotal = Math.max(0, visitSubtotal + packageSubtotal - (Number(discount) || 0))
+  // Batas atas diskon = harga layanan + paket (sama dengan p_service_price di RPC, yang menolak discount > service_price).
+  const maxDiscount = visitSubtotal + packageSubtotal
   const change = method === 'cash' && cashReceived > grandTotal ? cashReceived - grandTotal : 0
   const isCard = method === 'debit' || method === 'kredit'
 
@@ -137,40 +139,42 @@ export default function ClinicCloseBillModal({
         ? services.reduce((sum, s) => sum + s.price, 0)
         : paidOnline ? 0 : (Number(discount) || 0)
 
-      const trx = await createTransaction({
-        visit_id: visitId,
-        patient_id: patientId,
-        service_id: services[0]?.service_id ?? undefined,
-        service_name: serviceName,
-        service_price: visitSubtotal + packageSubtotal,
-        discount: finalDiscount,
-        total_amount: finalTotal,
-        payment_method: finalPaymentMethod,
-        payment_detail,
-        notes: notes.trim() || undefined,
-        cashier_name: cashierName.trim() || undefined,
-      })
-      if (user) await lockRecord('clinic_transactions', trx.id, user.full_name)
-      await completeVisitPayment(visitId, finalPaymentMethod, finalTotal)
-
-      // 1. Potong sesi paket aktif yang meng-cover layanan kunjungan ini (1 sesi per paket).
-      //    Lewati jika dibayar voucher 100% — jangan potong sesi paket.
+      // Sesi paket yang dipotong: 1 per kategori ter-cover (Performance & Medic), maks 2.
+      // Lewati jika dibayar voucher 100%.
+      const usePackageIds: string[] = []
       if (!paidWithVoucher && activePerformancePackage && coveredServices.some(s => isPerformanceService(s.service_name))) {
-        await usePackageSession(activePerformancePackage.id)
+        usePackageIds.push(activePerformancePackage.id)
       }
       if (!paidWithVoucher && activeMedicPackage && coveredServices.some(s => isMedicService(s.service_name))) {
-        await usePackageSession(activeMedicPackage.id)
+        usePackageIds.push(activeMedicPackage.id)
       }
 
-      // 2. Pembelian paket baru (jika dicentang).
-      if (buyingPackage && selectedNewPackageId && selectedNewPkg) {
-        await purchasePatientPackage({
-          patient_id: patientId,
-          package_id: selectedNewPackageId,
-          total_sessions: selectedNewPkg.sessions,
-          notes: packageNotes.trim() || undefined,
-        })
-      }
+      const doPurchase = buyingPackage && !!selectedNewPackageId && !!selectedNewPkg
+
+      // Satu RPC atomik menggantikan createTransaction + lockRecord + completeVisitPayment
+      // + usePackageSession(×2) + purchasePatientPackage — semua rollback bersama jika ada
+      // langkah gagal, dan menolak re-close visit yang sudah paid (anti transaksi ganda).
+      const { data: trxData, error: rpcErr } = await supabase.rpc('close_clinic_bill', {
+        p_visit_id: visitId,
+        p_patient_id: patientId,
+        p_service_id: services[0]?.service_id ?? null,
+        p_service_name: serviceName,
+        p_service_price: visitSubtotal + packageSubtotal,
+        p_discount: finalDiscount,
+        p_total_amount: finalTotal,
+        p_payment_method: finalPaymentMethod,
+        p_payment_detail: payment_detail,
+        p_notes: notes.trim() || null,
+        p_cashier_name: cashierName.trim() || null,
+        p_locked_by: user?.full_name ?? null,
+        p_use_package_ids: usePackageIds,
+        p_purchase_package: doPurchase,
+        p_purchase_package_id: doPurchase ? selectedNewPackageId : null,
+        p_purchase_package_sessions: doPurchase && selectedNewPkg ? selectedNewPkg.sessions : null,
+        p_purchase_package_notes: doPurchase ? (packageNotes.trim() || null) : null,
+      })
+      if (rpcErr) throw rpcErr
+      const trx = trxData as unknown as ClinicTransaction
 
       // Jadwalkan kunjungan berikutnya (best-effort — pembayaran di atas sudah committed).
       if (scheduleFollowUp && followUpDate && followUpServices.length > 0) {
@@ -219,20 +223,14 @@ export default function ClinicCloseBillModal({
                 .update({ slot_id: matchSlot.id })
                 .eq('id', newVisit.id)
 
-              await supabase.rpc('increment_clinic_slot_booked', { p_slot_id: matchSlot.id })
+              // Hanya visit follow-up yang meng-claim slot; booking yang dibuat di bawah TIDAK ikut claim.
+              await supabase.rpc('claim_clinic_slot', {
+                p_slot_id: matchSlot.id, p_claimed_by_type: 'visit', p_claimed_by_id: newVisit.id,
+              })
             }
           }
 
           // Buat clinic_bookings untuk follow-up agar pasien bisa check-in (dengan / tanpa slot)
-          console.log('[FollowUp Debug]', {
-            scheduleFollowUp,
-            followUpDate,
-            followUpServicesLength: followUpServices.length,
-            followUpServices,
-            patientId,
-            patientName,
-            patientPhone,
-          })
           const followUpServiceId = followUpServices[0]?.service_id ?? null
           if (followUpServiceId) {
             // Generate booking code dulu
@@ -459,7 +457,7 @@ export default function ClinicCloseBillModal({
         {!paidOnline && !paidWithVoucher && (
           <div className="form-group">
             <label>Diskon (Rp)</label>
-            <input type="number" min={0} value={discount} onChange={e => setDiscount(Math.max(0, Number(e.target.value)))} />
+            <input type="number" min={0} max={maxDiscount} value={discount} onChange={e => setDiscount(Math.max(0, Math.min(Number(e.target.value), maxDiscount)))} />
           </div>
         )}
 

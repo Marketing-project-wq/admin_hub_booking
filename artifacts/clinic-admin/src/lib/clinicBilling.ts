@@ -20,6 +20,9 @@ export interface ClinicTransaction {
   payment_status: string // paid | pending | cancelled
   notes: string | null
   cashier_name: string | null
+  patient_package_id: string | null
+  is_package_purchase: boolean
+  package_id: string | null
   created_at: string
   updated_at: string
   // joined
@@ -41,6 +44,9 @@ export interface CreateTransactionPayload {
   payment_detail: Record<string, string>
   notes?: string
   cashier_name?: string
+  patient_package_id?: string | null
+  is_package_purchase?: boolean
+  package_id?: string | null
 }
 
 // List transaksi dengan filter
