@@ -702,6 +702,34 @@ async function searchPatients(query: string): Promise<PatientHistory[]> {
   return (data ?? []) as unknown as PatientHistory[]
 }
 
+// Daftar default tab Riwayat Pasien: pasien diurut berdasarkan kunjungan TERAKHIR
+// (visit_date terbaru dulu, bukan alfabetis). PostgREST tak bisa DISTINCT ON / order-by
+// agregat embedded, jadi ambil sejumlah visit terbaru lalu dedupe per pasien di klien
+// (maks 50 pasien). Pasien tanpa kunjungan tidak muncul di daftar default — itu memang
+// "riwayat" — tapi tetap bisa ditemukan lewat kotak pencarian.
+async function fetchRecentPatients(): Promise<PatientHistory[]> {
+  const { data, error } = await supabase
+    .from('clinic_visits')
+    .select('visit_date, patient:clinic_patients!inner(id, patient_code, full_name, phone, date_of_birth, gender, is_active)')
+    .eq('patient.is_active', true)
+    .order('visit_date', { ascending: false })
+    .limit(200)
+  if (error) throw error
+  const seen = new Set<string>()
+  const out: PatientHistory[] = []
+  for (const row of (data ?? []) as any[]) {
+    const p = row.patient
+    if (!p || seen.has(p.id)) continue
+    seen.add(p.id)
+    out.push({
+      id: p.id, patient_code: p.patient_code, full_name: p.full_name,
+      phone: p.phone, date_of_birth: p.date_of_birth, gender: p.gender,
+    })
+    if (out.length >= 50) break
+  }
+  return out
+}
+
 // Fetch riwayat visit pasien
 async function fetchPatientVisitHistory(patientId: string): Promise<DokterVisit[]> {
   const { data, error } = await supabase
@@ -2026,10 +2054,27 @@ function RiwayatTab({ onOpenVisit }: { onOpenVisit: (visit: DokterVisit) => void
   const [patientVisits, setPatientVisits] = useState<DokterVisit[]>([])
   const [loadingVisits, setLoadingVisits] = useState(false)
 
+  // Muat daftar default (pasien terurut kunjungan terakhir) — dipakai saat tab dibuka
+  // dan saat kotak pencarian dikosongkan lagi.
+  const loadDefault = useCallback(async () => {
+    setSearching(true)
+    try {
+      setResults(await fetchRecentPatients())
+      setError('')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Gagal memuat daftar pasien')
+    } finally {
+      setSearching(false)
+    }
+  }, [])
+
+  // Tab Riwayat Pasien dibuka → langsung tampilkan daftar default (tanpa perlu ngetik).
+  useEffect(() => { loadDefault() }, [loadDefault])
+
   const handleQuery = (val: string) => {
     setQuery(val)
     if (searchTimer.current) clearTimeout(searchTimer.current)
-    if (!val.trim()) { setResults([]); return }
+    if (!val.trim()) { loadDefault(); return }
     searchTimer.current = setTimeout(async () => {
       setSearching(true)
       try {
@@ -2072,7 +2117,7 @@ function RiwayatTab({ onOpenVisit }: { onOpenVisit: (visit: DokterVisit) => void
           {searching ? (
             <p style={{ color: 'var(--text-muted)' }}>Mencari...</p>
           ) : results.length === 0 ? (
-            <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>{query.trim() ? 'Tidak ada pasien ditemukan.' : 'Ketik untuk mencari pasien.'}</p>
+            <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>{query.trim() ? 'Tidak ada pasien ditemukan.' : 'Belum ada pasien dengan riwayat kunjungan.'}</p>
           ) : results.map(p => (
             <div key={p.id} onClick={() => selectPatient(p)}
               style={{
