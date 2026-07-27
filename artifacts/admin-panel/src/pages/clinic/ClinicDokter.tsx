@@ -707,11 +707,15 @@ async function searchPatients(query: string): Promise<PatientHistory[]> {
 // agregat embedded, jadi ambil sejumlah visit terbaru lalu dedupe per pasien di klien
 // (maks 50 pasien). Pasien tanpa kunjungan tidak muncul di daftar default — itu memang
 // "riwayat" — tapi tetap bisa ditemukan lewat kotak pencarian.
-async function fetchRecentPatients(): Promise<PatientHistory[]> {
-  const { data, error } = await supabase
+async function fetchRecentPatients(from?: string, to?: string): Promise<PatientHistory[]> {
+  // Filter (.gte/.lte) HARUS sebelum transform (.order/.limit) — batasan tipe PostgREST builder.
+  let q = supabase
     .from('clinic_visits')
     .select('visit_date, patient:clinic_patients!inner(id, patient_code, full_name, phone, date_of_birth, gender, is_active)')
     .eq('patient.is_active', true)
+  if (from) q = q.gte('visit_date', from)
+  if (to)   q = q.lte('visit_date', to)
+  const { data, error } = await q
     .order('visit_date', { ascending: false })
     .limit(200)
   if (error) throw error
@@ -2049,21 +2053,20 @@ function RiwayatTab({ onOpenVisit }: { onOpenVisit: (visit: DokterVisit) => void
   const [searching, setSearching] = useState(false)
   const [error, setError] = useState('')
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Filter rentang tanggal GENERAL (di samping search) — menyaring DAFTAR PASIEN default
+  // (pasien dgn kunjungan di rentang ini). Diabaikan selama search aktif. Kosong = tanpa filter.
+  const [fromDate, setFromDate] = useState('')
+  const [toDate, setToDate] = useState('')
 
   const [selectedPatient, setSelectedPatient] = useState<PatientHistory | null>(null)
   const [patientVisits, setPatientVisits] = useState<DokterVisit[]>([])
   const [loadingVisits, setLoadingVisits] = useState(false)
-  // Filter rentang tanggal (client-side) untuk daftar kunjungan pasien terpilih.
-  // Kosong = tidak ada filter. Di-reset tiap ganti pasien (lihat selectPatient).
-  const [fromDate, setFromDate] = useState('')
-  const [toDate, setToDate] = useState('')
 
-  // Muat daftar default (pasien terurut kunjungan terakhir) — dipakai saat tab dibuka
-  // dan saat kotak pencarian dikosongkan lagi.
-  const loadDefault = useCallback(async () => {
+  // Muat daftar default (pasien terurut kunjungan terakhir) dengan filter tanggal opsional.
+  const loadDefault = useCallback(async (from: string, to: string) => {
     setSearching(true)
     try {
-      setResults(await fetchRecentPatients())
+      setResults(await fetchRecentPatients(from || undefined, to || undefined))
       setError('')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Gagal memuat daftar pasien')
@@ -2072,17 +2075,22 @@ function RiwayatTab({ onOpenVisit }: { onOpenVisit: (visit: DokterVisit) => void
     }
   }, [])
 
-  // Tab Riwayat Pasien dibuka → langsung tampilkan daftar default (tanpa perlu ngetik).
-  useEffect(() => { loadDefault() }, [loadDefault])
+  // Saat search kosong (tab dibuka / box dikosongkan / filter tanggal berubah) → muat ulang
+  // daftar default dgn filter tanggal tersimpan. Saat search aktif → efek ini no-op: filter
+  // tanggal diabaikan, hasil di-set oleh handleQuery.
+  useEffect(() => {
+    if (query.trim()) return
+    loadDefault(fromDate, toDate)
+  }, [query, fromDate, toDate, loadDefault])
 
   const handleQuery = (val: string) => {
     setQuery(val)
     if (searchTimer.current) clearTimeout(searchTimer.current)
-    if (!val.trim()) { loadDefault(); return }
+    if (!val.trim()) return   // query kosong → daftar default ditangani useEffect di atas
     searchTimer.current = setTimeout(async () => {
       setSearching(true)
       try {
-        setResults(await searchPatients(val.trim()))
+        setResults(await searchPatients(val.trim()))   // search murni nama/kode/HP, tanpa filter tanggal
         setError('')
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Pencarian gagal')
@@ -2094,7 +2102,6 @@ function RiwayatTab({ onOpenVisit }: { onOpenVisit: (visit: DokterVisit) => void
 
   const selectPatient = async (p: PatientHistory) => {
     setSelectedPatient(p)
-    setFromDate(''); setToDate('')   // buang filter tanggal dari pasien sebelumnya
     setLoadingVisits(true)
     try {
       setPatientVisits(await fetchPatientVisitHistory(p.id))
@@ -2106,13 +2113,7 @@ function RiwayatTab({ onOpenVisit }: { onOpenVisit: (visit: DokterVisit) => void
     }
   }
 
-  // Saring kunjungan pasien terpilih berdasarkan rentang tanggal (inklusif).
-  // visit_date & fromDate/toDate sama-sama 'YYYY-MM-DD' → perbandingan string aman.
-  const filteredVisits = patientVisits.filter(v => {
-    if (fromDate && v.visit_date < fromDate) return false
-    if (toDate && v.visit_date > toDate) return false
-    return true
-  })
+  const searchActive = !!query.trim()
   const hasDateFilter = !!(fromDate || toDate)
 
   return (
@@ -2120,9 +2121,31 @@ function RiwayatTab({ onOpenVisit }: { onOpenVisit: (visit: DokterVisit) => void
       <div className="filter-bar">
         <input
           type="text" placeholder="Cari nama, kode pasien, atau nomor HP..."
-          value={query} onChange={e => handleQuery(e.target.value)} style={{ minWidth: 300 }}
+          value={query} onChange={e => handleQuery(e.target.value)} style={{ minWidth: 260 }}
         />
+        {/* Filter tanggal GENERAL utk daftar pasien — nonaktif selama search aktif */}
+        <span style={{ fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap', alignSelf: 'center' }}>Tgl kunjungan:</span>
+        <input
+          type="date" value={fromDate} max={toDate || undefined}
+          disabled={searchActive} onChange={e => setFromDate(e.target.value)}
+          title="Dari tanggal" style={{ opacity: searchActive ? 0.5 : 1 }}
+        />
+        <span style={{ color: 'var(--text-muted)' }}>–</span>
+        <input
+          type="date" value={toDate} min={fromDate || undefined}
+          disabled={searchActive} onChange={e => setToDate(e.target.value)}
+          title="Sampai tanggal" style={{ opacity: searchActive ? 0.5 : 1 }}
+        />
+        {hasDateFilter && (
+          <button type="button" className="btn-secondary" onClick={() => { setFromDate(''); setToDate('') }}
+            style={{ width: 'auto', padding: '6px 12px' }}>Reset Filter</button>
+        )}
       </div>
+      {searchActive && hasDateFilter && (
+        <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 12px' }}>
+          Filter tanggal dinonaktifkan selama pencarian nama/kode. Kosongkan kotak cari untuk memakainya lagi.
+        </p>
+      )}
       {error && <p style={{ color: 'var(--red)', fontSize: 13, marginBottom: 12 }}>{error}</p>}
 
       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-start' }}>
@@ -2161,29 +2184,11 @@ function RiwayatTab({ onOpenVisit }: { onOpenVisit: (visit: DokterVisit) => void
                 <div><span style={{ color: 'var(--text-muted)' }}>Gender: </span>{selectedPatient.gender || '-'}</div>
               </div>
 
-              {/* Filter rentang tanggal — ter-scope ke pasien terpilih (client-side) */}
-              <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: 12 }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Dari</label>
-                  <input type="date" value={fromDate} max={toDate || undefined} onChange={e => setFromDate(e.target.value)} style={{ ...emrField, width: 'auto' }} />
-                </div>
-                <div>
-                  <label style={{ display: 'block', fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Sampai</label>
-                  <input type="date" value={toDate} min={fromDate || undefined} onChange={e => setToDate(e.target.value)} style={{ ...emrField, width: 'auto' }} />
-                </div>
-                {hasDateFilter && (
-                  <button type="button" className="btn-secondary" onClick={() => { setFromDate(''); setToDate('') }}
-                    style={{ width: 'auto', padding: '8px 14px' }}>Reset Filter</button>
-                )}
-              </div>
-
               {loadingVisits ? (
                 <p style={{ color: 'var(--text-muted)' }}>Memuat riwayat...</p>
               ) : patientVisits.length === 0 ? (
                 <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>Belum ada riwayat kunjungan</p>
-              ) : filteredVisits.length === 0 ? (
-                <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>Tidak ada kunjungan pada rentang tanggal ini.</p>
-              ) : filteredVisits.map(v => (
+              ) : patientVisits.map(v => (
                 <div key={v.id} style={{ borderTop: '1px solid var(--border)', padding: '10px 0', display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
                   <div style={{ minWidth: 0 }}>
                     <div style={{ fontSize: 13, fontWeight: 600 }}>{fmtDate(v.visit_date)}{v.visit_time ? ` · ${fmtTime(v.visit_time)}` : ''}</div>
