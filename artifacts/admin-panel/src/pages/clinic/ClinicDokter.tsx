@@ -2053,6 +2053,10 @@ function RiwayatTab({ onOpenVisit }: { onOpenVisit: (visit: DokterVisit) => void
   const [selectedPatient, setSelectedPatient] = useState<PatientHistory | null>(null)
   const [patientVisits, setPatientVisits] = useState<DokterVisit[]>([])
   const [loadingVisits, setLoadingVisits] = useState(false)
+  // Filter rentang tanggal (client-side) untuk daftar kunjungan pasien terpilih.
+  // Kosong = tidak ada filter. Di-reset tiap ganti pasien (lihat selectPatient).
+  const [fromDate, setFromDate] = useState('')
+  const [toDate, setToDate] = useState('')
 
   // Muat daftar default (pasien terurut kunjungan terakhir) — dipakai saat tab dibuka
   // dan saat kotak pencarian dikosongkan lagi.
@@ -2090,6 +2094,7 @@ function RiwayatTab({ onOpenVisit }: { onOpenVisit: (visit: DokterVisit) => void
 
   const selectPatient = async (p: PatientHistory) => {
     setSelectedPatient(p)
+    setFromDate(''); setToDate('')   // buang filter tanggal dari pasien sebelumnya
     setLoadingVisits(true)
     try {
       setPatientVisits(await fetchPatientVisitHistory(p.id))
@@ -2100,6 +2105,15 @@ function RiwayatTab({ onOpenVisit }: { onOpenVisit: (visit: DokterVisit) => void
       setLoadingVisits(false)
     }
   }
+
+  // Saring kunjungan pasien terpilih berdasarkan rentang tanggal (inklusif).
+  // visit_date & fromDate/toDate sama-sama 'YYYY-MM-DD' → perbandingan string aman.
+  const filteredVisits = patientVisits.filter(v => {
+    if (fromDate && v.visit_date < fromDate) return false
+    if (toDate && v.visit_date > toDate) return false
+    return true
+  })
+  const hasDateFilter = !!(fromDate || toDate)
 
   return (
     <div>
@@ -2147,11 +2161,29 @@ function RiwayatTab({ onOpenVisit }: { onOpenVisit: (visit: DokterVisit) => void
                 <div><span style={{ color: 'var(--text-muted)' }}>Gender: </span>{selectedPatient.gender || '-'}</div>
               </div>
 
+              {/* Filter rentang tanggal — ter-scope ke pasien terpilih (client-side) */}
+              <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: 12 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Dari</label>
+                  <input type="date" value={fromDate} max={toDate || undefined} onChange={e => setFromDate(e.target.value)} style={{ ...emrField, width: 'auto' }} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Sampai</label>
+                  <input type="date" value={toDate} min={fromDate || undefined} onChange={e => setToDate(e.target.value)} style={{ ...emrField, width: 'auto' }} />
+                </div>
+                {hasDateFilter && (
+                  <button type="button" className="btn-secondary" onClick={() => { setFromDate(''); setToDate('') }}
+                    style={{ width: 'auto', padding: '8px 14px' }}>Reset Filter</button>
+                )}
+              </div>
+
               {loadingVisits ? (
                 <p style={{ color: 'var(--text-muted)' }}>Memuat riwayat...</p>
               ) : patientVisits.length === 0 ? (
                 <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>Belum ada riwayat kunjungan</p>
-              ) : patientVisits.map(v => (
+              ) : filteredVisits.length === 0 ? (
+                <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>Tidak ada kunjungan pada rentang tanggal ini.</p>
+              ) : filteredVisits.map(v => (
                 <div key={v.id} style={{ borderTop: '1px solid var(--border)', padding: '10px 0', display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
                   <div style={{ minWidth: 0 }}>
                     <div style={{ fontSize: 13, fontWeight: 600 }}>{fmtDate(v.visit_date)}{v.visit_time ? ` · ${fmtTime(v.visit_time)}` : ''}</div>
