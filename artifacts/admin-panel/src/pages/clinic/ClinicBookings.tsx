@@ -5,7 +5,7 @@ import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../context/AuthContext'
 import {
   getBookings, getAllBookings, confirmBooking, cancelBooking, serviceName,
-  todayISO, daysAgoISO, listServices, createManualVisit, createVisitFromBooking,
+  todayISO, daysAgoISO, listServices, createManualVisit, createVisitFromBooking, orIlike,
   type ClinicBooking, type BookingFilters, type ClinicService,
 } from '../../lib/clinic'
 
@@ -73,13 +73,10 @@ export default function ClinicBookings() {
 
   const fetchData = useCallback(async () => {
     setLoading(true)
-    console.log('date range:', dateFrom, dateTo)
     try {
       const { data: rows, count } = await getBookings({ status: statusFilter, dateFrom, dateTo, search }, page, PAGE_SIZE)
-      console.log('fetch result:', rows, count)
       setData(rows); setTotal(count); setError('')
     } catch (err) {
-      console.log('fetch result:', null, err)
       setError(err instanceof Error ? err.message : 'Gagal memuat data')
     } finally {
       setLoading(false)
@@ -181,7 +178,7 @@ export default function ClinicBookings() {
       const { data } = await supabase
         .from('clinic_patients')
         .select('id, full_name, patient_code, phone')
-        .or(`full_name.ilike.%${patientSearch}%,phone.ilike.%${patientSearch}%,patient_code.ilike.%${patientSearch}%`)
+        .or(orIlike(['full_name', 'phone', 'patient_code'], patientSearch))
         .eq('is_active', true)
         .limit(5)
       setPatientResults(data ?? [])

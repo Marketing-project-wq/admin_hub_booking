@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import { ClinicVisit, ClinicPatient } from './clinic'
+import { ClinicVisit, ClinicPatient, orIlike } from './clinic'
 
 export interface ClinicTransaction {
   id: string
@@ -20,6 +20,9 @@ export interface ClinicTransaction {
   payment_status: string // paid | pending | cancelled
   notes: string | null
   cashier_name: string | null
+  patient_package_id: string | null
+  is_package_purchase: boolean
+  package_id: string | null
   created_at: string
   updated_at: string
   // joined
@@ -41,6 +44,9 @@ export interface CreateTransactionPayload {
   payment_detail: Record<string, string>
   notes?: string
   cashier_name?: string
+  patient_package_id?: string | null
+  is_package_purchase?: boolean
+  package_id?: string | null
 }
 
 // List transaksi dengan filter
@@ -65,7 +71,7 @@ export async function listTransactions(params: {
   if (dateFrom) q = q.gte('created_at', dateFrom + 'T00:00:00')
   if (dateTo) q = q.lte('created_at', dateTo + 'T23:59:59')
   if (paymentMethod !== 'all') q = q.eq('payment_method', paymentMethod)
-  if (search) q = q.or(`transaction_code.ilike.%${search}%,service_name.ilike.%${search}%`)
+  if (search) q = q.or(orIlike(['transaction_code', 'service_name'], search))
   q = q.range(page * pageSize, (page + 1) * pageSize - 1)
 
   const { data, error, count } = await q

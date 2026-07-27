@@ -45,6 +45,9 @@ export default function ClinicAuditLog() {
     try {
       const { rows: r, count } = await listAuditLogs({
         recordType: recordType === 'all' ? undefined : recordType,
+        dateFrom: dateFrom || undefined,
+        dateTo: dateTo || undefined,
+        search: search || undefined,
         page,
         pageSize: PAGE_SIZE,
       })
@@ -54,14 +57,14 @@ export default function ClinicAuditLog() {
     } finally {
       setLoading(false)
     }
-  }, [recordType, page])
+  }, [recordType, dateFrom, dateTo, search, page])
 
   useEffect(() => { if (isSuperAdmin) fetchData() }, [isSuperAdmin, fetchData])
 
   const handleSearchChange = (val: string) => {
     setSearchInput(val)
     if (searchTimer.current) clearTimeout(searchTimer.current)
-    searchTimer.current = setTimeout(() => setSearch(val), 300)
+    searchTimer.current = setTimeout(() => { setSearch(val); setPage(0) }, 300)
   }
 
   if (!isSuperAdmin) {
@@ -71,14 +74,6 @@ export default function ClinicAuditLog() {
       </div>
     )
   }
-
-  // Client-side filter (date range + performed_by) on the current page.
-  const displayed = rows.filter(r => {
-    if (dateFrom && r.created_at < dateFrom + 'T00:00:00') return false
-    if (dateTo && r.created_at > dateTo + 'T23:59:59') return false
-    if (search && !r.performed_by.toLowerCase().includes(search.toLowerCase())) return false
-    return true
-  })
 
   const from = total > 0 ? page * PAGE_SIZE + 1 : 0
   const to = Math.min((page + 1) * PAGE_SIZE, total)
@@ -99,9 +94,9 @@ export default function ClinicAuditLog() {
           {RECORD_TYPES.map(t => <option key={t} value={t}>{RECORD_LABEL[t]}</option>)}
         </select>
         <label style={{ fontSize: 13, color: 'var(--text-muted)' }}>Dari</label>
-        <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} />
+        <input type="date" value={dateFrom} onChange={e => { setDateFrom(e.target.value); setPage(0) }} />
         <label style={{ fontSize: 13, color: 'var(--text-muted)' }}>Sampai</label>
-        <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} />
+        <input type="date" value={dateTo} onChange={e => { setDateTo(e.target.value); setPage(0) }} />
         <input type="text" placeholder="Cari nama yang melakukan..." value={searchInput} onChange={e => handleSearchChange(e.target.value)} style={{ minWidth: 200 }} />
       </div>
 
@@ -115,9 +110,9 @@ export default function ClinicAuditLog() {
           <tbody>
             {loading ? (
               <tr className="loading-row"><td colSpan={7}>Memuat data...</td></tr>
-            ) : displayed.length === 0 ? (
+            ) : rows.length === 0 ? (
               <tr><td colSpan={7} className="empty-state">Tidak ada log</td></tr>
-            ) : displayed.map(r => (
+            ) : rows.map(r => (
               <tr key={r.id}>
                 <td style={{ whiteSpace: 'nowrap', fontSize: 12 }}>{fmtDateTime(r.created_at)}</td>
                 <td><ActionBadge action={r.action} /></td>
