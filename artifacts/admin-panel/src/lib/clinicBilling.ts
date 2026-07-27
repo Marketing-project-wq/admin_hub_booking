@@ -126,11 +126,14 @@ export async function getTodaySummary(): Promise<{
 }> {
   const todayStart = new Date()
   todayStart.setHours(0, 0, 0, 0)
+  const todayEnd = new Date()
+  todayEnd.setHours(23, 59, 59, 999)
 
   const { data, error } = await supabase
     .from('clinic_transactions')
     .select('total_amount, payment_method')
     .gte('created_at', todayStart.toISOString())
+    .lte('created_at', todayEnd.toISOString())
     .eq('payment_status', 'paid')
 
   if (error) throw error
