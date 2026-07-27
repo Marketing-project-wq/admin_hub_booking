@@ -480,12 +480,37 @@ function parseDiagnosis(raw: unknown): DiagnosisData {
   }
 }
 
+// ── Plan (SOAP: P) ──────────────────────────────────────────────────────────
+type DischargeStatus = 'Berobat Jalan' | 'Sehat' | 'Rujuk' | 'Meninggal'
+const DISCHARGE_STATUS_OPTIONS: DischargeStatus[] = ['Berobat Jalan', 'Sehat', 'Rujuk', 'Meninggal']
+
+interface PlanData {
+  treatment: string            // Rencana Terapi/Tindakan
+  education_followup: string   // Edukasi & Follow-up
+  discharge_status: DischargeStatus | null
+  legacy_migrated?: true       // penanda baris hasil migrasi (saat ini tak ada isinya)
+}
+const emptyPlan = (): PlanData => ({ treatment: '', education_followup: '', discharge_status: null })
+
+/** Kolom plan (jsonb). Baris lama kosong → jalur default. */
+function parsePlan(raw: unknown): PlanData {
+  if (raw == null || typeof raw !== 'object') return emptyPlan()
+  const r = raw as Partial<PlanData>
+  const ds = r.discharge_status
+  return {
+    treatment: typeof r.treatment === 'string' ? r.treatment : '',
+    education_followup: typeof r.education_followup === 'string' ? r.education_followup : '',
+    discharge_status: DISCHARGE_STATUS_OPTIONS.includes(ds as DischargeStatus) ? (ds as DischargeStatus) : null,
+    ...(r.legacy_migrated ? { legacy_migrated: true as const } : {}),
+  }
+}
+
 interface AssessmentForm {
   subjective: SubjectiveData
   objective: ObjectiveData
   vital_signs: VitalSigns
   assessment: string
-  plan: string
+  plan: PlanData
   diagnosis: DiagnosisData
   follow_up_date: string
   notes: string
@@ -547,8 +572,8 @@ interface MedicalHistory {
   services: { service_name: string; price: number }[]
   assessment: {
     diagnosis: DiagnosisData | string | null   // jsonb (baru) / string (legacy) / null
-    plan: string | null
-    // jsonb setelah migrasi; string kalau data lama / migrasi belum jalan. Tidak dirender di Riwayat.
+    plan: PlanData | string | null             // jsonb (baru) / string (legacy) / null
+    // subjective/objective: jsonb setelah migrasi; string kalau data lama. Tidak dirender di Riwayat.
     subjective: SubjectiveData | string | null
     objective: ObjectiveData | string | null
     assessment: string | null
@@ -600,7 +625,7 @@ async function fetchAssessment(visitId: string): Promise<AssessmentRecord | null
       objective: parseObjective(data.objective),
       vital_signs: parseVitalSigns(data.vital_signs),
       assessment: data.assessment ?? '',
-      plan: data.plan ?? '',
+      plan: parsePlan(data.plan),
       diagnosis: parseDiagnosis(data.diagnosis),
       follow_up_date: data.follow_up_date ?? '',
       notes: data.notes ?? '',
@@ -617,9 +642,9 @@ async function saveAssessment(visitId: string, patientId: string, form: Assessme
       patient_id: patientId,
       assessment_type: 'doctor',   // form ini = assessment dokter; koeksis dgn baris 'therapist' (ClinicTriase)
       ...form,
-      // diagnosis kini disimpan dari form (jsonb). follow_up_date tetap null sampai
-      // section Plan diimplementasi (form.follow_up_date masih '' → tak valid utk kolom date).
-      follow_up_date: null,
+      // plan & diagnosis disimpan sebagai jsonb dari ...form. follow_up_date kolom date:
+      // string kosong tidak valid → normalisasi '' menjadi null (opsional, tidak wajib).
+      follow_up_date: form.follow_up_date || null,
       updated_at: new Date().toISOString(),
     }, { onConflict: 'visit_id,assessment_type' })   // match unique index asli (visit_id, assessment_type)
     .select('id')
@@ -822,7 +847,7 @@ export default function ClinicDokter() {
   const [historyLoading, setHistoryLoading] = useState(false)
   const [assessment, setAssessment] = useState<AssessmentForm>({
     subjective: emptySubjective(), objective: emptyObjective(), vital_signs: emptyVitalSigns(),
-    assessment: '', plan: '', diagnosis: emptyDiagnosis(), follow_up_date: '', notes: '', handled_by: '',
+    assessment: '', plan: emptyPlan(), diagnosis: emptyDiagnosis(), follow_up_date: '', notes: '', handled_by: '',
   })
   const [loadingAssessment, setLoadingAssessment] = useState(false)
   const [savingAssessment, setSavingAssessment] = useState(false)
@@ -953,7 +978,7 @@ export default function ClinicDokter() {
       } else {
         setAssessment({
           subjective: emptySubjective(), objective: emptyObjective(), vital_signs: emptyVitalSigns(),
-          assessment: '', plan: '', diagnosis: emptyDiagnosis(), follow_up_date: '', notes: '',
+          assessment: '', plan: emptyPlan(), diagnosis: emptyDiagnosis(), follow_up_date: '', notes: '',
           handled_by: user?.full_name ?? '',
         })
         setAssessmentId(null)
@@ -1059,6 +1084,12 @@ export default function ClinicDokter() {
       finally { setIcdSearching(false) }
     }, 300)
   }
+
+  // ── Plan helpers ──────────────────────────────────────────────────────────
+  const plan = assessment.plan
+  const patchPlan = (patch: Partial<PlanData>) =>
+    setAssessment(p => ({ ...p, plan: { ...p.plan, ...patch } }))
+
   // Gender pasien menentukan file gambar; selain 'male'/'female' (atau kosong) → default 'male'.
   const patientGender: 'male' | 'female' = selectedVisit?.patient?.gender === 'female' ? 'female' : 'male'
   const bodyImageKey = `${bodyView}-${patientGender}`
@@ -1771,18 +1802,51 @@ export default function ClinicDokter() {
                       )}
                     </div>
 
-                    {/* Rencana Tindakan (Plan) — dipindah dari .map, tak diubah */}
+                    {/* ── Rencana / Plan (SOAP: P) ─────────────────────────────────── */}
                     <div style={{ marginBottom: 14 }}>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                        <span style={{ padding: '2px 10px', borderRadius: 999, background: 'rgba(139,92,246,0.15)', color: '#C4B5FD', fontSize: 12, fontWeight: 700 }}>Rencana Tindakan</span>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                        <span style={{ padding: '2px 10px', borderRadius: 999, background: 'rgba(139,92,246,0.15)', color: '#C4B5FD', fontSize: 12, fontWeight: 700 }}>Rencana (Plan)</span>
                       </label>
+
+                      <label style={emrSubLabel}>Rencana Terapi/Tindakan</label>
                       <textarea
-                        value={assessment.plan}
-                        onChange={e => setAssessment(prev => ({ ...prev, plan: e.target.value }))}
-                        placeholder="Rencana tindakan, edukasi, follow-up..."
+                        value={plan.treatment}
+                        onChange={e => patchPlan({ treatment: e.target.value })}
+                        placeholder="Rencana tindakan, terapi..."
                         rows={3}
-                        style={{ width: '100%', padding: '10px 12px', border: '1.5px solid #E5E7EB', borderRadius: 8, fontSize: 13, fontFamily: 'inherit', resize: 'vertical', boxSizing: 'border-box' }}
+                        style={{ ...emrField, resize: 'vertical' }}
                       />
+
+                      <label style={{ ...emrSubLabel, marginTop: 12 }}>Edukasi &amp; Follow-up</label>
+                      <textarea
+                        value={plan.education_followup}
+                        onChange={e => patchPlan({ education_followup: e.target.value })}
+                        placeholder="Edukasi pasien, home exercise, instruksi follow-up..."
+                        rows={3}
+                        style={{ ...emrField, resize: 'vertical' }}
+                      />
+
+                      <label style={{ ...emrSubLabel, marginTop: 12 }}>Status Pulang</label>
+                      <select
+                        value={plan.discharge_status ?? ''}
+                        onChange={e => patchPlan({ discharge_status: e.target.value === '' ? null : (e.target.value as DischargeStatus) })}
+                        style={emrField}
+                      >
+                        <option value="">— Pilih —</option>
+                        {DISCHARGE_STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+                      </select>
+
+                      <label style={{ ...emrSubLabel, marginTop: 12 }}>Tanggal Follow-up (opsional)</label>
+                      <input
+                        type="date"
+                        value={assessment.follow_up_date}
+                        onChange={e => setAssessment(prev => ({ ...prev, follow_up_date: e.target.value }))}
+                        style={emrField}
+                      />
+                      <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '6px 0 0' }}>
+                        Catatan internal untuk dokter — bukan membuat janji/booking baru. Untuk menjadwalkan
+                        kunjungan follow-up pasien, gunakan alur Close Bill di Kasir.
+                      </p>
                     </div>
 
                     <div style={{ marginBottom: 14 }}>
@@ -1903,12 +1967,18 @@ export default function ClinicDokter() {
                                     <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{h.assessment.assessment}</span>
                                   </div>
                                 )}
-                                {h.assessment.plan && (
-                                  <div>
-                                    <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)' }}>Plan: </span>
-                                    <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{h.assessment.plan}</span>
-                                  </div>
-                                )}
+                                {h.assessment.plan && (() => {
+                                  const p = h.assessment.plan
+                                  const txt = typeof p === 'string'
+                                    ? p
+                                    : [p.treatment, p.education_followup].filter(Boolean).join(' — ')
+                                  return txt ? (
+                                    <div>
+                                      <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)' }}>Plan: </span>
+                                      <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{txt}</span>
+                                    </div>
+                                  ) : null
+                                })()}
                               </div>
                             )}
                           </div>
