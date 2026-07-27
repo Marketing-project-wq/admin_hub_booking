@@ -2,8 +2,428 @@ import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../../lib/supabase'
 import { fmtDate, fmtTime, fmtDateTime } from '../../lib/format'
 import { useAuth } from '../../context/AuthContext'
-import { lockRecord } from '../../lib/clinic'
+import { lockRecord, orIlike } from '../../lib/clinic'
 import LockBadge from '../../components/clinic/LockBadge'
+
+// ─── Subjective (EMR) ────────────────────────────────────────────────────────
+// Daftar tetap sengaja didefinisikan di kode (bukan di database) supaya gampang diedit.
+const ILLNESS_HISTORY_OPTIONS = [
+  'Hipertensi', 'Diabetes', 'Penyakit Jantung', 'Asma', 'Osteoarthritis',
+  'Rheumatoid Arthritis', 'Osteoporosis', 'Riwayat Cedera Olahraga',
+  'Riwayat Operasi Ortopedi', 'Riwayat Patah Tulang', 'Gangguan Ginjal',
+  'Gangguan Tiroid', 'Tidak Ada',
+]
+const OTHER_ALLERGY_OPTIONS = [
+  'Alergi Makanan', 'Alergi Debu', 'Alergi Dingin',
+  'Alergi Lateks/Getah', 'Alergi Serbuk Sari', 'Tidak Ada',
+]
+const BLOOD_TYPE_OPTIONS = ['A', 'B', 'AB', 'O']
+const ADDITIONAL_NOTE_TYPES = [
+  { value: 'psikologis', label: 'Psikologis' },
+  { value: 'ekonomi', label: 'Ekonomi' },
+  { value: 'spiritual', label: 'Spiritual' },
+] as const
+
+type AdditionalNoteType = (typeof ADDITIONAL_NOTE_TYPES)[number]['value']
+
+interface SubjectiveGeneral {
+  blood_type: string
+  is_smoker: boolean
+  is_pregnant: boolean
+  is_lactating: boolean
+}
+interface SubjectiveAdditionalNote {
+  type: AdditionalNoteType
+  value: string
+}
+interface SubjectiveData {
+  general: SubjectiveGeneral
+  chief_complaint: string
+  illness_history: string[]
+  illness_other: string
+  illness_notes: string
+  drug_allergies: string
+  other_allergies: string[]
+  allergy_other: string
+  allergy_notes: string
+  additional_notes: SubjectiveAdditionalNote[]
+}
+
+const emptySubjective = (): SubjectiveData => ({
+  general: { blood_type: '', is_smoker: false, is_pregnant: false, is_lactating: false },
+  chief_complaint: '',
+  illness_history: [], illness_other: '', illness_notes: '',
+  drug_allergies: '',
+  other_allergies: [], allergy_other: '', allergy_notes: '',
+  additional_notes: [],
+})
+
+/**
+ * Normalisasi kolom `subjective` jadi SubjectiveData. Tahan tiga bentuk:
+ * jsonb terstruktur (baru), hasil migrasi legacy ({chief_complaint, legacy_migrated}),
+ * dan plain text (kalau migrasi SQL belum dijalankan).
+ */
+function parseSubjective(raw: unknown): SubjectiveData {
+  const base = emptySubjective()
+  if (raw == null) return base
+  if (typeof raw === 'string') return { ...base, chief_complaint: raw }
+  if (typeof raw !== 'object') return base
+  const r = raw as Partial<SubjectiveData> & { general?: Partial<SubjectiveGeneral> }
+  return {
+    general: { ...base.general, ...(r.general ?? {}) },
+    chief_complaint: r.chief_complaint ?? '',
+    illness_history: Array.isArray(r.illness_history) ? r.illness_history : [],
+    illness_other: r.illness_other ?? '',
+    illness_notes: r.illness_notes ?? '',
+    drug_allergies: r.drug_allergies ?? '',
+    other_allergies: Array.isArray(r.other_allergies) ? r.other_allergies : [],
+    allergy_other: r.allergy_other ?? '',
+    allergy_notes: r.allergy_notes ?? '',
+    additional_notes: Array.isArray(r.additional_notes) ? r.additional_notes : [],
+  }
+}
+
+// ─── Objective (EMR) ─────────────────────────────────────────────────────────
+// Dipakai lagi di Tahap B (Lokasi Nyeri) — sengaja didefinisikan sekali di sini.
+const SPORTS_BODY_PARTS = [
+  'Leher', 'Bahu', 'Siku', 'Pergelangan Tangan', 'Punggung/Tulang Belakang',
+  'Panggul', 'Lutut', 'Pergelangan Kaki', 'Telapak Kaki', 'Otot & Sendi Umum',
+]
+const CONSCIOUSNESS_OPTIONS = ['Compos Mentis', 'Somnolence', 'Sopor', 'Coma'] as const
+type Consciousness = (typeof CONSCIOUSNESS_OPTIONS)[number]
+
+interface ObjectivePhysicalExamItem {
+  part: string
+  status: 'normal' | 'abnormal'
+  notes: string
+}
+const PAIN_FREQUENCY_OPTIONS = ['Jarang', 'Hilang timbul', 'Terus menerus'] as const
+type PainFrequency = (typeof PAIN_FREQUENCY_OPTIONS)[number]
+
+/** Lokasi nyeri: status saja, TANPA catatan per baris (beda dgn Pemeriksaan Fisik). */
+interface PainLocationItem {
+  part: string
+  status: 'normal' | 'abnormal'
+}
+interface PainAssessmentData {
+  nrs_score: number | null   // 0–10
+  locations: PainLocationItem[]
+  cause: string
+  duration: string
+  frequency: PainFrequency | null
+}
+/** Titik pada diagram tubuh. x/y disimpan sebagai PERSEN (0–100) relatif kotak SVG,
+ *  jadi posisinya ikut menyesuaikan kalau container di-resize. */
+interface BodyPoint {
+  id: string
+  view: 'front' | 'back'
+  x: number
+  y: number
+  part_label: string
+  notes: string
+}
+// ⚠️ BUTUH VALIDASI KLINIS. Ambang "Get Up and Go" bervariasi antar sumber (12–14.5 detik),
+// belum dikonfirmasi cocok dengan SOP klinik ini.
+// TODO: validasi ke fisioterapis 20FIT. Ubah angka ini kapan pun sudah ada kepastian.
+const FALL_RISK_THRESHOLD_SECONDS = 12
+
+/** risk_level dihitung OTOMATIS dari test_seconds — bukan dipilih manual. */
+type FallRiskLevel = 'rendah' | 'tinggi'
+interface FallRiskData {
+  test_seconds: number | null
+  risk_level: FallRiskLevel | null
+}
+const computeFallRisk = (secs: number | null): FallRiskLevel | null =>
+  secs === null ? null : (secs >= FALL_RISK_THRESHOLD_SECONDS ? 'tinggi' : 'rendah')
+
+interface ObjectiveData {
+  consciousness: Consciousness | null
+  physical_exam: ObjectivePhysicalExamItem[]
+  pain_assessment: PainAssessmentData
+  body_points: BodyPoint[]
+  fall_risk: FallRiskData
+  // Fallback baris lama — jangan dihapus.
+  legacy_text?: string
+  legacy_migrated?: true
+}
+
+/** Urutan pencarian ekstensi gambar diagram tubuh: .png dulu, lalu .jpg, lalu .jpeg. */
+const BODY_IMAGE_EXTS = ['png', 'jpg', 'jpeg'] as const
+
+const newPointId = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4)
+/** Kolom `vital_signs` TERPISAH dari `objective` (bukan bagian dari jsonb objective). */
+interface VitalSigns {
+  temperature: number | null       // celcius
+  systolic: number | null          // mmHg
+  diastolic: number | null         // mmHg
+  pulse: number | null             // /menit
+  respiratory_rate: number | null  // /menit
+}
+
+const emptyPainAssessment = (): PainAssessmentData => ({
+  nrs_score: null, locations: [], cause: '', duration: '', frequency: null,
+})
+const emptyFallRisk = (): FallRiskData => ({ test_seconds: null, risk_level: null })
+const emptyObjective = (): ObjectiveData => ({
+  consciousness: null, physical_exam: [], pain_assessment: emptyPainAssessment(), body_points: [], fall_risk: emptyFallRisk(),
+})
+
+/** Backward-compat: baris lama tanpa fall_risk → default kosong. risk_level selalu
+ *  dihitung ulang dari test_seconds (abaikan nilai risk_level tersimpan). */
+function parseFallRisk(raw: unknown): FallRiskData {
+  if (raw == null || typeof raw !== 'object') return emptyFallRisk()
+  const r = raw as Partial<FallRiskData>
+  const secs = typeof r.test_seconds === 'number' && Number.isFinite(r.test_seconds) ? r.test_seconds : null
+  return { test_seconds: secs, risk_level: computeFallRisk(secs) }
+}
+
+/** Backward-compat: baris lama yang belum punya pain_assessment → default kosong. */
+function parsePainAssessment(raw: unknown): PainAssessmentData {
+  const base = emptyPainAssessment()
+  if (raw == null || typeof raw !== 'object') return base
+  const r = raw as Partial<PainAssessmentData>
+  const score = typeof r.nrs_score === 'number' && r.nrs_score >= 0 && r.nrs_score <= 10 ? r.nrs_score : null
+  const freqValid = (PAIN_FREQUENCY_OPTIONS as readonly string[]).includes(r.frequency as string)
+  return {
+    nrs_score: score,
+    locations: Array.isArray(r.locations)
+      ? r.locations
+          .filter(l => l && typeof l.part === 'string')
+          .map(l => ({ part: l.part, status: l.status === 'abnormal' ? 'abnormal' as const : 'normal' as const }))
+      : [],
+    cause: r.cause ?? '',
+    duration: r.duration ?? '',
+    frequency: freqValid ? (r.frequency as PainFrequency) : null,
+  }
+}
+const emptyVitalSigns = (): VitalSigns => ({
+  temperature: null, systolic: null, diastolic: null, pulse: null, respiratory_rate: null,
+})
+
+/** Normalisasi kolom `objective`: jsonb baru, hasil migrasi legacy, atau plain text lama. */
+function parseObjective(raw: unknown): ObjectiveData {
+  const base = emptyObjective()
+  if (raw == null) return base
+  if (typeof raw === 'string') return raw.trim() ? { ...base, legacy_text: raw, legacy_migrated: true } : base
+  if (typeof raw !== 'object') return base
+  const r = raw as Partial<ObjectiveData>
+  const valid = (CONSCIOUSNESS_OPTIONS as readonly string[]).includes(r.consciousness as string)
+  return {
+    consciousness: valid ? (r.consciousness as Consciousness) : null,
+    physical_exam: Array.isArray(r.physical_exam)
+      ? r.physical_exam
+          .filter(p => p && typeof p.part === 'string')
+          .map(p => ({ part: p.part, status: p.status === 'abnormal' ? 'abnormal' as const : 'normal' as const, notes: p.notes ?? '' }))
+      : [],
+    pain_assessment: parsePainAssessment(r.pain_assessment),
+    body_points: Array.isArray(r.body_points)
+      ? r.body_points
+          .filter(p => p && typeof p.id === 'string')
+          .map(p => ({
+            id: p.id,
+            view: p.view === 'back' ? 'back' as const : 'front' as const,
+            x: typeof p.x === 'number' ? p.x : 0,
+            y: typeof p.y === 'number' ? p.y : 0,
+            part_label: p.part_label ?? '',
+            notes: p.notes ?? '',
+          }))
+      : [],
+    fall_risk: parseFallRisk(r.fall_risk),
+    ...(r.legacy_text ? { legacy_text: r.legacy_text } : {}),
+    ...(r.legacy_migrated ? { legacy_migrated: true as const } : {}),
+  }
+}
+
+/** Normalisasi kolom `vital_signs` (kolom tersendiri di clinic_assessments). */
+function parseVitalSigns(raw: unknown): VitalSigns {
+  const base = emptyVitalSigns()
+  if (raw == null || typeof raw !== 'object') return base
+  const r = raw as Record<string, unknown>
+  const num = (v: unknown): number | null =>
+    v === null || v === undefined || v === '' || Number.isNaN(Number(v)) ? null : Number(v)
+  return {
+    temperature: num(r.temperature),
+    systolic: num(r.systolic),
+    diastolic: num(r.diastolic),
+    pulse: num(r.pulse),
+    respiratory_rate: num(r.respiratory_rate),
+  }
+}
+
+/** Warna skala nyeri — replikasi persis intensityColor() di ClinicTriase.tsx:470. */
+function intensityColor(v: number): string {
+  if (v <= 2) return '#16A34A'
+  if (v <= 5) return '#CA8A04'
+  if (v <= 7) return '#EA580C'
+  return '#DC2626'
+}
+
+// Gaya input konsisten dgn form lain — semua lewat theme vars, tanpa warna hardcode.
+const emrField: React.CSSProperties = {
+  width: '100%', padding: '10px 12px', borderRadius: 8, fontSize: 13,
+  fontFamily: 'inherit', boxSizing: 'border-box',
+  border: '1px solid var(--border-strong)', background: 'var(--bg-input)', color: 'var(--text-primary)',
+}
+const emrSubLabel: React.CSSProperties = {
+  fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 4,
+}
+
+/** Sub-blok di dalam section Subjective. */
+function EmrBlock({ label, children }: { label: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <div style={{ marginBottom: 12, border: '1px solid var(--border)', borderRadius: 8, padding: 12, background: 'var(--bg-elevated)' }}>
+      <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: 0.3, marginBottom: 8 }}>{label}</div>
+      {children}
+    </div>
+  )
+}
+
+/** Checkbox group — pola & styling sama persis dgn MultiCheck di ClinicTriase.tsx. */
+function MultiCheck({ options, value, onChange }: { options: string[]; value: string[]; onChange: (v: string[]) => void }) {
+  const toggle = (opt: string) => onChange(value.includes(opt) ? value.filter(o => o !== opt) : [...value, opt])
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
+      {options.map(opt => (
+        <label key={opt} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
+          <input type="checkbox" checked={value.includes(opt)} onChange={() => toggle(opt)} style={{ width: 'auto', accentColor: 'var(--red)' }} />
+          {opt}
+        </label>
+      ))}
+    </div>
+  )
+}
+
+function CheckRow({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
+      <input type="checkbox" checked={checked} onChange={e => onChange(e.target.checked)} style={{ width: 'auto', accentColor: 'var(--red)' }} />
+      {label}
+    </label>
+  )
+}
+
+/**
+ * Siluet tubuh SKEMATIK (stick-figure) — SVG ORISINAL yang dibangun murni dari
+ * bentuk geometris dasar: lingkaran (kepala/tangan), rounded-rect (torso, lengan,
+ * tungkai, panggul), dan ellipse (telapak kaki). BUKAN ilustrasi anatomis dan
+ * tidak menjiplak/men-trace gambar mana pun. Tampak 'back' hanya menambah garis
+ * tengah tipis sebagai pembeda visual — tanpa detail anatomi.
+ * viewBox tetap 0 0 200 500 supaya rasio konsisten & koordinat persen stabil.
+ */
+function BodySilhouette({ view }: { view: 'front' | 'back' }) {
+  const shape = { fill: 'var(--bg-elevated)', stroke: 'var(--border-strong)', strokeWidth: 1.25 }
+  const guide = { fill: 'var(--border-strong)', opacity: 0.35 }
+  return (
+    <g>
+      {/* Kepala (oval) + leher pendek */}
+      <ellipse cx={100} cy={44} rx={25} ry={31} {...shape} />
+      <rect x={92} y={68} width={16} height={14} rx={7} {...shape} />
+
+      {/* Bahu/dada lebar (92) → pinggang meruncing (58) → panggul (68) */}
+      <ellipse cx={100} cy={118} rx={46} ry={40} {...shape} />
+      <rect x={71} y={142} width={58} height={58} rx={22} {...shape} />
+      <rect x={66} y={192} width={68} height={54} rx={24} {...shape} />
+
+      {/* Lengan kiri: lengan atas — siku — lengan bawah — telapak tangan */}
+      <rect x={40} y={92} width={20} height={72} rx={10} {...shape} />
+      <circle cx={50} cy={166} r={11} {...shape} />
+      <rect x={40} y={168} width={20} height={68} rx={10} {...shape} />
+      <ellipse cx={50} cy={248} rx={11} ry={14} {...shape} />
+
+      {/* Lengan kanan */}
+      <rect x={140} y={92} width={20} height={72} rx={10} {...shape} />
+      <circle cx={150} cy={166} r={11} {...shape} />
+      <rect x={140} y={168} width={20} height={68} rx={10} {...shape} />
+      <ellipse cx={150} cy={248} rx={11} ry={14} {...shape} />
+
+      {/* Tungkai kiri: paha — lutut — betis — telapak kaki */}
+      <rect x={74} y={240} width={24} height={100} rx={12} {...shape} />
+      <circle cx={86} cy={343} r={12} {...shape} />
+      <rect x={75} y={346} width={22} height={100} rx={11} {...shape} />
+      <ellipse cx={86} cy={458} rx={16} ry={12} {...shape} />
+
+      {/* Tungkai kanan */}
+      <rect x={102} y={240} width={24} height={100} rx={12} {...shape} />
+      <circle cx={114} cy={343} r={12} {...shape} />
+      <rect x={103} y={346} width={22} height={100} rx={11} {...shape} />
+      <ellipse cx={114} cy={458} rx={16} ry={12} {...shape} />
+
+      {/* Tampak belakang: garis tengah + garis bahu & pinggang (opacity rendah) */}
+      {view === 'back' && (
+        <>
+          <rect x={97.5} y={92} width={5} height={104} rx={2.5} {...guide} />
+          <rect x={62} y={102} width={76} height={4} rx={2} {...guide} />
+          <rect x={76} y={186} width={48} height={4} rx={2} {...guide} />
+        </>
+      )}
+    </g>
+  )
+}
+
+/** Replikasi persis Collapsible di ClinicTriase.tsx:354-366 (module-local, tak di-export). */
+function Collapsible({ title, defaultOpen = false, children }: { title: string; defaultOpen?: boolean; children: React.ReactNode }) {
+  const [open, setOpen] = useState(defaultOpen)
+  return (
+    <div style={{ background: 'var(--bg-card)', borderLeft: '3px solid var(--red)', borderRadius: 8, padding: 16, marginBottom: 12, boxShadow: '0 1px 2px rgba(0,0,0,.2)' }}>
+      <div onClick={() => setOpen(o => !o)}
+        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}>
+        <span style={{ color: 'var(--red)', fontSize: 12, fontWeight: 700, letterSpacing: 0.4, textTransform: 'uppercase' }}>{title}</span>
+        <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>{open ? '▲' : '▼'}</span>
+      </div>
+      {open && <div style={{ marginTop: 14 }}>{children}</div>}
+    </div>
+  )
+}
+
+interface BodyPartStatus { part: string; status: 'normal' | 'abnormal'; notes?: string }
+
+/**
+ * Daftar bagian tubuh + toggle Normal / Ada Kelainan (pola tombol Ya/Tidak PAR-Q).
+ * Dipakai dua kali:
+ *   showNotes=true  → Pemeriksaan Fisik (muncul input catatan saat "Ada Kelainan")
+ *   showNotes=false → Lokasi Nyeri (status saja, tanpa catatan per baris)
+ */
+function BodyPartStatusList({ parts, value, onChange, showNotes }: {
+  parts: string[]
+  value: BodyPartStatus[]
+  onChange: (next: BodyPartStatus[]) => void
+  showNotes: boolean
+}) {
+  const setPart = (part: string, patch: Partial<BodyPartStatus>) => {
+    const idx = value.findIndex(v => v.part === part)
+    onChange(idx >= 0
+      ? value.map((v, i) => (i === idx ? { ...v, ...patch } : v))
+      : [...value, { part, status: 'normal' as const, ...patch }])
+  }
+  return (
+    <>
+      {parts.map(part => {
+        const ex = value.find(v => v.part === part) ?? null
+        const abnormal = ex?.status === 'abnormal'
+        const isNormal = !!ex && !abnormal
+        return (
+          <div key={part} style={{ padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
+              <span style={{ fontSize: 13, flex: 1 }}>{part}</span>
+              <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                <button type="button" onClick={() => setPart(part, showNotes ? { status: 'normal', notes: '' } : { status: 'normal' })}
+                  style={{ padding: '5px 16px', borderRadius: 6, border: '1px solid', cursor: 'pointer',
+                    borderColor: isNormal ? '#374151' : 'var(--border-strong)', background: isNormal ? '#374151' : 'transparent', color: isNormal ? '#fff' : 'var(--text-muted)', fontWeight: isNormal ? 700 : 400 }}>Normal</button>
+                <button type="button" onClick={() => setPart(part, { status: 'abnormal' })}
+                  style={{ padding: '5px 16px', borderRadius: 6, border: '1px solid', cursor: 'pointer',
+                    borderColor: abnormal ? 'var(--red)' : 'var(--border-strong)', background: abnormal ? 'var(--red)' : 'transparent', color: abnormal ? '#fff' : 'var(--text-muted)', fontWeight: abnormal ? 700 : 400 }}>Ada Kelainan</button>
+              </div>
+            </div>
+            {showNotes && abnormal && (
+              <input type="text" value={ex?.notes ?? ''} onChange={ev => setPart(part, { notes: ev.target.value })}
+                placeholder={`Catatan kelainan pada ${part}...`} style={{ ...emrField, marginTop: 8 }} />
+            )}
+          </div>
+        )
+      })}
+    </>
+  )
+}
 
 interface DokterVisit {
   id: string
@@ -34,12 +454,39 @@ interface PatientHistory {
   gender: string | null
 }
 
+// ─── Diagnosis (EMR) ─────────────────────────────────────────────────────────
+interface Icd10Selection {
+  code: string
+  display: string
+  is_primary: boolean
+}
+interface DiagnosisData {
+  text: string                 // diagnosa kerja, teks bebas (wajib)
+  icd10_codes: Icd10Selection[] // minimal 1 (wajib); tepat 1 yang is_primary
+}
+const emptyDiagnosis = (): DiagnosisData => ({ text: '', icd10_codes: [] })
+
+/** Kolom diagnosis (jsonb). Baris lama semuanya null → jalur default. */
+function parseDiagnosis(raw: unknown): DiagnosisData {
+  if (raw == null || typeof raw !== 'object') return emptyDiagnosis()
+  const r = raw as Partial<DiagnosisData>
+  return {
+    text: typeof r.text === 'string' ? r.text : '',
+    icd10_codes: Array.isArray(r.icd10_codes)
+      ? r.icd10_codes
+          .filter(c => c && typeof c.code === 'string')
+          .map(c => ({ code: c.code, display: c.display ?? '', is_primary: !!c.is_primary }))
+      : [],
+  }
+}
+
 interface AssessmentForm {
-  subjective: string
-  objective: string
+  subjective: SubjectiveData
+  objective: ObjectiveData
+  vital_signs: VitalSigns
   assessment: string
   plan: string
-  diagnosis: string
+  diagnosis: DiagnosisData
   follow_up_date: string
   notes: string
   handled_by: string
@@ -99,10 +546,11 @@ interface MedicalHistory {
   chief_complaint: string | null
   services: { service_name: string; price: number }[]
   assessment: {
-    diagnosis: string | null
+    diagnosis: DiagnosisData | string | null   // jsonb (baru) / string (legacy) / null
     plan: string | null
-    subjective: string | null
-    objective: string | null
+    // jsonb setelah migrasi; string kalau data lama / migrasi belum jalan. Tidak dirender di Riwayat.
+    subjective: SubjectiveData | string | null
+    objective: ObjectiveData | string | null
     assessment: string | null
     handled_by: string | null
   } | null
@@ -139,6 +587,7 @@ async function fetchAssessment(visitId: string): Promise<AssessmentRecord | null
     .from('clinic_assessments')
     .select('*')
     .eq('visit_id', visitId)
+    .eq('assessment_type', 'doctor')   // ambil baris dokter; hindari nyangkut baris 'therapist' + error multi-row
     .maybeSingle()
   if (!data) return null
   return {
@@ -147,11 +596,12 @@ async function fetchAssessment(visitId: string): Promise<AssessmentRecord | null
     lockedAt: data.locked_at ?? null,
     lockedBy: data.locked_by ?? null,
     form: {
-      subjective: data.subjective ?? '',
-      objective: data.objective ?? '',
+      subjective: parseSubjective(data.subjective),
+      objective: parseObjective(data.objective),
+      vital_signs: parseVitalSigns(data.vital_signs),
       assessment: data.assessment ?? '',
       plan: data.plan ?? '',
-      diagnosis: data.diagnosis ?? '',
+      diagnosis: parseDiagnosis(data.diagnosis),
       follow_up_date: data.follow_up_date ?? '',
       notes: data.notes ?? '',
       handled_by: data.handled_by ?? '',
@@ -165,11 +615,13 @@ async function saveAssessment(visitId: string, patientId: string, form: Assessme
     .upsert({
       visit_id: visitId,
       patient_id: patientId,
+      assessment_type: 'doctor',   // form ini = assessment dokter; koeksis dgn baris 'therapist' (ClinicTriase)
       ...form,
-      diagnosis: null,
+      // diagnosis kini disimpan dari form (jsonb). follow_up_date tetap null sampai
+      // section Plan diimplementasi (form.follow_up_date masih '' → tak valid utk kolom date).
       follow_up_date: null,
       updated_at: new Date().toISOString(),
-    }, { onConflict: 'visit_id' })
+    }, { onConflict: 'visit_id,assessment_type' })   // match unique index asli (visit_id, assessment_type)
     .select('id')
     .single()
   if (error) throw error
@@ -217,7 +669,7 @@ async function searchPatients(query: string): Promise<PatientHistory[]> {
   const { data, error } = await supabase
     .from('clinic_patients')
     .select('id, patient_code, full_name, phone, date_of_birth, gender')
-    .or(`full_name.ilike.%${query}%,patient_code.ilike.%${query}%,phone.ilike.%${query}%`)
+    .or(orIlike(['full_name', 'patient_code', 'phone'], query))
     .eq('is_active', true)
     .order('full_name')
     .limit(20)
@@ -369,10 +821,22 @@ export default function ClinicDokter() {
   const [medicalHistory, setMedicalHistory] = useState<MedicalHistory[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
   const [assessment, setAssessment] = useState<AssessmentForm>({
-    subjective: '', objective: '', assessment: '', plan: '', diagnosis: '', follow_up_date: '', notes: '', handled_by: '',
+    subjective: emptySubjective(), objective: emptyObjective(), vital_signs: emptyVitalSigns(),
+    assessment: '', plan: '', diagnosis: emptyDiagnosis(), follow_up_date: '', notes: '', handled_by: '',
   })
   const [loadingAssessment, setLoadingAssessment] = useState(false)
   const [savingAssessment, setSavingAssessment] = useState(false)
+  const [newNoteType, setNewNoteType] = useState<AdditionalNoteType>('psikologis')
+  const [bodyView, setBodyView] = useState<'front' | 'back'>('front')
+  const [pointDraft, setPointDraft] = useState<(BodyPoint & { isNew: boolean }) | null>(null)
+  // ICD-10 picker
+  const [icdQuery, setIcdQuery] = useState('')
+  const [icdResults, setIcdResults] = useState<{ code: string; display: string }[]>([])
+  const [icdSearching, setIcdSearching] = useState(false)
+  const icdTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Index ekstensi yang sedang dicoba, dilacak per basis nama file (mis. 'front-male').
+  // Naik tiap kali <img> gagal; kalau sudah melewati daftar ekstensi → fallback ke siluet SVG.
+  const [bodyExtIndex, setBodyExtIndex] = useState<Record<string, number>>({})
   const [assessmentError, setAssessmentError] = useState('')
   const [assessmentId, setAssessmentId] = useState<string | null>(null)
   const [assessmentLocked, setAssessmentLocked] = useState(false)
@@ -416,7 +880,7 @@ export default function ClinicDokter() {
             id, visit_date, visit_time, chief_complaint,
             services:clinic_visit_services(service_name, price),
             assessment:clinic_assessments(
-              diagnosis, plan, subjective, objective, assessment, handled_by
+              diagnosis, plan, subjective, objective, assessment, handled_by, assessment_type
             )
           `)
           .eq('patient_id', patientId)
@@ -431,7 +895,9 @@ export default function ClinicDokter() {
           visit_time: v.visit_time,
           chief_complaint: v.chief_complaint,
           services: v.services ?? [],
-          assessment: Array.isArray(v.assessment) ? v.assessment[0] ?? null : v.assessment,
+          assessment: Array.isArray(v.assessment)
+            ? (v.assessment.find((a: any) => a?.assessment_type === 'doctor') ?? null)
+            : v.assessment,
         }))
 
         setMedicalHistory(history)
@@ -486,7 +952,8 @@ export default function ClinicDokter() {
         setAssessmentLockedBy(existingAssessment.lockedBy)
       } else {
         setAssessment({
-          subjective: '', objective: '', assessment: '', plan: '', diagnosis: '', follow_up_date: '', notes: '',
+          subjective: emptySubjective(), objective: emptyObjective(), vital_signs: emptyVitalSigns(),
+          assessment: '', plan: '', diagnosis: emptyDiagnosis(), follow_up_date: '', notes: '',
           handled_by: user?.full_name ?? '',
         })
         setAssessmentId(null)
@@ -503,8 +970,118 @@ export default function ClinicDokter() {
     }
   }
 
+  // ── Subjective helpers ────────────────────────────────────────────────────
+  const subj = assessment.subjective
+  const patchSubj = (patch: Partial<SubjectiveData>) =>
+    setAssessment(p => ({ ...p, subjective: { ...p.subjective, ...patch } }))
+  const patchGeneral = (patch: Partial<SubjectiveGeneral>) =>
+    setAssessment(p => ({ ...p, subjective: { ...p.subjective, general: { ...p.subjective.general, ...patch } } }))
+  const addNote = () =>
+    setAssessment(p => ({ ...p, subjective: { ...p.subjective, additional_notes: [...p.subjective.additional_notes, { type: newNoteType, value: '' }] } }))
+  const updateNote = (i: number, value: string) =>
+    setAssessment(p => ({ ...p, subjective: { ...p.subjective, additional_notes: p.subjective.additional_notes.map((n, idx) => (idx === i ? { ...n, value } : n)) } }))
+  const removeNote = (i: number) =>
+    setAssessment(p => ({ ...p, subjective: { ...p.subjective, additional_notes: p.subjective.additional_notes.filter((_, idx) => idx !== i) } }))
+
+  // ── Objective helpers ─────────────────────────────────────────────────────
+  const obj = assessment.objective
+  const vitals = assessment.vital_signs
+  const patchObj = (patch: Partial<ObjectiveData>) =>
+    setAssessment(p => ({ ...p, objective: { ...p.objective, ...patch } }))
+  const patchVital = (k: keyof VitalSigns, v: string) =>
+    setAssessment(p => ({ ...p, vital_signs: { ...p.vital_signs, [k]: v === '' ? null : Number(v) } }))
+  const pain = obj.pain_assessment
+  const patchPain = (patch: Partial<PainAssessmentData>) =>
+    setAssessment(p => ({ ...p, objective: { ...p.objective, pain_assessment: { ...p.objective.pain_assessment, ...patch } } }))
+
+  // ── Body diagram helpers ──────────────────────────────────────────────────
+  // Klik di siluet → titik baru pada koordinat itu, disimpan sebagai PERSEN
+  // terhadap bounding box SVG (aman terhadap resize container).
+  const handleDiagramClick = (e: React.MouseEvent<SVGSVGElement>) => {
+    if (assessmentLocked) return
+    const rect = e.currentTarget.getBoundingClientRect()
+    if (!rect.width || !rect.height) return
+    const x = Math.min(100, Math.max(0, ((e.clientX - rect.left) / rect.width) * 100))
+    const y = Math.min(100, Math.max(0, ((e.clientY - rect.top) / rect.height) * 100))
+    setPointDraft({ id: newPointId(), view: bodyView, x, y, part_label: '', notes: '', isNew: true })
+  }
+  const savePoint = () => {
+    if (!pointDraft) return
+    const { isNew, ...p } = pointDraft
+    patchObj({ body_points: isNew ? [...obj.body_points, p] : obj.body_points.map(bp => (bp.id === p.id ? p : bp)) })
+    setPointDraft(null)
+  }
+  const deletePoint = (id: string) => {
+    patchObj({ body_points: obj.body_points.filter(bp => bp.id !== id) })
+    setPointDraft(null)
+  }
+  const viewPoints = obj.body_points.filter(p => p.view === bodyView)
+  // Fall risk — risk_level SELALU turunan dari test_seconds (tidak dipilih manual).
+  const setFallSeconds = (secs: number | null) =>
+    patchObj({ fall_risk: { test_seconds: secs, risk_level: computeFallRisk(secs) } })
+
+  // ── Diagnosis helpers ─────────────────────────────────────────────────────
+  const diag = assessment.diagnosis
+  const patchDiag = (patch: Partial<DiagnosisData>) =>
+    setAssessment(p => ({ ...p, diagnosis: { ...p.diagnosis, ...patch } }))
+  // Toggle: kode yang belum ada → tambah (kode pertama otomatis primer); kode yang
+  // sudah ada → batalkan (kalau yang dibatalkan primer, promosikan sisa pertama).
+  const toggleIcd = (code: string, display: string) =>
+    setAssessment(p => {
+      const list = p.diagnosis.icd10_codes
+      let next: Icd10Selection[]
+      if (list.some(c => c.code === code)) {
+        next = list.filter(c => c.code !== code)
+        if (next.length && !next.some(c => c.is_primary)) next = next.map((c, i) => ({ ...c, is_primary: i === 0 }))
+      } else {
+        next = [...list, { code, display, is_primary: list.length === 0 }]
+      }
+      return { ...p, diagnosis: { ...p.diagnosis, icd10_codes: next } }
+    })
+  const setPrimaryIcd = (code: string) =>
+    setAssessment(p => ({ ...p, diagnosis: { ...p.diagnosis, icd10_codes: p.diagnosis.icd10_codes.map(c => ({ ...c, is_primary: c.code === code })) } }))
+
+  const handleIcdSearch = (q: string) => {
+    setIcdQuery(q)
+    if (icdTimer.current) clearTimeout(icdTimer.current)
+    const term = q.trim()
+    if (term.length < 2) { setIcdResults([]); setIcdSearching(false); return }
+    setIcdSearching(true)
+    icdTimer.current = setTimeout(async () => {
+      try {
+        const { data } = await supabase
+          .from('clinic_icd10')
+          .select('code, display')
+          .or(orIlike(['code', 'display'], term))
+          .limit(15)
+        setIcdResults((data ?? []) as { code: string; display: string }[])
+      } catch { setIcdResults([]) }
+      finally { setIcdSearching(false) }
+    }, 300)
+  }
+  // Gender pasien menentukan file gambar; selain 'male'/'female' (atau kosong) → default 'male'.
+  const patientGender: 'male' | 'female' = selectedVisit?.patient?.gender === 'female' ? 'female' : 'male'
+  const bodyImageKey = `${bodyView}-${patientGender}`
+  const bodyExtTried = bodyExtIndex[bodyImageKey] ?? 0
+  // Semua ekstensi sudah dicoba dan gagal → pakai siluet SVG.
+  const bodyImageFailed = bodyExtTried >= BODY_IMAGE_EXTS.length
+  const bodyImageSrc = bodyImageFailed ? '' : `/images/body-diagram/${bodyImageKey}.${BODY_IMAGE_EXTS[bodyExtTried]}`
+
   const handleSaveAssessment = async (): Promise<boolean> => {
     if (!selectedVisit?.id || !selectedVisit?.patient?.full_name) return false
+    // Keluhan Utama wajib diisi (validasi client-side sebelum simpan).
+    if (!assessment.subjective.chief_complaint.trim()) {
+      setAssessmentError('Keluhan Utama wajib diisi.')
+      return false
+    }
+    if (!assessment.diagnosis.text.trim()) {
+      setAssessmentError('Diagnosa wajib diisi.')
+      return false
+    }
+    if (assessment.diagnosis.icd10_codes.length === 0) {
+      setAssessmentError('Minimal 1 kode ICD-10 wajib dipilih.')
+      return false
+    }
     setSavingAssessment(true)
     setAssessmentError('')
     try {
@@ -788,25 +1365,425 @@ export default function ClinicDokter() {
 
                     <fieldset disabled={assessmentLocked} style={{ border: 'none', padding: 0, margin: 0 }}>
 
-                    {([
-                      { key: 'subjective', label: 'Keluhan Subjektif Pasien', color: '#93C5FD', bg: 'rgba(59,130,246,0.15)', placeholder: 'Keluhan subjektif pasien, riwayat singkat...' },
-                      { key: 'objective', label: 'Temuan Pemeriksaan Fisik', color: '#34D399', bg: 'rgba(5,150,105,0.15)', placeholder: 'Temuan pemeriksaan fisik, hasil tes...' },
-                      { key: 'assessment', label: 'Clinical Impression / Assessment', color: '#FCD34D', bg: 'rgba(245,158,11,0.15)', placeholder: 'Diagnosis / clinical impression...' },
-                      { key: 'plan', label: 'Rencana Tindakan', color: '#C4B5FD', bg: 'rgba(139,92,246,0.15)', placeholder: 'Rencana tindakan, edukasi, follow-up...' },
-                    ] as const).map(({ key, label, color, bg, placeholder }) => (
-                      <div key={key} style={{ marginBottom: 14 }}>
-                        <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                          <span style={{ padding: '2px 10px', borderRadius: 999, background: bg, color, fontSize: 12, fontWeight: 700 }}>{label}</span>
-                        </label>
+                    {/* ── Subjective (terstruktur) ──────────────────────────────────── */}
+                    <div style={{ marginBottom: 18 }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                        <span style={{ padding: '2px 10px', borderRadius: 999, background: 'rgba(59,130,246,0.15)', color: '#93C5FD', fontSize: 12, fontWeight: 700 }}>Keluhan Subjektif Pasien</span>
+                      </label>
+
+                      <EmrBlock label="Data Kesehatan">
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 12, alignItems: 'start' }}>
+                          <div>
+                            <label style={emrSubLabel}>Golongan Darah</label>
+                            <select value={subj.general.blood_type} onChange={e => patchGeneral({ blood_type: e.target.value })} style={emrField}>
+                              <option value="">— Pilih —</option>
+                              {BLOOD_TYPE_OPTIONS.map(b => <option key={b} value={b}>{b}</option>)}
+                            </select>
+                          </div>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 22 }}>
+                            <CheckRow label="Merokok" checked={subj.general.is_smoker} onChange={v => patchGeneral({ is_smoker: v })} />
+                            <CheckRow label="Hamil" checked={subj.general.is_pregnant} onChange={v => patchGeneral({ is_pregnant: v })} />
+                            <CheckRow label="Menyusui" checked={subj.general.is_lactating} onChange={v => patchGeneral({ is_lactating: v })} />
+                          </div>
+                        </div>
+                      </EmrBlock>
+
+                      <EmrBlock label={<>Keluhan Utama <span style={{ color: 'var(--red)' }}>*</span></>}>
                         <textarea
-                          value={assessment[key]}
-                          onChange={e => setAssessment(prev => ({ ...prev, [key]: e.target.value }))}
-                          placeholder={placeholder}
+                          value={subj.chief_complaint}
+                          onChange={e => patchSubj({ chief_complaint: e.target.value })}
+                          placeholder="Keluhan utama pasien saat ini..."
                           rows={3}
-                          style={{ width: '100%', padding: '10px 12px', border: '1.5px solid #E5E7EB', borderRadius: 8, fontSize: 13, fontFamily: 'inherit', resize: 'vertical', boxSizing: 'border-box' }}
+                          style={{ ...emrField, resize: 'vertical' }}
                         />
+                      </EmrBlock>
+
+                      <EmrBlock label="Riwayat Penyakit">
+                        <MultiCheck options={ILLNESS_HISTORY_OPTIONS} value={subj.illness_history} onChange={v => patchSubj({ illness_history: v })} />
+                        <div style={{ marginTop: 10 }}>
+                          <label style={emrSubLabel}>Lainnya</label>
+                          <input type="text" value={subj.illness_other} onChange={e => patchSubj({ illness_other: e.target.value })} placeholder="Riwayat penyakit lain..." style={emrField} />
+                        </div>
+                        <div style={{ marginTop: 10 }}>
+                          <label style={emrSubLabel}>Catatan</label>
+                          <textarea value={subj.illness_notes} onChange={e => patchSubj({ illness_notes: e.target.value })} rows={2} placeholder="Catatan riwayat penyakit..." style={{ ...emrField, resize: 'vertical' }} />
+                        </div>
+                      </EmrBlock>
+
+                      <EmrBlock label="Riwayat Alergi Obat">
+                        <textarea value={subj.drug_allergies} onChange={e => patchSubj({ drug_allergies: e.target.value })} rows={2} placeholder="Tulis alergi obat yang diketahui..." style={{ ...emrField, resize: 'vertical' }} />
+                      </EmrBlock>
+
+                      <EmrBlock label="Riwayat Alergi Lainnya">
+                        <MultiCheck options={OTHER_ALLERGY_OPTIONS} value={subj.other_allergies} onChange={v => patchSubj({ other_allergies: v })} />
+                        <div style={{ marginTop: 10 }}>
+                          <label style={emrSubLabel}>Lainnya</label>
+                          <input type="text" value={subj.allergy_other} onChange={e => patchSubj({ allergy_other: e.target.value })} placeholder="Alergi lain..." style={emrField} />
+                        </div>
+                        <div style={{ marginTop: 10 }}>
+                          <label style={emrSubLabel}>Catatan</label>
+                          <textarea value={subj.allergy_notes} onChange={e => patchSubj({ allergy_notes: e.target.value })} rows={2} placeholder="Catatan alergi..." style={{ ...emrField, resize: 'vertical' }} />
+                        </div>
+                      </EmrBlock>
+
+                      <EmrBlock label="Isian Tambahan">
+                        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                          <select value={newNoteType} onChange={e => setNewNoteType(e.target.value as AdditionalNoteType)} style={{ ...emrField, width: 'auto', minWidth: 160 }}>
+                            {ADDITIONAL_NOTE_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                          </select>
+                          <button type="button" className="btn-secondary" onClick={addNote} style={{ width: 'auto', padding: '8px 16px' }}>+ Tambah</button>
+                        </div>
+                        {subj.additional_notes.length === 0 ? (
+                          <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '10px 0 0' }}>Belum ada isian tambahan.</p>
+                        ) : subj.additional_notes.map((n, i) => (
+                          <div key={i} style={{ marginTop: 10, border: '1px solid var(--border)', borderRadius: 8, padding: 10 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                              <span className="badge" style={{ background: 'var(--bg-card)', color: 'var(--text-secondary)' }}>
+                                {ADDITIONAL_NOTE_TYPES.find(t => t.value === n.type)?.label ?? n.type}
+                              </span>
+                              <button type="button" onClick={() => removeNote(i)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--red)', fontSize: 12, fontWeight: 600 }}>Hapus</button>
+                            </div>
+                            <textarea value={n.value} onChange={e => updateNote(i, e.target.value)} rows={2} placeholder="Isi catatan..." style={{ ...emrField, resize: 'vertical' }} />
+                          </div>
+                        ))}
+                      </EmrBlock>
+                    </div>
+
+                    {/* ── Objective (terstruktur) — Tahap A ─────────────────────────── */}
+                    <div style={{ marginBottom: 18 }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                        <span style={{ padding: '2px 10px', borderRadius: 999, background: 'rgba(5,150,105,0.15)', color: '#34D399', fontSize: 12, fontWeight: 700 }}>Temuan Pemeriksaan Fisik</span>
+                      </label>
+
+                      {obj.legacy_text && (
+                        <div style={{ marginBottom: 12, padding: 10, border: '1px dashed var(--border-strong)', borderRadius: 8, background: 'var(--bg-elevated)' }}>
+                          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.3, marginBottom: 4 }}>Catatan lama (sebelum form terstruktur)</div>
+                          <div style={{ fontSize: 13, color: 'var(--text-secondary)', whiteSpace: 'pre-wrap' }}>{obj.legacy_text}</div>
+                        </div>
+                      )}
+
+                      <EmrBlock label="Status Kesadaran">
+                        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+                          {CONSCIOUSNESS_OPTIONS.map(lvl => (
+                            <label key={lvl} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}>
+                              <input type="radio" name="consciousness" checked={obj.consciousness === lvl} onChange={() => patchObj({ consciousness: lvl })} style={{ width: 'auto', accentColor: 'var(--red)' }} />
+                              {lvl}
+                            </label>
+                          ))}
+                        </div>
+                      </EmrBlock>
+
+                      <EmrBlock label="Vital Signs">
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 10 }}>
+                          {([
+                            { k: 'temperature', label: 'Suhu', unit: 'celcius', step: '0.1' },
+                            { k: 'systolic', label: 'Sistole', unit: 'mmHg', step: '1' },
+                            { k: 'diastolic', label: 'Diastole', unit: 'mmHg', step: '1' },
+                            { k: 'pulse', label: 'Nadi', unit: '/menit', step: '1' },
+                            { k: 'respiratory_rate', label: 'Frekuensi Pernafasan', unit: '/menit', step: '1' },
+                          ] as const).map(({ k, label, unit, step }) => (
+                            <div key={k}>
+                              <label style={emrSubLabel}>{label}</label>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <input type="number" step={step} value={vitals[k] ?? ''} onChange={e => patchVital(k, e.target.value)} placeholder="-" style={{ ...emrField, flex: 1 }} />
+                                <span style={{ fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap', minWidth: 52 }}>{unit}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </EmrBlock>
+
+                      <EmrBlock label="Pemeriksaan Fisik">
+                        <BodyPartStatusList
+                          parts={SPORTS_BODY_PARTS}
+                          value={obj.physical_exam}
+                          onChange={next => patchObj({ physical_exam: next.map(n => ({ part: n.part, status: n.status, notes: n.notes ?? '' })) })}
+                          showNotes
+                        />
+                      </EmrBlock>
+
+                      {/* ── Pain Assessment — Tahap B ──────────────────────────────── */}
+                      <EmrBlock label="Pain Assessment">
+                        {/* NRS Score — pola D.4 Intensitas Nyeri (ClinicTriase:684-696) */}
+                        <label style={emrSubLabel}>NRS Score (0–10)</label>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                          <input type="range" min={0} max={10} value={pain.nrs_score ?? 0}
+                            onChange={e => patchPain({ nrs_score: Number(e.target.value) })}
+                            style={{ flex: 1, accentColor: pain.nrs_score != null ? intensityColor(pain.nrs_score) : '#9CA3AF' }} />
+                          <span style={{ minWidth: 40, textAlign: 'center', fontWeight: 700, fontSize: 16, color: pain.nrs_score != null ? intensityColor(pain.nrs_score) : 'var(--text-muted)' }}>{pain.nrs_score ?? '-'}</span>
+                        </div>
+                        <div style={{ height: 6, borderRadius: 4, marginTop: 6, background: 'linear-gradient(to right, #16A34A, #CA8A04, #EA580C, #DC2626)' }} />
+                        {pain.nrs_score != null && pain.nrs_score >= 8 && (
+                          <div style={{ marginTop: 8, padding: 10, background: '#FEE2E2', border: '1px solid #DC2626', borderRadius: 8, color: '#991B1B', fontSize: 13 }}>
+                            ⚠ Intensitas nyeri sangat berat — wajib konsultasi dokter.
+                          </div>
+                        )}
+
+                        <div style={{ marginTop: 14 }}>
+                          <label style={emrSubLabel}>Lokasi Nyeri</label>
+                          <BodyPartStatusList
+                            parts={SPORTS_BODY_PARTS}
+                            value={pain.locations}
+                            onChange={next => patchPain({ locations: next.map(n => ({ part: n.part, status: n.status })) })}
+                            showNotes={false}
+                          />
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10, marginTop: 14 }}>
+                          <div>
+                            <label style={emrSubLabel}>Penyebab Nyeri</label>
+                            <input type="text" value={pain.cause} onChange={e => patchPain({ cause: e.target.value })} placeholder="Penyebab nyeri..." style={emrField} />
+                          </div>
+                          <div>
+                            <label style={emrSubLabel}>Durasi Nyeri</label>
+                            <input type="text" value={pain.duration} onChange={e => patchPain({ duration: e.target.value })} placeholder="mis. 3 hari / 2 minggu..." style={emrField} />
+                          </div>
+                        </div>
+
+                        <div style={{ marginTop: 14 }}>
+                          <label style={emrSubLabel}>Frekuensi Nyeri</label>
+                          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+                            {PAIN_FREQUENCY_OPTIONS.map(f => (
+                              <label key={f} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}>
+                                <input type="radio" name="pain_frequency" checked={pain.frequency === f} onChange={() => patchPain({ frequency: f })} style={{ width: 'auto', accentColor: 'var(--red)' }} />
+                                {f}
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      </EmrBlock>
+
+                      {/* ── Diagram Tubuh — Tahap C ────────────────────────────────── */}
+                      <EmrBlock label="Diagram Tubuh">
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16, alignItems: 'start' }}>
+                          <div>
+                            <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+                              {(['front', 'back'] as const).map(v => {
+                                const on = bodyView === v
+                                return (
+                                  <button type="button" key={v} onClick={() => setBodyView(v)}
+                                    style={{ padding: '6px 16px', borderRadius: 8, cursor: 'pointer', fontSize: 13, border: '1px solid',
+                                      borderColor: on ? 'var(--red)' : 'var(--border-strong)', background: on ? 'var(--red)' : 'transparent',
+                                      color: on ? '#fff' : 'var(--text-secondary)', fontWeight: on ? 700 : 400 }}>
+                                    {v === 'front' ? 'Depan' : 'Belakang'}
+                                  </button>
+                                )
+                              })}
+                            </div>
+                            <div style={{ maxWidth: 260, margin: '0 auto', border: '1px solid var(--border)', borderRadius: 8, background: 'var(--bg-input)', padding: 8 }}>
+                              {/* Kotak referensi koordinat — rasio dikunci 200:500 (2:5), sama dgn viewBox SVG.
+                                  Gambar asli & siluet SVG mengisi kotak yang PERSIS sama, jadi posisi titik
+                                  (persen x/y) identik di kedua mode. */}
+                              <div style={{ position: 'relative', width: '100%', aspectRatio: '200 / 500' }}>
+                                {!bodyImageFailed && (
+                                  <img
+                                    key={bodyImageSrc}
+                                    src={bodyImageSrc}
+                                    alt=""
+                                    onError={() => setBodyExtIndex(m => ({ ...m, [bodyImageKey]: (m[bodyImageKey] ?? 0) + 1 }))}
+                                    style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'fill', display: 'block', pointerEvents: 'none' }}
+                                  />
+                                )}
+                                <svg viewBox="0 0 200 500" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'block', cursor: assessmentLocked ? 'default' : 'crosshair' }} onClick={handleDiagramClick}>
+                                {/* Fallback: siluet SVG hanya digambar kalau gambar asli belum ada / gagal dimuat. */}
+                                {bodyImageFailed && <BodySilhouette view={bodyView} />}
+                                {viewPoints.map((p, i) => (
+                                  <g key={p.id} style={{ cursor: assessmentLocked ? 'default' : 'pointer' }}
+                                    onClick={ev => { ev.stopPropagation(); if (!assessmentLocked) setPointDraft({ ...p, isNew: false }) }}>
+                                    <circle cx={(p.x / 100) * 200} cy={(p.y / 100) * 500} r={11} fill="var(--red)" stroke="#fff" strokeWidth={2} />
+                                    <text x={(p.x / 100) * 200} y={(p.y / 100) * 500 + 4} textAnchor="middle" fontSize={12} fontWeight={700} fill="#fff">{i + 1}</text>
+                                  </g>
+                                ))}
+                                </svg>
+                              </div>
+                            </div>
+                            <p style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'center', marginTop: 6 }}>
+                              Klik pada diagram untuk menambah titik. Klik titik untuk mengubah.
+                            </p>
+                          </div>
+
+                          <div>
+                            <label style={emrSubLabel}>Daftar Titik ({obj.body_points.length})</label>
+                            {obj.body_points.length === 0 ? (
+                              <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '6px 0 0' }}>Belum ada titik.</p>
+                            ) : (['front', 'back'] as const)
+                              .flatMap(v => obj.body_points.filter(p => p.view === v).map((p, i) => ({ p, v, n: i + 1 })))
+                              .map(({ p, v, n }) => (
+                                <div key={p.id} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
+                                  <span style={{ flexShrink: 0, width: 22, height: 22, borderRadius: 999, background: 'var(--red)', color: '#fff', fontSize: 11, fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>{n}</span>
+                                  <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{ fontSize: 13, fontWeight: 600 }}>
+                                      {p.part_label || '(tanpa nama)'}
+                                      <span className="badge" style={{ marginLeft: 8, background: 'var(--bg-card)', color: 'var(--text-secondary)' }}>{v === 'front' ? 'Depan' : 'Belakang'}</span>
+                                    </div>
+                                    {p.notes && <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2, whiteSpace: 'pre-wrap' }}>{p.notes}</div>}
+                                  </div>
+                                  <button type="button" onClick={() => deletePoint(p.id)}
+                                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--red)', fontSize: 12, fontWeight: 600, flexShrink: 0 }}>Hapus</button>
+                                </div>
+                              ))}
+                          </div>
+                        </div>
+                      </EmrBlock>
+
+                      {/* ── Skala Risiko Jatuh — Tahap D (opsional, default tertutup) ── */}
+                      <Collapsible title="Skala Risiko Jatuh (opsional)">
+                        <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                          <div style={{ flex: '1 1 160px' }}>
+                            <label style={emrSubLabel}>Waktu Tes (detik)</label>
+                            <input type="number" step="0.1" min={0} value={obj.fall_risk.test_seconds ?? ''}
+                              onChange={e => setFallSeconds(e.target.value === '' ? null : Number(e.target.value))}
+                              placeholder="-" style={emrField} />
+                          </div>
+                          <div style={{ paddingBottom: 9 }}>
+                            {obj.fall_risk.risk_level === 'tinggi' ? (
+                              <span className="badge" style={{ background: 'var(--red)', color: '#fff' }}>Risiko Tinggi</span>
+                            ) : obj.fall_risk.risk_level === 'rendah' ? (
+                              <span className="badge" style={{ background: '#DCFCE7', color: '#166534' }}>Risiko Rendah</span>
+                            ) : (
+                              <span className="badge" style={{ background: 'var(--bg-elevated)', color: 'var(--text-muted)' }}>-</span>
+                            )}
+                          </div>
+                          <button type="button" className="btn-secondary" style={{ width: 'auto', padding: '8px 16px' }} onClick={() => setFallSeconds(null)}>Atur Ulang</button>
+                        </div>
+                        <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '10px 0 0', lineHeight: 1.5 }}>
+                          Waktu berdiri dari kursi, berjalan ±3 meter, berbalik, duduk kembali. Ambang batas berdasarkan referensi umum — validasikan dengan SOP klinis 20FIT sebelum dipakai untuk keputusan klinis.
+                        </p>
+                      </Collapsible>
+                    </div>
+
+                    {pointDraft && (
+                      <div className="modal-overlay" onClick={() => setPointDraft(null)}>
+                        <div className="modal-box" style={{ maxWidth: 460 }} onClick={e => e.stopPropagation()}>
+                          <h3 className="modal-title" style={{ marginTop: 0 }}>{pointDraft.isNew ? 'Tambah Titik' : 'Edit Titik'}</h3>
+                          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
+                            Tampak {pointDraft.view === 'front' ? 'Depan' : 'Belakang'} · x {pointDraft.x.toFixed(1)}% · y {pointDraft.y.toFixed(1)}%
+                          </div>
+
+                          <label style={emrSubLabel}>Bagian Tubuh</label>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+                            {SPORTS_BODY_PARTS.map(part => {
+                              const on = pointDraft.part_label === part
+                              return (
+                                <button type="button" key={part} onClick={() => setPointDraft(d => (d ? { ...d, part_label: part } : d))}
+                                  style={{ padding: '5px 12px', borderRadius: 999, cursor: 'pointer', fontSize: 12.5, border: '1px solid',
+                                    borderColor: on ? 'var(--red)' : 'var(--border-strong)',
+                                    background: on ? 'rgba(192,57,43,0.2)' : 'var(--bg-elevated)', color: on ? '#fff' : 'var(--text-secondary)', fontWeight: on ? 600 : 400 }}>{part}</button>
+                              )
+                            })}
+                          </div>
+                          <input type="text" value={pointDraft.part_label} onChange={e => setPointDraft(d => (d ? { ...d, part_label: e.target.value } : d))}
+                            placeholder="Atau ketik bagian tubuh lain..." style={emrField} />
+
+                          <div style={{ marginTop: 12 }}>
+                            <label style={emrSubLabel}>Catatan</label>
+                            <textarea value={pointDraft.notes} onChange={e => setPointDraft(d => (d ? { ...d, notes: e.target.value } : d))}
+                              rows={3} placeholder="Catatan temuan pada titik ini..." style={{ ...emrField, resize: 'vertical' }} />
+                          </div>
+
+                          <div className="modal-footer" style={{ marginTop: 16, display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                            <div>
+                              {!pointDraft.isNew && (
+                                <button type="button" onClick={() => deletePoint(pointDraft.id)}
+                                  style={{ background: 'none', border: '1px solid var(--red)', color: 'var(--red)', borderRadius: 8, padding: '8px 16px', cursor: 'pointer', fontWeight: 600 }}>Hapus</button>
+                              )}
+                            </div>
+                            <div style={{ display: 'flex', gap: 8 }}>
+                              <button type="button" className="btn-secondary" style={{ width: 'auto', padding: '8px 16px' }} onClick={() => setPointDraft(null)}>Batal</button>
+                              <button type="button" className="btn-primary" style={{ width: 'auto', padding: '8px 16px' }} onClick={savePoint}>Simpan</button>
+                            </div>
+                          </div>
+                        </div>
                       </div>
-                    ))}
+                    )}
+
+                    {/* Clinical Impression / Assessment (dulu satu .map bersama Plan; Plan dipindah
+                        ke bawah Diagnosis, markup & perilaku Plan tak berubah) */}
+                    <div style={{ marginBottom: 14 }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                        <span style={{ padding: '2px 10px', borderRadius: 999, background: 'rgba(245,158,11,0.15)', color: '#FCD34D', fontSize: 12, fontWeight: 700 }}>Clinical Impression / Assessment</span>
+                      </label>
+                      <textarea
+                        value={assessment.assessment}
+                        onChange={e => setAssessment(prev => ({ ...prev, assessment: e.target.value }))}
+                        placeholder="Diagnosis / clinical impression..."
+                        rows={3}
+                        style={{ width: '100%', padding: '10px 12px', border: '1.5px solid #E5E7EB', borderRadius: 8, fontSize: 13, fontFamily: 'inherit', resize: 'vertical', boxSizing: 'border-box' }}
+                      />
+                    </div>
+
+                    {/* ── Diagnosis — sebelum Plan ─────────────────────────────────── */}
+                    <div style={{ marginBottom: 14 }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                        <span style={{ padding: '2px 10px', borderRadius: 999, background: 'rgba(239,68,68,0.15)', color: 'var(--red)', fontSize: 12, fontWeight: 700 }}>Diagnosis</span>
+                      </label>
+
+                      <label style={emrSubLabel}>Diagnosa <span style={{ color: 'var(--red)' }}>*</span></label>
+                      <textarea
+                        value={diag.text}
+                        onChange={e => patchDiag({ text: e.target.value })}
+                        placeholder="Diagnosa kerja..."
+                        rows={2}
+                        style={{ ...emrField, resize: 'vertical' }}
+                      />
+
+                      <label style={{ ...emrSubLabel, marginTop: 12 }}>ICD-10 (2010) <span style={{ color: 'var(--red)' }}>*</span></label>
+                      <div style={{ position: 'relative' }}>
+                        <input type="text" value={icdQuery} onChange={e => handleIcdSearch(e.target.value)}
+                          placeholder="Ketik kode / nama diagnosis (min. 2 huruf)..." style={emrField} />
+                        {icdQuery.trim().length >= 2 && (
+                          <div style={{ position: 'absolute', zIndex: 20, top: '100%', left: 0, right: 0, marginTop: 4, maxHeight: 260, overflowY: 'auto', background: 'var(--bg-card)', border: '1px solid var(--border-strong)', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,.25)' }}>
+                            {icdSearching ? (
+                              <div style={{ padding: '10px 12px', fontSize: 12, color: 'var(--text-muted)' }}>Mencari…</div>
+                            ) : icdResults.length === 0 ? (
+                              <div style={{ padding: '10px 12px', fontSize: 12, color: 'var(--text-muted)' }}>Tidak ada hasil.</div>
+                            ) : icdResults.map(r => {
+                              const selected = diag.icd10_codes.some(c => c.code === r.code)
+                              return (
+                                <div key={r.code} onClick={() => toggleIcd(r.code, r.display)}
+                                  style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid var(--border)', display: 'flex', gap: 8, alignItems: 'baseline', background: selected ? 'rgba(192,57,43,0.18)' : 'transparent' }}>
+                                  <span style={{ fontWeight: 700, fontFamily: 'monospace', fontSize: 12, color: 'var(--text-primary)' }}>{r.code}</span>
+                                  <span style={{ fontSize: 12, color: 'var(--text-secondary)', flex: 1, minWidth: 0 }}>{r.display}</span>
+                                  {selected && <span style={{ fontSize: 11, color: 'var(--red)', fontWeight: 700, flexShrink: 0 }}>✓ dipilih</span>}
+                                </div>
+                              )
+                            })}
+                          </div>
+                        )}
+                      </div>
+
+                      {diag.icd10_codes.length > 0 && (
+                        <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          {diag.icd10_codes.map(c => (
+                            <div key={c.code} style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '8px 10px', border: '1px solid var(--border)', borderRadius: 8, background: 'var(--bg-elevated)' }}>
+                              <span style={{ fontWeight: 700, fontFamily: 'monospace', fontSize: 12 }}>{c.code}</span>
+                              <span style={{ fontSize: 12, color: 'var(--text-secondary)', flex: 1, minWidth: 0 }}>{c.display}</span>
+                              <button type="button" onClick={() => setPrimaryIcd(c.code)} title="Jadikan diagnosis primer"
+                                className="badge"
+                                style={{ cursor: 'pointer', border: 'none', flexShrink: 0, background: c.is_primary ? 'var(--red)' : 'var(--bg-card)', color: c.is_primary ? '#fff' : 'var(--text-muted)', fontWeight: 700 }}>
+                                {c.is_primary ? 'Primer' : 'Set Primer'}
+                              </button>
+                              <button type="button" onClick={() => toggleIcd(c.code, c.display)}
+                                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--red)', fontSize: 12, fontWeight: 600, flexShrink: 0 }}>Hapus</button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Rencana Tindakan (Plan) — dipindah dari .map, tak diubah */}
+                    <div style={{ marginBottom: 14 }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                        <span style={{ padding: '2px 10px', borderRadius: 999, background: 'rgba(139,92,246,0.15)', color: '#C4B5FD', fontSize: 12, fontWeight: 700 }}>Rencana Tindakan</span>
+                      </label>
+                      <textarea
+                        value={assessment.plan}
+                        onChange={e => setAssessment(prev => ({ ...prev, plan: e.target.value }))}
+                        placeholder="Rencana tindakan, edukasi, follow-up..."
+                        rows={3}
+                        style={{ width: '100%', padding: '10px 12px', border: '1.5px solid #E5E7EB', borderRadius: 8, fontSize: 13, fontFamily: 'inherit', resize: 'vertical', boxSizing: 'border-box' }}
+                      />
+                    </div>
 
                     <div style={{ marginBottom: 14 }}>
                       <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>Ditangani oleh</label>
@@ -908,12 +1885,18 @@ export default function ClinicDokter() {
                               <div style={{ background: 'var(--bg-elevated)', borderRadius: 8, padding: '10px 12px' }}>
                                 <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: '#9CA3AF', marginBottom: 8 }}>Kesimpulan Dokter</div>
 
-                                {h.assessment.diagnosis && (
-                                  <div style={{ marginBottom: 6 }}>
-                                    <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--red)' }}>Diagnosis: </span>
-                                    <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{h.assessment.diagnosis}</span>
-                                  </div>
-                                )}
+                                {h.assessment.diagnosis && (() => {
+                                  const d = h.assessment.diagnosis
+                                  const txt = typeof d === 'string'
+                                    ? d
+                                    : [d.text, (d.icd10_codes ?? []).map(c => c.code).join(', ')].filter(Boolean).join(' — ')
+                                  return txt ? (
+                                    <div style={{ marginBottom: 6 }}>
+                                      <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--red)' }}>Diagnosis: </span>
+                                      <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{txt}</span>
+                                    </div>
+                                  ) : null
+                                })()}
                                 {h.assessment.assessment && (
                                   <div style={{ marginBottom: 6 }}>
                                     <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)' }}>Assessment: </span>

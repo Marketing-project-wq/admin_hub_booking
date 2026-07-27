@@ -50,3 +50,12 @@ Thumbs.db
 node_modules/
 **/node_modules/
 artifacts/admin-panel/.env
+
+# Gambar diagram tubuh EMR — ditaruh manual oleh desainer, tidak di-commit.
+# Catatan: README.md di folder yang sama sengaja TIDAK di-ignore (dokumentasi tetap ikut git).
+artifacts/admin-panel/public/images/body-diagram/*.png
+artifacts/admin-panel/public/images/body-diagram/*.jpg
+artifacts/admin-panel/public/images/body-diagram/*.jpeg
+
+# Data import ICD-10 sekali pakai (dataset besar, bukan bagian aplikasi)
+artifacts/admin-panel/scripts/*.csv
