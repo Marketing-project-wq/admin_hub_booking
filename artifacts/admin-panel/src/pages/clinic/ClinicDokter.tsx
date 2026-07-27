@@ -548,7 +548,7 @@ export default function ClinicDokter() {
   return (
     <div>
       <div className="page-header">
-        <h2 className="page-title">Panel Dokter</h2>
+        <h2 className="page-title">Panel EMR</h2>
         {user?.full_name && (
           <span className="badge" style={{ background: '#EFF6FF', color: '#1D4ED8' }}>{user.full_name}</span>
         )}

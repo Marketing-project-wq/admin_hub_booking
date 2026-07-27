@@ -892,6 +892,91 @@ export async function listVisits(date: string): Promise<ClinicVisit[]> {
   return enrichVisits((data || []) as unknown as ClinicVisit[])
 }
 
+// ─── Calendar (gabungan booking + visit per hari) ────────────────────────────
+export interface CalendarItem {
+  kind: 'booking' | 'visit'
+  id: string
+  time: string | null       // slot.start_time (booking) | visit_time (visit)
+  patientName: string
+  serviceName: string
+  status: string
+}
+
+/**
+ * Aktivitas klinik untuk rentang [monthStart, monthEnd] (YYYY-MM-DD), dikelompokkan
+ * per tanggal. Dua sumber digabung dan di-dedup lewat clinic_bookings.visit_id:
+ *  - clinic_bookings yang BELUM jadi visit (visit_id IS NULL) & bukan 'cancelled',
+ *    tanggalnya diambil dari slot.slot_date (embed !inner ke clinic_slots).
+ *  - clinic_visits berdasarkan visit_date — SEMUA status ditampilkan (biar badge
+ *    warna yang membedakan). Booking yang sudah check-in (visit_id terisi) diwakili
+ *    oleh visit-nya sehingga tidak tampil dobel.
+ * Item tiap hari diurutkan berdasarkan jam (yang tanpa jam ditaruh di akhir).
+ */
+export async function getClinicCalendarData(
+  monthStart: string,
+  monthEnd: string,
+): Promise<Record<string, CalendarItem[]>> {
+  const [bookRes, visitRes] = await Promise.all([
+    supabase
+      .from('clinic_bookings')
+      .select(`
+        id, booking_code, full_name, status,
+        service:clinic_services(name),
+        slot:clinic_slots!inner(slot_date, start_time)
+      `)
+      .is('visit_id', null)
+      .neq('status', 'cancelled')
+      .gte('slot.slot_date', monthStart)
+      .lte('slot.slot_date', monthEnd),
+    supabase
+      .from('clinic_visits')
+      .select(VISIT_SELECT)
+      .gte('visit_date', monthStart)
+      .lte('visit_date', monthEnd),
+  ])
+  if (bookRes.error) throw bookRes.error
+  if (visitRes.error) throw visitRes.error
+
+  const map: Record<string, CalendarItem[]> = {}
+  const push = (date: string | null | undefined, item: CalendarItem) => {
+    if (!date) return
+    if (!map[date]) map[date] = []
+    map[date].push(item)
+  }
+
+  // Bookings yang belum jadi visit.
+  for (const b of (bookRes.data ?? []) as Record<string, unknown>[]) {
+    const slot = Array.isArray(b.slot) ? b.slot[0] : b.slot
+    const svc = Array.isArray(b.service) ? b.service[0] : b.service
+    push((slot as { slot_date?: string } | null)?.slot_date, {
+      kind: 'booking',
+      id: b.id as string,
+      time: (slot as { start_time?: string } | null)?.start_time ?? null,
+      patientName: (b.full_name as string) || '-',
+      serviceName: (svc as { name?: string } | null)?.name || '-',
+      status: b.status as string,
+    })
+  }
+
+  // Visits — enrichVisits menempelkan patient name + services.
+  const visits = await enrichVisits((visitRes.data ?? []) as unknown as ClinicVisit[])
+  for (const v of visits) {
+    push(v.visit_date, {
+      kind: 'visit',
+      id: v.id,
+      time: v.visit_time ?? null,
+      patientName: v.patient?.full_name || '-',
+      serviceName: (v.services ?? []).map(s => s.service_name).join(', ') || '-',
+      status: v.status,
+    })
+  }
+
+  for (const k in map) {
+    map[k].sort((a, b) => (a.time || '99:99').localeCompare(b.time || '99:99'))
+  }
+  return map
+}
+
 export async function getVisit(id: string): Promise<ClinicVisit> {
   const { data, error } = await supabase.from('clinic_visits').select(VISIT_SELECT).eq('id', id).single()
   if (error) throw error

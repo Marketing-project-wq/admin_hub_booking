@@ -40,10 +40,11 @@ const UNIT_MENUS: Record<string, MenuItem[]> = {
   ],
   clinic: [
     { label: 'Dashboard', path: '/clinic',          icon: '◻' },
+    { label: 'Kalender',  path: '/clinic/calendar',  icon: '◻' },
     { label: 'Bookings',  path: '/clinic/bookings',  icon: '◻' },
     { label: 'Kasir',     path: '/clinic/kasir',     icon: '◻' },
     { label: 'Triase',    path: '/clinic/triase',    icon: '◻' },
-    { label: 'Dokter',    path: '/clinic/dokter',    icon: '◻' },
+    { label: 'EMR',       path: '/clinic/dokter',    icon: '◻' },
     { label: 'Users',     path: '/clinic/users',     icon: '◻' },
     { label: 'Visits',    path: '/clinic/visits',    icon: '◻' },
     { label: 'Patients',  path: '/clinic/patients',  icon: '◻' },
@@ -122,7 +123,7 @@ export default function Sidebar({ currentUnit, open, onClose }: SidebarProps) {
 
             // Admin (kasir) hanya bisa akses Kasir dan Visits
             if (role === 'admin' && m.path &&
-                !(['/clinic/kasir', '/clinic/visits', '/clinic/bookings', '/clinic/slots'].includes(m.path))) return null
+                !(['/clinic/kasir', '/clinic/visits', '/clinic/bookings', '/clinic/slots', '/clinic/calendar'].includes(m.path))) return null
           }
 
           if (m.divider) {

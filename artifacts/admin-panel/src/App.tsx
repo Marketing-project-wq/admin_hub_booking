@@ -23,6 +23,7 @@ import ArenaAnalytics from './pages/arena/ArenaAnalytics'
 import ArenaApiKeys from './pages/arena/ArenaApiKeys'
 import GymDashboard from './pages/gym/GymDashboard'
 import ClinicDashboard from './pages/clinic/ClinicDashboard'
+import ClinicCalendar from './pages/clinic/ClinicCalendar'
 import ClinicBookings from './pages/clinic/ClinicBookings'
 import ClinicSlots from './pages/clinic/ClinicSlots'
 import ClinicPatients from './pages/clinic/ClinicPatients'
@@ -54,6 +55,7 @@ export default function App() {
             }
           >
             <Route index element={<ClinicDashboard />} />
+            <Route path="calendar" element={<ClinicCalendar />} />
             <Route path="bookings" element={<ClinicBookings />} />
             <Route path="visits" element={<ClinicVisits />} />
             <Route path="visits/:id" element={<ClinicVisitDetail />} />
