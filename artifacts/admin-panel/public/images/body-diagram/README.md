@@ -86,6 +86,13 @@ tampak Depan memakai gambar sementara tampak Belakang tetap memakai siluet SVG.
 
 ## Catatan
 
-File gambar di folder ini **ditaruh manual oleh tim internal (desainer)** dan **tidak**
-di-commit otomatis dari sesi kerja AI, kecuali memang diminta secara eksplisit.
-Folder ini sengaja hanya berisi README sebagai placeholder.
+Keempat file gambar (`front`/`back` × `male`/`female`, format `.jpeg`) adalah
+**versi awal dari desainer** dan **SUDAH di-commit ke repo** — di-`git add -f`,
+karena pola `*.jpeg`/`*.png` di `.gitignore` sebenarnya mengecualikannya. Jadi
+environment baru langsung mendapat gambarnya tanpa perlu ditaruh manual.
+
+**Status versi awal ini: belum sesuai rasio 2:5** — masih **agak gepeng** karena
+di-render `object-fit: fill` (lihat tabel dimensi di atas). Ini diterima sementara,
+bukan blocker. **TODO crop/pad ulang ke rasio 2:5 TETAP BERLAKU**: begitu desainer
+mengirim versi final, cukup timpa keempat file (nama dasar sama) lalu commit ulang —
+tidak perlu ubah kode.
