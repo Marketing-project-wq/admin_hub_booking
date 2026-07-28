@@ -1500,47 +1500,8 @@ button.unit-card:hover:not(.disabled):not(:disabled) {
   border-color: var(--glass-border);
 }
 
-/* ============================================================================
-   ROUNDED FLOATING SHELL (desktop) — image-1 style
-   The sidebar + content are inset from the viewport into one rounded frame
-   floating on the page gradient, so nothing runs sharp to the top edge.
-   Sidebar rounds its left corners, content rounds its right corners; they
-   abut (sidebar border-right = the seam) to read as a single rounded card.
-   Scoped to desktop; the mobile block (max-width:768px) keeps the sliding
-   full-bleed sidebar untouched.
-   ============================================================================ */
-@media (min-width: 769px) {
-  /* ONE unified rounded frame floating on the page gradient. The sidebar is
-     in-flow (sticky) and flush-LEFT inside the frame — it is NOT a separate
-     rounded/floating panel; it shares the frame's outer corners and meets the
-     content with a straight seam (its own border-right). */
-  .layout {
-    margin: 14px;
-    min-height: calc(100vh - 28px);
-    border-radius: 28px;
-    background: var(--content-panel-bg);
-    box-shadow: var(--shadow-elevated);
-    align-items: stretch;
-  }
-  .sidebar {
-    position: sticky;
-    top: 14px;
-    left: auto; bottom: auto;
-    align-self: flex-start;
-    height: calc(100vh - 28px);
-    border-radius: 28px 0 0 28px;   /* frame's left corners only */
-    border-right: 1px solid var(--sidebar-border);
-    overflow: hidden;
-    z-index: 10;
-  }
-  .main-content {
-    margin: 0;                       /* flush against the sidebar — no gap */
-    flex: 1;
-    min-width: 0;
-    background: transparent;         /* the frame (.layout) surface shows through */
-    box-shadow: none;
-    border-radius: 0 28px 28px 0;    /* frame's right corners only */
-    min-height: calc(100vh - 28px);
-  }
-  .layout-clinic .main-content { margin-left: 0; }
-}
+/* NOTE: The rounded floating "shell" frame was removed — a fixed/sticky frame
+   loses its rounding as soon as the page scrolls (reads as a square box). Per
+   design direction the rounding lives on the sidebar CONTENTS (the pill menu
+   items), not the outer frame. The sidebar stays a normal full-height flush
+   panel (base .sidebar rules), so scrolling never squares anything off. */
