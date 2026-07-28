@@ -34,10 +34,10 @@
   --text-muted:     var(--ink-soft);
   --text-faint:     var(--ink-faint);
 
-  /* Page gradient */
-  --bg-grad-a: #F2E9E6;
-  --bg-grad-b: #E9EEF3;
-  --bg-page:   #ECE7E9;
+  /* Page gradient — cool soft lavender / periwinkle (image-1 vibe) */
+  --bg-grad-a: #F4F3FB;
+  --bg-grad-b: #E8E7F4;
+  --bg-page:   #EEEDF7;
 
   /* Glass surfaces */
   --glass:        rgba(255, 255, 255, 0.55);
@@ -54,7 +54,7 @@
 
   /* Sidebar — seamless translucent gradient (blends into the page gradient via
      backdrop-blur) in light mode, dark in dark mode (theme-aware) */
-  --bg-sidebar: linear-gradient(160deg, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0.22) 100%);
+  --bg-sidebar: linear-gradient(160deg, rgba(246,245,253,0.60) 0%, rgba(234,233,247,0.24) 100%);
   --sidebar-edge: transparent;
   --sidebar-text:        #55555A;
   --sidebar-text-strong: #1D1D1F;
