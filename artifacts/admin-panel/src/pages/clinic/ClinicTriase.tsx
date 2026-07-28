@@ -1284,7 +1284,7 @@ export default function ClinicTriase() {
                   opacity: v.status === 'completed' ? 0.7 : 1,
                 }}>
                 {/* Waktu */}
-                <div style={{ width: 56, flexShrink: 0, fontWeight: 700, fontSize: 14, color: '#374151' }}>
+                <div style={{ width: 56, flexShrink: 0, fontWeight: 700, fontSize: 14, color: 'var(--text-secondary)' }}>
                   {v.visit_time ? fmtTime(v.visit_time) : '—'}
                 </div>
 
@@ -1414,7 +1414,7 @@ export default function ClinicTriase() {
 
                   {/* Kondisi pasien */}
                   <div>
-                    <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 6 }}>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 6 }}>
                       Kondisi Pasien Hari Ini
                     </label>
                     <textarea
@@ -1428,7 +1428,7 @@ export default function ClinicTriase() {
 
                   {/* Treatment */}
                   <div>
-                    <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 6 }}>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 6 }}>
                       Treatment yang Dilakukan
                     </label>
                     <textarea
@@ -1442,7 +1442,7 @@ export default function ClinicTriase() {
 
                   {/* Respon pasien */}
                   <div>
-                    <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 6 }}>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 6 }}>
                       Respon Pasien
                     </label>
                     <textarea
@@ -1456,7 +1456,7 @@ export default function ClinicTriase() {
 
                   {/* Catatan */}
                   <div>
-                    <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 6 }}>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 6 }}>
                       Catatan Tambahan
                     </label>
                     <textarea
@@ -1476,7 +1476,7 @@ export default function ClinicTriase() {
                       style={{
                         flex: 1, padding: '10px 0', borderRadius: 8,
                         border: '1px solid #E5E7EB', background: '#fff',
-                        color: '#374151', fontSize: 13, fontWeight: 600,
+                        color: 'var(--text-secondary)', fontSize: 13, fontWeight: 600,
                         cursor: assessmentLoading ? 'not-allowed' : 'pointer',
                       }}
                     >

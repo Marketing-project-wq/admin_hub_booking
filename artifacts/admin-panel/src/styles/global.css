@@ -160,35 +160,42 @@
 }
 .layout-clinic .main-content { color: var(--text-primary); }
 
-/* Clinic dark palette — deep navy (#071A33) → blues (#123C66 / #2E6FB6) → cream
-   text (#FFF3E6), brand red = 20FIT #E4002B. */
+/* Clinic dark palette — deep navy → darker glass blues → cream text
+   (#FFF3E6), accent blue from #2E6FB6, brand red = 20FIT #E4002B.
+   color-scheme:dark makes native controls (date picker, select arrow,
+   scrollbars, checkboxes) render light so their icons stay visible. */
 :root[data-theme="dark"] .layout-clinic {
-  --bg-page:        #071A33;
-  --bg-sidebar:     linear-gradient(180deg, rgba(7,26,51,0) 0%, rgba(6,20,40,0.6) 44%, #05132A 100%);
-  --bg-deep:        #05132A;
-  --content-panel-bg: #0A2140;
-  --bg-card:        #123C66;
-  --bg-card-hover:  #17497B;
-  --bg-input:       #0C2C50;
-  --bg-elevated:    #1A5085;
-  --bg-modal:         #123C66;
-  --bg-sidebar-solid: #05132A;
-  --border:         rgba(163,196,224,0.14);
-  --border-strong:  rgba(163,196,224,0.30);
+  color-scheme: dark;
+  --bg-page:        #061426;
+  --bg-sidebar:     linear-gradient(180deg, rgba(6,20,38,0) 0%, rgba(4,15,30,0.6) 44%, #040F1F 100%);
+  --bg-deep:        #04101F;
+  /* Rounded content panel gets a deep dark gradient so glass cards pop on it. */
+  --content-panel-bg: linear-gradient(165deg, #0A2039 0%, #06152A 100%);
+  --bg-card:        #0E2E4F;
+  --bg-card-hover:  #123A5E;
+  --bg-input:       #0A2038;
+  --bg-elevated:    #143A60;
+  --bg-modal:         #0E2E4F;
+  --bg-sidebar-solid: #061426;
+  --border:         rgba(140,180,220,0.14);
+  --border-strong:  rgba(140,180,220,0.28);
   --red:            #E4002B;
   --red-dark:       #B80023;
   --red-glow:       rgba(228,0,43,0.24);
   --blue:           #4E90D4;
   --text-primary:   #FFF3E6;
-  --text-secondary: #B8D0E8;
-  --text-muted:     #7BA0C6;
-  --text-faint:     #4E739B;
-  --shadow-card:    0 4px 24px rgba(0,0,0,0.45), 0 1px 4px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.06);
-  --shadow-elevated: 0 8px 32px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.08);
+  --text-secondary: #C2D6EC;
+  --text-muted:     #86A8CC;
+  --text-faint:     #557699;
+  /* Stronger blue-tinted glass sheen (layered over the solid card via the sheen
+     rule) → the "liquid glass" gradient feel on cards/tables. */
+  --glass-sheen:    linear-gradient(160deg, rgba(122,168,224,0.13) 0%, rgba(122,168,224,0.03) 40%, rgba(0,0,0,0) 66%);
+  --shadow-card:    0 6px 26px rgba(0,0,0,0.5), 0 1px 4px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.06);
+  --shadow-elevated: 0 10px 36px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.08);
   background: var(--bg-page);
 }
 :root[data-theme="dark"] .layout-clinic .main-content {
-  background: var(--bg-page);
+  background: var(--content-panel-bg);
 }
 
 /* ============================================================================
