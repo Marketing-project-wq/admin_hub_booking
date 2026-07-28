@@ -25,11 +25,62 @@ const VIEWS: { key: ViewKey; label: string; instruksi: string }[] = [
   },
 ]
 
+// ── Anotasi custom (Stage 4a titik + catatan; Stage 4b garis antar titik) ────
+// Koordinat titik ternormalisasi 0..1 — konsisten dengan landmarks MediaPipe di tabel yang sama.
+interface AnnotationPoint { id: string; x: number; y: number; note: string }
+// Garis HANYA antar 2 titik custom yang ada (by id) — tidak ada garis lepas.
+interface AnnotationLine { id: string; point_a_id: string; point_b_id: string; angle_deg: number; note: string }
+interface Annotations {
+  general_note: string
+  points: AnnotationPoint[]
+  lines: AnnotationLine[]
+}
+const emptyAnnotations = (): Annotations => ({ general_note: '', points: [], lines: [] })
+// Id pendek unik — pola sama newPointId body-diagram (ClinicDokter).
+const newAnnotationId = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4)
+
+// Sudut garis vs horizontal, dihitung di RUANG PIKSEL (×w/×h dulu) — rumus identik
+// tiltFromHorizontal di lib/pose (3 garis MediaPipe), dinormalisasi ke [-90,90].
+function lineAngleDeg(a: AnnotationPoint, b: AnnotationPoint, w: number, h: number): number {
+  let deg = (Math.atan2((b.y - a.y) * h, (b.x - a.x) * w) * 180) / Math.PI
+  if (deg > 90) deg -= 180
+  if (deg < -90) deg += 180
+  return Math.round(deg * 10) / 10
+}
+
+/** Kolom annotations (jsonb). Baris lama NULL → default. Pola parsePlan/parseDiagnosis.
+ *  Garis dengan endpoint yang tidak ada di points DIBUANG (jaga konsistensi data). */
+function parseAnnotations(raw: unknown): Annotations {
+  if (raw == null || typeof raw !== 'object') return emptyAnnotations()
+  const r = raw as Partial<Annotations>
+  const points = Array.isArray(r.points)
+    ? r.points
+        .filter(p => p && typeof p.x === 'number' && typeof p.y === 'number')
+        .map(p => ({ id: typeof p.id === 'string' ? p.id : newAnnotationId(), x: p.x, y: p.y, note: typeof p.note === 'string' ? p.note : '' }))
+    : []
+  const ids = new Set(points.map(p => p.id))
+  const lines = Array.isArray(r.lines)
+    ? (r.lines as Partial<AnnotationLine>[])
+        .filter(l => l && typeof l.point_a_id === 'string' && typeof l.point_b_id === 'string' && ids.has(l.point_a_id) && ids.has(l.point_b_id))
+        .map(l => ({
+          id: typeof l.id === 'string' ? l.id : newAnnotationId(),
+          point_a_id: l.point_a_id!, point_b_id: l.point_b_id!,
+          angle_deg: typeof l.angle_deg === 'number' ? l.angle_deg : 0,
+          note: typeof l.note === 'string' ? l.note : '',
+        }))
+    : []
+  return {
+    general_note: typeof r.general_note === 'string' ? r.general_note : '',
+    points, lines,
+  }
+}
+
 interface Scan {
   id?: string
   imageUrl: string          // object URL (lokal, belum simpan) atau signed URL (dari Storage)
   landmarks: PoseLandmark[]
   angles: PoseAngles
+  annotations: Annotations
   w: number                 // dimensi asli gambar (0 = belum diketahui, diisi saat <img> load)
   h: number
   saved: boolean
@@ -96,6 +147,69 @@ function Overlay({ scan }: { scan: Scan }) {
       <Label x={Math.max(lsh.x, rsh.x) + fs * 0.3} y={Math.min(lsh.y, rsh.y) - fs * 0.3} text={fmtDeg(scan.angles.shoulder_tilt_deg)} color="#ef4444" />
       <Label x={Math.max(lhip.x, rhip.x) + fs * 0.3} y={Math.max(lhip.y, rhip.y) + fs} text={fmtDeg(scan.angles.hip_tilt_deg)} color="#3b82f6" />
       <Label x={mank.x + fs * 0.3} y={(msh.y + mank.y) / 2} text={fmtDeg(scan.angles.lateral_deviation_deg)} color="#22c55e" />
+    </svg>
+  )
+}
+
+// Layer titik anotasi custom — SVG TERPISAH di atas Overlay MediaPipe (Overlay tetap
+// pointerEvents:none / read-only). Interaktif HANYA saat mode anotasi ON; saat OFF
+// titik tetap terlihat tapi tidak menangkap event (scroll aman). Pembedaan tap-kosong
+// vs tap-titik = per-elemen onClick + stopPropagation (pola persis body-diagram),
+// dengan lingkaran hit transparan besar (~target 20px layar) untuk jari di HP.
+function AnnotationLayer({ scan, active, linkMode, selectedPointId, onBackgroundClick, onPointClick, onLineClick }: {
+  scan: Scan
+  active: boolean
+  linkMode: boolean                 // sub-mode Hubungkan Garis (Stage 4b)
+  selectedPointId: string | null    // titik A terpilih saat linkMode
+  onBackgroundClick: (e: React.MouseEvent<SVGSVGElement>) => void
+  onPointClick: (p: AnnotationPoint) => void
+  onLineClick: (l: AnnotationLine) => void
+}) {
+  const { w, h } = scan
+  if (w === 0) return null
+  const S = Math.max(w, h)
+  const rVis = S / 70   // marker visual (fuchsia — jelas beda dari titik putih MediaPipe)
+  const rHit = S / 16   // area tap transparan (≈20px pada lebar render tipikal)
+  const sw = S / 260    // ketebalan garis — sama dengan garis MediaPipe
+  const pts = scan.annotations.points
+  const byId = (id: string) => pts.find(p => p.id === id)
+  // Edit garis hanya di mode anotasi umum (bukan saat linkMode — tap titik prioritas).
+  const linesInteractive = active && !linkMode
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none"
+      onClick={active ? onBackgroundClick : undefined}
+      style={{ position: 'absolute', inset: 0, width: '100%', height: '100%',
+        pointerEvents: active ? 'auto' : 'none', touchAction: 'manipulation',
+        cursor: active ? 'crosshair' : 'default' }}>
+      {/* Garis custom (oranye, putus-putus = anotasi dokter, bukan pengukuran otomatis) */}
+      {scan.annotations.lines.map(l => {
+        const pa = byId(l.point_a_id), pb = byId(l.point_b_id)
+        if (!pa || !pb) return null
+        const x1 = pa.x * w, y1 = pa.y * h, x2 = pb.x * w, y2 = pb.y * h
+        return (
+          <g key={l.id} style={{ cursor: linesInteractive ? 'pointer' : 'default' }}
+            onClick={linesInteractive ? (ev => { ev.stopPropagation(); onLineClick(l) }) : undefined}>
+            <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="transparent" strokeWidth={rHit} />
+            <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="#f97316" strokeWidth={sw}
+              strokeDasharray={`${S / 60} ${S / 90}`} />
+            <text x={(x1 + x2) / 2} y={(y1 + y2) / 2 - sw * 2} textAnchor="middle" fontSize={S / 28} fontWeight={700}
+              fill="#f97316" stroke="#000" strokeWidth={S / 340} paintOrder="stroke">{fmtDeg(l.angle_deg)}</text>
+          </g>
+        )
+      })}
+      {/* Titik custom */}
+      {pts.map((p, i) => (
+        <g key={p.id} style={{ cursor: active ? 'pointer' : 'default' }}
+          onClick={active ? (ev => { ev.stopPropagation(); onPointClick(p) }) : undefined}>
+          <circle cx={p.x * w} cy={p.y * h} r={rHit} fill="transparent" />
+          {p.id === selectedPointId && (
+            <circle cx={p.x * w} cy={p.y * h} r={rVis * 2} fill="none" stroke="#f97316" strokeWidth={rVis / 2.5} />
+          )}
+          <circle cx={p.x * w} cy={p.y * h} r={rVis} fill="#e879f9" stroke="#111" strokeWidth={rVis / 4} />
+          <text x={p.x * w} y={p.y * h - rVis * 1.8} textAnchor="middle" fontSize={S / 28} fontWeight={700}
+            fill="#e879f9" stroke="#000" strokeWidth={S / 340} paintOrder="stroke">{i + 1}</text>
+        </g>
+      ))}
     </svg>
   )
 }
@@ -288,6 +402,118 @@ export default function PostureScanPanel({ visitId, patientId }: { visitId: stri
   const setBusyFor = (v: ViewKey, msg?: string) => setBusy(b => ({ ...b, [v]: msg }))
   const setErrFor = (v: ViewKey, msg: string) => setErr(e => ({ ...e, [v]: msg }))
 
+  // ── Anotasi (Stage 4a titik, Stage 4b garis) — per view, independen ───────
+  const [annoMode, setAnnoMode] = useState<Partial<Record<ViewKey, boolean>>>({})
+  const [annoDirty, setAnnoDirty] = useState<Partial<Record<ViewKey, boolean>>>({})
+  const [annoDraft, setAnnoDraft] = useState<{ view: ViewKey; point: AnnotationPoint; isNew: boolean } | null>(null)
+  // Konfirmasi cascade: hapus titik yang masih dipakai garis.
+  const [annoDeleteConfirm, setAnnoDeleteConfirm] = useState(false)
+  // Sub-mode "Hubungkan Garis" + titik A terpilih + dialog garis (Stage 4b).
+  const [linkMode, setLinkMode] = useState<Partial<Record<ViewKey, boolean>>>({})
+  const [linkFrom, setLinkFrom] = useState<{ view: ViewKey; pointId: string } | null>(null)
+  const [lineDraft, setLineDraft] = useState<{ view: ViewKey; line: AnnotationLine; isNew: boolean } | null>(null)
+
+  const patchAnnotations = (view: ViewKey, patch: Partial<Annotations>) => {
+    setScans(s => (s[view] ? { ...s, [view]: { ...s[view]!, annotations: { ...s[view]!.annotations, ...patch } } } : s))
+    setAnnoDirty(d => ({ ...d, [view]: true }))
+  }
+
+  // Tap area kosong: mode link → batal pilih titik A; mode biasa → titik baru + dialog.
+  // Koordinat dinormalisasi 0..1 via getBoundingClientRect (pola body-diagram/SignaturePad).
+  const handleAnnotationLayerClick = (view: ViewKey, e: React.MouseEvent<SVGSVGElement>) => {
+    if (linkMode[view]) { setLinkFrom(null); return }
+    const rect = e.currentTarget.getBoundingClientRect()
+    if (!rect.width || !rect.height) return
+    const x = clamp((e.clientX - rect.left) / rect.width, 0, 1)
+    const y = clamp((e.clientY - rect.top) / rect.height, 0, 1)
+    setAnnoDeleteConfirm(false)
+    setAnnoDraft({ view, point: { id: newAnnotationId(), x, y, note: '' }, isNew: true })
+  }
+
+  // Tap titik: mode link → pilih A / batal / lengkapi garis A→B; mode biasa → dialog edit.
+  const handlePointTap = (view: ViewKey, p: AnnotationPoint) => {
+    if (!linkMode[view]) {
+      setAnnoDeleteConfirm(false)
+      setAnnoDraft({ view, point: { ...p }, isNew: false })
+      return
+    }
+    const scan = scans[view]
+    if (!scan) return
+    const curSel = linkFrom?.view === view ? linkFrom.pointId : null
+    if (!curSel) { setLinkFrom({ view, pointId: p.id }); return }
+    if (curSel === p.id) { setLinkFrom(null); return }   // tap titik A lagi = batal pilih
+    const a = scan.annotations.points.find(pt => pt.id === curSel)
+    if (!a) { setLinkFrom(null); return }
+    const dup = scan.annotations.lines.some(l =>
+      (l.point_a_id === curSel && l.point_b_id === p.id) || (l.point_a_id === p.id && l.point_b_id === curSel))
+    if (dup) { setErrFor(view, 'Garis antara dua titik ini sudah ada.'); setLinkFrom(null); return }
+    setLinkFrom(null)
+    setLineDraft({
+      view,
+      line: { id: newAnnotationId(), point_a_id: a.id, point_b_id: p.id, angle_deg: lineAngleDeg(a, p, scan.w, scan.h), note: '' },
+      isNew: true,
+    })
+  }
+
+  const saveAnnoDraft = () => {
+    if (!annoDraft) return
+    const { view, point, isNew } = annoDraft
+    const cur = scans[view]?.annotations
+    if (cur) patchAnnotations(view, { points: isNew ? [...cur.points, point] : cur.points.map(p => (p.id === point.id ? point : p)) })
+    setAnnoDraft(null)
+    setAnnoDeleteConfirm(false)
+  }
+  // Hapus titik: kalau masih dipakai garis → minta konfirmasi eksplisit dulu; saat
+  // dikonfirmasi, garis-garis ber-endpoint titik itu IKUT terhapus (tanpa garis nyangkut).
+  const deleteAnnoDraft = () => {
+    if (!annoDraft) return
+    const { view, point } = annoDraft
+    const cur = scans[view]?.annotations
+    if (!cur) { setAnnoDraft(null); return }
+    const linkedCount = cur.lines.filter(l => l.point_a_id === point.id || l.point_b_id === point.id).length
+    if (linkedCount > 0 && !annoDeleteConfirm) { setAnnoDeleteConfirm(true); return }
+    patchAnnotations(view, {
+      points: cur.points.filter(p => p.id !== point.id),
+      lines: cur.lines.filter(l => l.point_a_id !== point.id && l.point_b_id !== point.id),
+    })
+    setAnnoDraft(null)
+    setAnnoDeleteConfirm(false)
+  }
+
+  const saveLineDraft = () => {
+    if (!lineDraft) return
+    const { view, line, isNew } = lineDraft
+    const cur = scans[view]?.annotations
+    if (cur) patchAnnotations(view, { lines: isNew ? [...cur.lines, line] : cur.lines.map(l => (l.id === line.id ? line : l)) })
+    setLineDraft(null)
+  }
+  const deleteLineDraft = () => {
+    if (!lineDraft) return
+    const { view, line } = lineDraft
+    const cur = scans[view]?.annotations
+    if (cur) patchAnnotations(view, { lines: cur.lines.filter(l => l.id !== line.id) })
+    setLineDraft(null)
+  }
+
+  // UPDATE kolom annotations SAJA pada baris tersimpan — image_path/landmarks/angles
+  // sudah final, tidak disentuh.
+  const saveAnnotations = async (view: ViewKey) => {
+    const scan = scans[view]
+    if (!scan?.saved || !scan.id) return
+    setErrFor(view, '')
+    setBusyFor(view, 'Menyimpan anotasi…')
+    try {
+      const { error } = await supabase.from('clinic_posture_scans')
+        .update({ annotations: scan.annotations }).eq('id', scan.id)
+      if (error) throw error
+      setAnnoDirty(d => ({ ...d, [view]: false }))
+    } catch (e) {
+      setErrFor(view, e instanceof Error ? e.message : 'Gagal menyimpan anotasi')
+    } finally {
+      setBusyFor(view, undefined)
+    }
+  }
+
   // Muat scan tersimpan (terbaru per view) saat tab dibuka → render dari data DB + Storage.
   useEffect(() => {
     let cancelled = false
@@ -296,17 +522,18 @@ export default function PostureScanPanel({ visitId, patientId }: { visitId: stri
       try {
         const { data } = await supabase
           .from('clinic_posture_scans')
-          .select('id, view, image_path, landmarks, angles')
+          .select('id, view, image_path, landmarks, angles, annotations')
           .eq('visit_id', visitId)
           .order('created_at', { ascending: false })
         const next: Partial<Record<ViewKey, Scan>> = {}
-        for (const row of (data ?? []) as { id: string; view: ViewKey; image_path: string; landmarks: PoseLandmark[]; angles: PoseAngles }[]) {
+        for (const row of (data ?? []) as { id: string; view: ViewKey; image_path: string; landmarks: PoseLandmark[]; angles: PoseAngles; annotations: unknown }[]) {
           if (next[row.view]) continue // sudah ada yang lebih baru (order desc)
           const { data: signed } = await supabase.storage.from(BUCKET).createSignedUrl(row.image_path, SIGNED_TTL)
           if (!signed?.signedUrl) continue
           next[row.view] = {
             id: row.id, imageUrl: signed.signedUrl,
             landmarks: row.landmarks ?? [], angles: row.angles,
+            annotations: parseAnnotations(row.annotations),
             w: 0, h: 0, saved: true,
           }
         }
@@ -352,7 +579,8 @@ export default function PostureScanPanel({ visitId, patientId }: { visitId: stri
         ...computeAngles(landmarks, img.naturalWidth, img.naturalHeight),
         detection_confidence: Math.round(keyVisibility(landmarks) * 100) / 100,
       }
-      setScans(s => ({ ...s, [view]: { imageUrl: url, landmarks, angles, w: img.naturalWidth, h: img.naturalHeight, saved: false, file: work } }))
+      setScans(s => ({ ...s, [view]: { imageUrl: url, landmarks, angles, annotations: emptyAnnotations(), w: img.naturalWidth, h: img.naturalHeight, saved: false, file: work } }))
+      setAnnoDirty(d => ({ ...d, [view]: false }))   // foto baru = anotasi kosong, ikut Simpan utama
     } catch (e) {
       URL.revokeObjectURL(url)
       setErrFor(view, e instanceof Error ? e.message : 'Gagal memproses foto')
@@ -380,16 +608,18 @@ export default function PostureScanPanel({ visitId, patientId }: { visitId: stri
       const ins = await supabase.from('clinic_posture_scans').insert({
         visit_id: visitId, patient_id: patientId, view,
         image_path: path, landmarks: scan.landmarks, angles: scan.angles,
-      }).select('id, image_path, landmarks, angles').single()
+        annotations: scan.annotations,   // anotasi preview ikut tersimpan bersama Simpan utama
+      }).select('id, image_path, landmarks, angles, annotations').single()
       if (ins.error) throw ins.error
-      const row = ins.data as { id: string; image_path: string; landmarks: PoseLandmark[]; angles: PoseAngles }
+      const row = ins.data as { id: string; image_path: string; landmarks: PoseLandmark[]; angles: PoseAngles; annotations: unknown }
       const { data: signed } = await supabase.storage.from(BUCKET).createSignedUrl(row.image_path, SIGNED_TTL)
       URL.revokeObjectURL(scan.imageUrl)
       // Render ulang MURNI dari data tersimpan (foto Storage + landmarks/angles dari DB).
       setScans(s => ({
         ...s,
-        [view]: { id: row.id, imageUrl: signed?.signedUrl ?? scan.imageUrl, landmarks: row.landmarks ?? [], angles: row.angles, w: 0, h: 0, saved: true },
+        [view]: { id: row.id, imageUrl: signed?.signedUrl ?? scan.imageUrl, landmarks: row.landmarks ?? [], angles: row.angles, annotations: parseAnnotations(row.annotations), w: 0, h: 0, saved: true },
       }))
+      setAnnoDirty(d => ({ ...d, [view]: false }))
       setTrendRefresh(n => n + 1)   // scan baru tersimpan → muat ulang tabel tren
     } catch (e) {
       setErrFor(view, e instanceof Error ? e.message : 'Gagal menyimpan')
@@ -465,6 +695,14 @@ export default function PostureScanPanel({ visitId, patientId }: { visitId: stri
                     <img src={scan.imageUrl} alt={`postur ${v.key}`} onLoad={e => onImgLoad(v.key, e.currentTarget)}
                       style={{ width: '100%', display: 'block' }} />
                     {scan.w > 0 && <Overlay scan={scan} />}
+                    {scan.w > 0 && (
+                      <AnnotationLayer scan={scan} active={!!annoMode[v.key]}
+                        linkMode={!!linkMode[v.key]}
+                        selectedPointId={linkFrom?.view === v.key ? linkFrom.pointId : null}
+                        onBackgroundClick={e => handleAnnotationLayerClick(v.key, e)}
+                        onPointClick={p => handlePointTap(v.key, p)}
+                        onLineClick={l => setLineDraft({ view: v.key, line: { ...l }, isNew: false })} />
+                    )}
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 8, fontSize: 12 }}>
                     <AngleRow color="#ef4444" label="Kemiringan bahu" deg={scan.angles.shoulder_tilt_deg} />
@@ -501,12 +739,61 @@ export default function PostureScanPanel({ visitId, patientId }: { visitId: stri
                       </>
                     )}
                     {fileInput(v.key, scan.saved ? 'Scan ulang' : 'Ganti foto')}
+                    <button type="button" className="btn-secondary"
+                      onClick={() => {
+                        const next = !annoMode[v.key]
+                        setAnnoMode(m => ({ ...m, [v.key]: next }))
+                        // Keluar mode anotasi → sub-mode garis & pilihan titik A ikut reset.
+                        if (!next) { setLinkMode(m => ({ ...m, [v.key]: false })); setLinkFrom(f => (f?.view === v.key ? null : f)) }
+                      }}
+                      style={{ width: 'auto', padding: '8px 14px', ...(annoMode[v.key] ? { background: 'rgba(232,121,249,0.15)', color: '#e879f9' } : {}) }}>
+                      {annoMode[v.key] ? '✏ Anotasi: ON' : '✏ Anotasi'}
+                    </button>
+                    {annoMode[v.key] && (
+                      <button type="button" className="btn-secondary"
+                        onClick={() => {
+                          const next = !linkMode[v.key]
+                          setLinkMode(m => ({ ...m, [v.key]: next }))
+                          setLinkFrom(f => (f?.view === v.key ? null : f))
+                        }}
+                        style={{ width: 'auto', padding: '8px 14px', ...(linkMode[v.key] ? { background: 'rgba(249,115,22,0.15)', color: '#f97316' } : {}) }}>
+                        {linkMode[v.key] ? '🔗 Garis: ON' : '🔗 Hubungkan Garis'}
+                      </button>
+                    )}
+                    {scan.saved && (
+                      <button type="button" className="btn-primary" style={{ width: 'auto', padding: '8px 14px' }}
+                        disabled={!!status || !annoDirty[v.key]} onClick={() => saveAnnotations(v.key)}>
+                        Simpan Anotasi{annoDirty[v.key] ? ' •' : ''}
+                      </button>
+                    )}
                   </div>
+                  {annoMode[v.key] && !linkMode[v.key] && (
+                    <p style={{ fontSize: 11, color: '#e879f9', margin: '6px 0 0' }}>
+                      Mode anotasi aktif — tap foto untuk menambah titik, tap titik ungu untuk edit/hapus, tap garis oranye untuk edit/hapus garis.
+                    </p>
+                  )}
+                  {annoMode[v.key] && linkMode[v.key] && (
+                    <p style={{ fontSize: 11, color: '#f97316', margin: '6px 0 0' }}>
+                      {linkFrom?.view === v.key
+                        ? 'Titik A terpilih — tap titik lain untuk membuat garis, tap titik yang sama / area kosong untuk batal.'
+                        : 'Mode garis — tap titik pertama, lalu titik kedua untuk menghubungkan.'}
+                    </p>
+                  )}
                   {!scan.saved && (
                     <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '6px 0 0' }}>
                       Foto &amp; hasil deteksi ini belum masuk rekam — klik Simpan.
                     </p>
                   )}
+
+                  {/* Catatan Umum — selalu terlihat, tanpa perlu Mode Anotasi */}
+                  <div style={{ marginTop: 10 }}>
+                    <label style={{ display: 'block', fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Catatan Umum</label>
+                    <textarea value={scan.annotations.general_note}
+                      onChange={e => patchAnnotations(v.key, { general_note: e.target.value })}
+                      rows={2} placeholder="Catatan umum untuk scan ini..."
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: 8, fontSize: 12, fontFamily: 'inherit',
+                        border: '1px solid var(--border-strong)', background: 'var(--bg-input)', color: 'var(--text-primary)', boxSizing: 'border-box', resize: 'vertical' }} />
+                  </div>
                 </>
               ) : (
                 <div style={{ border: '1px dashed var(--border-strong)', borderRadius: 8, padding: 20, textAlign: 'center' }}>
@@ -521,6 +808,76 @@ export default function PostureScanPanel({ visitId, patientId }: { visitId: stri
           )
         })}
       </div>
+
+      {/* Dialog titik anotasi — nested modal, pola sama dialog titik body-diagram */}
+      {annoDraft && (
+        <div className="modal-overlay" onClick={() => { setAnnoDraft(null); setAnnoDeleteConfirm(false) }}>
+          <div className="modal-box" style={{ maxWidth: 420 }} onClick={e => e.stopPropagation()}>
+            <h3 className="modal-title" style={{ marginTop: 0 }}>{annoDraft.isNew ? 'Tambah Titik Anotasi' : 'Edit Titik Anotasi'}</h3>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 10 }}>
+              {annoDraft.view === 'depan' ? 'Depan' : 'Belakang'} · x {(annoDraft.point.x * 100).toFixed(1)}% · y {(annoDraft.point.y * 100).toFixed(1)}%
+            </div>
+            <label style={{ display: 'block', fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Catatan (opsional)</label>
+            <textarea value={annoDraft.point.note} autoFocus
+              onChange={e => setAnnoDraft(d => (d ? { ...d, point: { ...d.point, note: e.target.value } } : d))}
+              rows={3} placeholder="Catatan pada titik ini..."
+              style={{ width: '100%', padding: '8px 10px', borderRadius: 8, fontSize: 13, fontFamily: 'inherit',
+                border: '1px solid var(--border-strong)', background: 'var(--bg-input)', color: 'var(--text-primary)', boxSizing: 'border-box', resize: 'vertical' }} />
+            {annoDeleteConfirm && (
+              <p style={{ fontSize: 12, color: 'var(--text-primary)', background: 'rgba(245,158,11,0.12)', borderLeft: '3px solid #f59e0b', borderRadius: 6, padding: '8px 10px', margin: '10px 0 0', lineHeight: 1.4 }}>
+                ⚠ Titik ini dipakai di {scans[annoDraft.view]?.annotations.lines.filter(l => l.point_a_id === annoDraft.point.id || l.point_b_id === annoDraft.point.id).length ?? 0} garis — garis tersebut akan ikut terhapus.
+              </p>
+            )}
+            <div className="modal-footer" style={{ marginTop: 14, display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+              <div>
+                {!annoDraft.isNew && (
+                  <button type="button" onClick={deleteAnnoDraft}
+                    style={annoDeleteConfirm
+                      ? { background: 'var(--red)', border: '1px solid var(--red)', color: '#fff', borderRadius: 8, padding: '8px 14px', cursor: 'pointer', fontWeight: 600 }
+                      : { background: 'none', border: '1px solid var(--red)', color: 'var(--red)', borderRadius: 8, padding: '8px 14px', cursor: 'pointer', fontWeight: 600 }}>
+                    {annoDeleteConfirm ? 'Ya, Hapus Titik + Garis' : 'Hapus Titik'}
+                  </button>
+                )}
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button type="button" className="btn-secondary" style={{ width: 'auto', padding: '8px 14px' }} onClick={() => { setAnnoDraft(null); setAnnoDeleteConfirm(false) }}>Batal</button>
+                <button type="button" className="btn-primary" style={{ width: 'auto', padding: '8px 14px' }} onClick={saveAnnoDraft}>Simpan Titik</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Dialog garis anotasi (Stage 4b) — pola sama dialog titik */}
+      {lineDraft && (
+        <div className="modal-overlay" onClick={() => setLineDraft(null)}>
+          <div className="modal-box" style={{ maxWidth: 420 }} onClick={e => e.stopPropagation()}>
+            <h3 className="modal-title" style={{ marginTop: 0 }}>{lineDraft.isNew ? 'Tambah Garis Anotasi' : 'Edit Garis Anotasi'}</h3>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 10 }}>
+              {lineDraft.view === 'depan' ? 'Depan' : 'Belakang'} · sudut vs horizontal:{' '}
+              <span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#f97316' }}>{fmtDeg(lineDraft.line.angle_deg)}</span>
+            </div>
+            <label style={{ display: 'block', fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Catatan (opsional)</label>
+            <textarea value={lineDraft.line.note} autoFocus
+              onChange={e => setLineDraft(d => (d ? { ...d, line: { ...d.line, note: e.target.value } } : d))}
+              rows={3} placeholder="Catatan pada garis ini..."
+              style={{ width: '100%', padding: '8px 10px', borderRadius: 8, fontSize: 13, fontFamily: 'inherit',
+                border: '1px solid var(--border-strong)', background: 'var(--bg-input)', color: 'var(--text-primary)', boxSizing: 'border-box', resize: 'vertical' }} />
+            <div className="modal-footer" style={{ marginTop: 14, display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+              <div>
+                {!lineDraft.isNew && (
+                  <button type="button" onClick={deleteLineDraft}
+                    style={{ background: 'none', border: '1px solid var(--red)', color: 'var(--red)', borderRadius: 8, padding: '8px 14px', cursor: 'pointer', fontWeight: 600 }}>Hapus Garis</button>
+                )}
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button type="button" className="btn-secondary" style={{ width: 'auto', padding: '8px 14px' }} onClick={() => setLineDraft(null)}>Batal</button>
+                <button type="button" className="btn-primary" style={{ width: 'auto', padding: '8px 14px' }} onClick={saveLineDraft}>Simpan Garis</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
