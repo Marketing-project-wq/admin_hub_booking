@@ -297,8 +297,14 @@ export default function ClinicBookings() {
       return
     }
 
-    // Pasien baru
-    if (!newPatientForm.full_name || !newPatientForm.phone) return
+    // Pasien baru — date_of_birth & id_number NOT NULL di clinic_patients,
+    // jadi wajib tervalidasi di sini, bukan mengandalkan penolakan DB.
+    if (!newPatientForm.full_name.trim() || !newPatientForm.phone.trim() ||
+        !newPatientForm.date_of_birth || !newPatientForm.id_number.trim()) {
+      setManualError('Lengkapi semua field wajib (*): nama, nomor HP, tanggal lahir, dan nomor KTP.')
+      return
+    }
+    setManualError(null)
     setManualLoading(true)
     try {
       const { data, error } = await supabase
@@ -307,9 +313,9 @@ export default function ClinicBookings() {
           full_name: newPatientForm.full_name.trim(),
           phone: newPatientForm.phone.trim(),
           gender: newPatientForm.gender,
-          date_of_birth: newPatientForm.date_of_birth || null,
+          date_of_birth: newPatientForm.date_of_birth,
           id_type: newPatientForm.id_type,
-          id_number: newPatientForm.id_number.trim() || null,
+          id_number: newPatientForm.id_number.trim(),
           is_active: true,
         })
         .select('id, full_name, patient_code, phone')
@@ -327,7 +333,8 @@ export default function ClinicBookings() {
 
   const step1Ready = manualPatientMode === 'search'
     ? !!selectedPatient
-    : !!(newPatientForm.full_name.trim() && newPatientForm.phone.trim())
+    : !!(newPatientForm.full_name.trim() && newPatientForm.phone.trim() &&
+         newPatientForm.date_of_birth && newPatientForm.id_number.trim())
 
   const resetManualModal = () => {
     setManualStep(1)
