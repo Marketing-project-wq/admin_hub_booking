@@ -52,8 +52,10 @@
   --border:        rgba(20, 20, 30, 0.08);
   --border-strong: rgba(20, 20, 30, 0.14);
 
-  /* Sidebar — light frosted glass in light mode, dark in dark mode (theme-aware) */
-  --bg-sidebar: rgba(255, 255, 255, 0.72);
+  /* Sidebar — seamless translucent gradient (blends into the page gradient via
+     backdrop-blur) in light mode, dark in dark mode (theme-aware) */
+  --bg-sidebar: linear-gradient(160deg, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0.22) 100%);
+  --sidebar-edge: transparent;
   --sidebar-text:        #55555A;
   --sidebar-text-strong: #1D1D1F;
   --sidebar-text-faint:  #9A9A9E;
@@ -117,7 +119,8 @@
   --border:        rgba(255, 255, 255, 0.10);
   --border-strong: rgba(255, 255, 255, 0.18);
 
-  --bg-sidebar: rgba(10, 10, 12, 0.88);
+  --bg-sidebar: linear-gradient(160deg, rgba(22,22,26,0.86) 0%, rgba(10,10,12,0.92) 100%);
+  --sidebar-edge: rgba(255,255,255,0.06);
   --sidebar-text:        rgba(255,255,255,0.62);
   --sidebar-text-strong: #FFFFFF;
   --sidebar-text-faint:  rgba(255,255,255,0.35);
@@ -150,7 +153,7 @@
 
 :root[data-theme="dark"] .layout-clinic {
   --bg-page:        #0f1923;
-  --bg-sidebar:     #0a1628;
+  --bg-sidebar:     linear-gradient(160deg, #0d1c34 0%, #0a1628 100%);
   --bg-deep:        #0a1628;
   --content-panel-bg: #111d2e;
   --bg-card:        #1a2740;
@@ -441,7 +444,7 @@ button.unit-card:hover:not(.disabled):not(:disabled) {
   background: var(--bg-sidebar);
   -webkit-backdrop-filter: blur(22px) saturate(1.4);
   backdrop-filter: blur(22px) saturate(1.4);
-  border-right: 1px solid var(--sidebar-border);
+  border-right: 1px solid var(--sidebar-edge);
   color: var(--sidebar-text-strong);
   position: fixed;
   top: 0; left: 0; bottom: 0;
@@ -1065,7 +1068,7 @@ tr.row-selected { background: var(--red-soft) !important; }
 /* Sidebar */
 .layout-clinic .sidebar {
   background: var(--bg-sidebar);
-  border-right: 1px solid var(--sidebar-border);
+  border-right: 1px solid var(--sidebar-edge);
   width: 220px;
 }
 .layout-clinic .main-content {
