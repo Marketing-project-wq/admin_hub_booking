@@ -6,11 +6,22 @@ import { useAuth } from '../../context/AuthContext'
 import {
   getBookings, getAllBookings, confirmBooking, cancelBooking, serviceName,
   todayISO, daysAgoISO, listServices, createManualVisit, createVisitFromBooking, orIlike,
+  createPatientForBooking, NeedsPatientInfoError,
   type ClinicBooking, type BookingFilters, type ClinicService,
 } from '../../lib/clinic'
 
 const PAGE_SIZE = 20
 const RED = 'var(--red)'
+
+const checkinLabelStyle: React.CSSProperties = {
+  fontSize: 11, color: 'var(--text-secondary)', textTransform: 'uppercase',
+  letterSpacing: 1, display: 'block', marginBottom: 6,
+}
+const checkinInputStyle: React.CSSProperties = {
+  width: '100%', padding: '10px 12px', borderRadius: 8,
+  background: 'var(--bg-input)', border: '1px solid var(--border-strong)',
+  color: 'var(--text-primary)', fontSize: 14, boxSizing: 'border-box',
+}
 
 export default function ClinicBookings() {
   const { user } = useAuth()
@@ -46,7 +57,7 @@ export default function ClinicBookings() {
   const [manualPatientMode, setManualPatientMode] = useState<'search' | 'new'>('search')
   const [newPatientForm, setNewPatientForm] = useState({
     full_name: '', phone: '', gender: 'male', date_of_birth: '',
-    id_type: 'KTP', id_number: '',
+    id_type: 'nik', id_number: '',
   })
   const [patientActivePackages, setPatientActivePackages] = useState<{
     id: string
@@ -63,6 +74,13 @@ export default function ClinicBookings() {
   const [checkinKtp, setCheckinKtp] = useState('')
   const [checkinLoading, setCheckinLoading] = useState(false)
   const [checkinError, setCheckinError] = useState<string | null>(null)
+  // Form identitas pasien — muncul kalau booking belum terhubung ke clinic_patients
+  // manapun (patient_id kosong dan phone tidak match). Diisi staff dari KTP asli.
+  const [checkinPatientForm, setCheckinPatientForm] = useState<{
+    full_name: string; phone: string; email: string
+    date_of_birth: string; gender: string
+    id_type: 'nik' | 'sim' | 'passport'; id_number: string
+  } | null>(null)
 
   const [selected, setSelected] = useState<ClinicBooking | null>(null)
   const [confirmConfirm, setConfirmConfirm] = useState<ClinicBooking | null>(null)
@@ -88,7 +106,7 @@ export default function ClinicBookings() {
     const { data } = await supabase
       .from('clinic_bookings')
       .select(`
-        id, booking_code, full_name, phone, status, visit_id,
+        id, booking_code, full_name, phone, email, patient_id, status, visit_id,
         service:clinic_services(name),
         slot:clinic_slots!inner(slot_date, start_time)
       `)
@@ -97,6 +115,26 @@ export default function ClinicBookings() {
       .order('updated_at', { ascending: true })
     setArrivedBookings((data ?? []) as any)
   }, [])
+
+  // Update status booking dari arrived ke checked_in + bereskan state modal
+  const finishCheckin = async (booking: ClinicBooking) => {
+    await supabase
+      .from('clinic_bookings')
+      .update({
+        status: 'checked_in',
+        check_in_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', booking.id)
+
+    setShowCheckinModal(false)
+    setCheckinBooking(null)
+    setCheckinKtp('')
+    setCheckinPatientForm(null)
+    setToast(`Check-in berhasil — ${booking.full_name}`)
+    fetchArrivedBookings()
+    fetchData()
+  }
 
   const handleCheckinConfirm = async () => {
     if (!checkinBooking) return
@@ -113,23 +151,53 @@ export default function ClinicBookings() {
 
       // Buat visit dari booking
       await createVisitFromBooking(checkinBooking.id)
-
-      // Update status booking dari arrived ke checked_in
-      await supabase
-        .from('clinic_bookings')
-        .update({
-          status: 'checked_in',
-          check_in_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
+      await finishCheckin(checkinBooking)
+    } catch (e) {
+      if (e instanceof NeedsPatientInfoError) {
+        // Booking online tanpa pasien — minta staff lengkapi identitas asli dulu.
+        // NIK yang terlanjur diketik di modal awal ikut terbawa, tidak dibuang.
+        setCheckinPatientForm({
+          full_name: checkinBooking.full_name ?? '',
+          phone: checkinBooking.phone ?? '',
+          email: checkinBooking.email ?? '',
+          date_of_birth: '',
+          gender: '',
+          id_type: 'nik',
+          id_number: checkinKtp.trim(),
         })
-        .eq('id', checkinBooking.id)
+      } else {
+        setCheckinError(e instanceof Error ? e.message : 'Check-in gagal')
+      }
+    } finally {
+      setCheckinLoading(false)
+    }
+  }
 
-      setShowCheckinModal(false)
-      setCheckinBooking(null)
-      setCheckinKtp('')
-      setToast(`Check-in berhasil — ${checkinBooking.full_name}`)
-      fetchArrivedBookings()
-      fetchData()
+  const setCheckinField = (k: keyof NonNullable<typeof checkinPatientForm>, v: string) =>
+    setCheckinPatientForm(f => (f ? { ...f, [k]: v } : f))
+
+  const checkinFormValid = !!(checkinPatientForm &&
+    checkinPatientForm.full_name.trim() &&
+    checkinPatientForm.date_of_birth &&
+    checkinPatientForm.gender &&
+    checkinPatientForm.id_number.trim())
+
+  const handleCheckinNewPatient = async () => {
+    if (!checkinBooking || !checkinPatientForm || !checkinFormValid) return
+    setCheckinLoading(true)
+    setCheckinError(null)
+    try {
+      await createPatientForBooking(checkinBooking.id, {
+        full_name: checkinPatientForm.full_name.trim(),
+        phone: checkinPatientForm.phone.trim() || null,
+        email: checkinPatientForm.email.trim() || null,
+        date_of_birth: checkinPatientForm.date_of_birth,
+        gender: checkinPatientForm.gender as 'male' | 'female',
+        id_type: checkinPatientForm.id_type,
+        id_number: checkinPatientForm.id_number.trim(),
+      })
+      await createVisitFromBooking(checkinBooking.id)
+      await finishCheckin(checkinBooking)
     } catch (e) {
       setCheckinError(e instanceof Error ? e.message : 'Check-in gagal')
     } finally {
@@ -879,7 +947,7 @@ export default function ClinicBookings() {
                   {(checkinBooking as any).booking_code}
                 </div>
               </div>
-              <button onClick={() => { setShowCheckinModal(false); setCheckinKtp(''); setCheckinError(null) }}
+              <button onClick={() => { setShowCheckinModal(false); setCheckinKtp(''); setCheckinPatientForm(null); setCheckinError(null) }}
                 style={{ background: 'none', border: 'none', color: 'var(--text-muted)',
                   cursor: 'pointer', fontSize: 20 }}>×</button>
             </div>
@@ -898,27 +966,97 @@ export default function ClinicBookings() {
               </div>
             </div>
 
-            {/* Input KTP */}
-            <div style={{ marginBottom: 20 }}>
-              <label style={{ fontSize: 11, color: 'var(--text-secondary)', textTransform: 'uppercase',
-                letterSpacing: 1, display: 'block', marginBottom: 6 }}>
-                Nomor KTP / NIK
-              </label>
-              <input
-                type="text"
-                value={checkinKtp}
-                onChange={e => setCheckinKtp(e.target.value)}
-                placeholder="16 digit NIK"
-                maxLength={16}
-                style={{ width: '100%', padding: '10px 12px', borderRadius: 8,
-                  background: 'var(--bg-input)', border: '1px solid var(--border-strong)',
-                  color: 'var(--text-primary)', fontSize: 14, fontFamily: "'JetBrains Mono', monospace",
-                  boxSizing: 'border-box' as const }}
-              />
-              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
-                Opsional — bisa diisi untuk melengkapi data rekam medis
+            {!checkinPatientForm ? (
+              /* Input KTP */
+              <div style={{ marginBottom: 20 }}>
+                <label style={checkinLabelStyle}>
+                  Nomor KTP / NIK
+                </label>
+                <input
+                  type="text"
+                  value={checkinKtp}
+                  onChange={e => setCheckinKtp(e.target.value)}
+                  placeholder="16 digit NIK"
+                  maxLength={16}
+                  style={{ ...checkinInputStyle, fontFamily: "'JetBrains Mono', monospace" }}
+                />
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+                  Opsional — bisa diisi untuk melengkapi data rekam medis
+                </div>
               </div>
-            </div>
+            ) : (
+              /* Form identitas — booking belum terhubung ke pasien manapun */
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ padding: '10px 12px', borderRadius: 8,
+                  background: 'rgba(228,0,43,0.08)', border: '1px solid rgba(228,0,43,0.25)',
+                  fontSize: 12, color: 'var(--text-secondary)', marginBottom: 14, lineHeight: 1.5 }}>
+                  Booking ini belum terhubung ke data pasien. Tanyakan identitas
+                  pasien (dari KTP asli) dan lengkapi di bawah sebelum check-in.
+                </div>
+
+                <div style={{ marginBottom: 12 }}>
+                  <label style={checkinLabelStyle}>Nama Lengkap *</label>
+                  <input type="text" value={checkinPatientForm.full_name}
+                    onChange={e => setCheckinField('full_name', e.target.value)}
+                    style={checkinInputStyle} />
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+                  <div>
+                    <label style={checkinLabelStyle}>No. HP</label>
+                    <input type="tel" value={checkinPatientForm.phone}
+                      onChange={e => setCheckinField('phone', e.target.value)}
+                      style={checkinInputStyle} />
+                  </div>
+                  <div>
+                    <label style={checkinLabelStyle}>Email</label>
+                    <input type="email" value={checkinPatientForm.email}
+                      onChange={e => setCheckinField('email', e.target.value)}
+                      style={checkinInputStyle} />
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+                  <div>
+                    <label style={checkinLabelStyle}>Tanggal Lahir *</label>
+                    <input type="date" value={checkinPatientForm.date_of_birth}
+                      max={new Date().toISOString().slice(0, 10)}
+                      onChange={e => setCheckinField('date_of_birth', e.target.value)}
+                      style={checkinInputStyle} />
+                  </div>
+                  <div>
+                    <label style={checkinLabelStyle}>Jenis Kelamin *</label>
+                    <select value={checkinPatientForm.gender}
+                      onChange={e => setCheckinField('gender', e.target.value)}
+                      style={checkinInputStyle}>
+                      <option value="">Pilih…</option>
+                      <option value="male">Laki-laki</option>
+                      <option value="female">Perempuan</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.6fr', gap: 10 }}>
+                  <div>
+                    <label style={checkinLabelStyle}>Jenis ID *</label>
+                    <select value={checkinPatientForm.id_type}
+                      onChange={e => setCheckinField('id_type', e.target.value)}
+                      style={checkinInputStyle}>
+                      <option value="nik">KTP / NIK</option>
+                      <option value="sim">SIM</option>
+                      <option value="passport">Passport</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style={checkinLabelStyle}>Nomor ID *</label>
+                    <input type="text" value={checkinPatientForm.id_number}
+                      onChange={e => setCheckinField('id_number', e.target.value)}
+                      placeholder="Sesuai identitas asli"
+                      style={{ ...checkinInputStyle, fontFamily: "'JetBrains Mono', monospace" }} />
+                  </div>
+                </div>
+              </div>
+            )}
 
             {checkinError && (
               <div style={{ color: 'var(--red)', fontSize: 13, marginBottom: 12 }}>{checkinError}</div>
@@ -927,20 +1065,33 @@ export default function ClinicBookings() {
             {/* Buttons */}
             <div style={{ display: 'flex', gap: 10 }}>
               <button
-                onClick={() => { setShowCheckinModal(false); setCheckinKtp(''); setCheckinError(null) }}
+                onClick={() => { setShowCheckinModal(false); setCheckinKtp(''); setCheckinPatientForm(null); setCheckinError(null) }}
                 style={{ flex: 1, padding: 12, borderRadius: 8, background: 'var(--bg-elevated)',
                   border: '1px solid var(--border)', color: 'var(--text-secondary)',
                   cursor: 'pointer', fontWeight: 600 }}>
                 Batal
               </button>
-              <button
-                onClick={handleCheckinConfirm}
-                disabled={checkinLoading}
-                style={{ flex: 2, padding: 12, borderRadius: 8, background: RED,
-                  border: 'none', color: '#fff', cursor: checkinLoading ? 'not-allowed' : 'pointer',
-                  fontWeight: 700, fontSize: 14 }}>
-                {checkinLoading ? 'Memproses...' : '✓ Konfirmasi Check-in'}
-              </button>
+              {!checkinPatientForm ? (
+                <button
+                  onClick={handleCheckinConfirm}
+                  disabled={checkinLoading}
+                  style={{ flex: 2, padding: 12, borderRadius: 8, background: RED,
+                    border: 'none', color: '#fff', cursor: checkinLoading ? 'not-allowed' : 'pointer',
+                    fontWeight: 700, fontSize: 14 }}>
+                  {checkinLoading ? 'Memproses...' : '✓ Konfirmasi Check-in'}
+                </button>
+              ) : (
+                <button
+                  onClick={handleCheckinNewPatient}
+                  disabled={checkinLoading || !checkinFormValid}
+                  style={{ flex: 2, padding: 12, borderRadius: 8,
+                    background: checkinFormValid ? RED : 'var(--bg-elevated)',
+                    border: 'none', color: checkinFormValid ? '#fff' : 'var(--text-muted)',
+                    cursor: checkinLoading || !checkinFormValid ? 'not-allowed' : 'pointer',
+                    fontWeight: 700, fontSize: 14 }}>
+                  {checkinLoading ? 'Memproses...' : '✓ Simpan Pasien & Check-in'}
+                </button>
+              )}
             </div>
           </div>
         </div>

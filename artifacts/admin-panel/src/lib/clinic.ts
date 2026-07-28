@@ -709,7 +709,7 @@ export interface VisitFromBookingPayload {
   notes?: string | null
 }
 
-interface BookingForVisit {
+export interface BookingForVisit {
   id: string
   patient_id: string | null
   service_id: string | null
@@ -722,24 +722,57 @@ interface BookingForVisit {
 }
 
 /**
+ * Thrown when a booking has no linked patient and no clinic_patients row matches
+ * its phone. The caller must collect real identity data from the patient (via
+ * createPatientForBooking) before retrying createVisitFromBooking.
+ */
+export class NeedsPatientInfoError extends Error {
+  booking: BookingForVisit
+  constructor(booking: BookingForVisit) {
+    super('NEEDS_PATIENT_INFO')
+    this.name = 'NeedsPatientInfoError'
+    this.booking = booking
+  }
+}
+
+/**
  * Resolve a patient_id for a booking that has none (legacy/online bookings made
- * before patients existed). Matches by phone first; otherwise auto-creates a
- * minimal patient record from the booking data with placeholder identity fields.
+ * before patients existed). Matches by phone; if nothing matches, throws
+ * NeedsPatientInfoError — never auto-creates a patient with placeholder data.
  */
 async function resolvePatientFromBooking(b: BookingForVisit): Promise<string> {
   if (b.phone) {
     const { data } = await supabase.from('clinic_patients').select('id').eq('phone', b.phone).limit(1)
     if (data && data.length > 0) return (data[0] as { id: string }).id
   }
+  throw new NeedsPatientInfoError(b)
+}
 
+export interface NewPatientInfo {
+  full_name: string
+  phone: string | null
+  email: string | null
+  date_of_birth: string
+  gender: 'male' | 'female'
+  id_type: 'nik' | 'sim' | 'passport'
+  id_number: string
+}
+
+/**
+ * Create a clinic_patients row from real identity data collected by staff, then
+ * link it to the booking. Backfilling booking.patient_id (instead of relying on
+ * a phone re-match) makes the retried createVisitFromBooking immune to
+ * phone-format mismatches.
+ */
+export async function createPatientForBooking(bookingId: string, info: NewPatientInfo): Promise<string> {
   const insert: Record<string, unknown> = {
-    full_name: b.full_name,
-    phone: b.phone,
-    email: b.email,
-    id_type: 'nik',
-    id_number: `TMP-${b.phone || Date.now().toString(36)}`, // temporary placeholder ID
-    date_of_birth: '2000-01-01',                            // placeholder
-    gender: 'male',                                          // placeholder
+    full_name: info.full_name,
+    phone: info.phone,
+    email: info.email,
+    id_type: info.id_type,
+    id_number: info.id_number,
+    date_of_birth: info.date_of_birth,
+    gender: info.gender,
     created_at: new Date().toISOString(),
   }
   const { data: code, error: codeErr } = await supabase.rpc('generate_patient_code')
@@ -747,7 +780,15 @@ async function resolvePatientFromBooking(b: BookingForVisit): Promise<string> {
 
   const { data, error } = await supabase.from('clinic_patients').insert(insert).select('id').single()
   if (error) throw error
-  return (data as { id: string }).id
+  const patientId = (data as { id: string }).id
+
+  const { error: linkErr } = await supabase
+    .from('clinic_bookings')
+    .update({ patient_id: patientId })
+    .eq('id', bookingId)
+  if (linkErr) throw linkErr
+
+  return patientId
 }
 
 /** Create a visit from an existing booking and mark the booking checked-in. */
