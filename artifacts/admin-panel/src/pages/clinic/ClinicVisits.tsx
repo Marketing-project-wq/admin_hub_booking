@@ -831,5 +831,5 @@ function Label({ children }: { children: React.ReactNode }) {
   return <div style={{ color: 'var(--text-muted)' }}>{children}</div>
 }
 function Val({ children }: { children: React.ReactNode }) {
-  return <div style={{ fontWeight: 500 }}>{children}</div>
+  return <div style={{ fontWeight: 500, wordBreak: 'break-word' }}>{children}</div>
 }
