@@ -3,6 +3,7 @@
 // render ulang dari data tersimpan. Perbandingan antar-waktu = Stage 3 (belum dibuat).
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
+import { fmtDate } from '../../lib/format'
 import { detectPose, computeAngles, keyVisibility, type PoseLandmark, type PoseAngles } from '../../lib/pose'
 
 const BUCKET = 'clinic-posture'
@@ -109,6 +110,78 @@ function AngleRow({ color, label, deg }: { color: string; label: string; deg: nu
   )
 }
 
+// ── Tren riwayat scan pasien (Stage 3) — murni tabel + delta, tanpa chart ────
+interface TrendRow {
+  id: string
+  view: ViewKey
+  created_at: string
+  visit_date: string | null   // dari join clinic_visits; fallback created_at
+  angles: PoseAngles
+}
+
+// Delta netral vs baris sebelumnya: ▲ naik / ▼ turun / = sama. TANPA warna
+// merah/hijau — kita tidak menilai arah perubahan sebagai baik/buruk.
+function fmtDelta(cur: number, prev: number): string {
+  const d = Math.round((cur - prev) * 10) / 10
+  if (d === 0) return '='
+  return `${d > 0 ? '▲' : '▼'}${Math.abs(d).toFixed(1)}`
+}
+
+const trendTh: React.CSSProperties = {
+  padding: '6px 10px', textAlign: 'left', fontSize: 11, fontWeight: 700,
+  textTransform: 'uppercase', letterSpacing: 0.4, color: 'var(--text-muted)',
+  borderBottom: '1px solid var(--border)', whiteSpace: 'nowrap',
+}
+const trendTd: React.CSSProperties = {
+  padding: '6px 10px', fontSize: 12, color: 'var(--text-secondary)',
+  borderBottom: '1px solid var(--border)', whiteSpace: 'nowrap',
+}
+
+function TrendTable({ label, rows }: { label: string; rows: TrendRow[] }) {
+  if (rows.length === 0) return null
+  return (
+    <div style={{ marginBottom: 10 }}>
+      <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, color: 'var(--text-secondary)', marginBottom: 4 }}>{label}</div>
+      {/* Tabel bisa > lebar modal di HP → scroll horizontal di wrapper (pola table-wrap) */}
+      <div style={{ overflowX: 'auto', border: '1px solid var(--border)', borderRadius: 8, background: 'var(--bg-elevated)' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 480 }}>
+          <thead>
+            <tr>
+              <th style={trendTh}>Tanggal</th>
+              <th style={trendTh}>Bahu (°)</th>
+              <th style={trendTh}>Pinggul (°)</th>
+              <th style={trendTh}>Dev. Lateral (°)</th>
+              <th style={trendTh}>Keyakinan</th>
+              <th style={trendTh}>Δ vs sebelumnya</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r, i) => {
+              const prev = i > 0 ? rows[i - 1] : null
+              const a = r.angles
+              const conf = a.detection_confidence
+              return (
+                <tr key={r.id}>
+                  <td style={trendTd}>{fmtDate(r.visit_date ?? r.created_at)}</td>
+                  <td style={{ ...trendTd, fontFamily: 'monospace' }}>{a.shoulder_tilt_deg.toFixed(1)}</td>
+                  <td style={{ ...trendTd, fontFamily: 'monospace' }}>{a.hip_tilt_deg.toFixed(1)}</td>
+                  <td style={{ ...trendTd, fontFamily: 'monospace' }}>{a.lateral_deviation_deg.toFixed(1)}</td>
+                  <td style={{ ...trendTd, fontFamily: 'monospace' }}>{conf != null ? `${Math.round(conf * 100)}%` : '—'}</td>
+                  <td style={{ ...trendTd, color: 'var(--text-muted)', fontFamily: 'monospace' }}>
+                    {prev
+                      ? `B ${fmtDelta(a.shoulder_tilt_deg, prev.angles.shoulder_tilt_deg)} · P ${fmtDelta(a.hip_tilt_deg, prev.angles.hip_tilt_deg)} · L ${fmtDelta(a.lateral_deviation_deg, prev.angles.lateral_deviation_deg)}`
+                      : '— (scan pertama)'}
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
 // Panduan level HP (opsional): indikator kemiringan device via DeviceOrientationEvent.
 // - iOS 13+ butuh requestPermission() lewat gesture user → tombol dulu.
 // - Device tanpa sensor (banyak desktop) → sembunyikan total, TIDAK memblok upload.
@@ -184,6 +257,33 @@ export default function PostureScanPanel({ visitId, patientId }: { visitId: stri
   const [loading, setLoading] = useState(true)
   // Konfirmasi ekstra sebelum simpan saat keyakinan deteksi rendah (per view).
   const [confirming, setConfirming] = useState<Partial<Record<ViewKey, boolean>>>({})
+  // Tren riwayat scan pasien (semua visit). null = masih memuat.
+  const [trend, setTrend] = useState<TrendRow[] | null>(null)
+  const [trendRefresh, setTrendRefresh] = useState(0)
+
+  // Muat SEMUA scan milik pasien ini (lintas visit) untuk tabel tren — terpisah dari
+  // loader per-visit di bawah, tidak menyentuh alur capture/simpan.
+  useEffect(() => {
+    if (!patientId) { setTrend([]); return }
+    let cancelled = false
+    ;(async () => {
+      try {
+        const { data } = await supabase
+          .from('clinic_posture_scans')
+          .select('id, view, created_at, angles, visit:clinic_visits(visit_date)')
+          .eq('patient_id', patientId)
+          .order('created_at', { ascending: true })
+        if (cancelled) return
+        setTrend(((data ?? []) as unknown as { id: string; view: ViewKey; created_at: string; angles: PoseAngles; visit: { visit_date: string } | null }[]).map(r => ({
+          id: r.id, view: r.view, created_at: r.created_at,
+          visit_date: r.visit?.visit_date ?? null, angles: r.angles,
+        })))
+      } catch {
+        if (!cancelled) setTrend([])
+      }
+    })()
+    return () => { cancelled = true }
+  }, [patientId, trendRefresh])
 
   const setBusyFor = (v: ViewKey, msg?: string) => setBusy(b => ({ ...b, [v]: msg }))
   const setErrFor = (v: ViewKey, msg: string) => setErr(e => ({ ...e, [v]: msg }))
@@ -290,6 +390,7 @@ export default function PostureScanPanel({ visitId, patientId }: { visitId: stri
         ...s,
         [view]: { id: row.id, imageUrl: signed?.signedUrl ?? scan.imageUrl, landmarks: row.landmarks ?? [], angles: row.angles, w: 0, h: 0, saved: true },
       }))
+      setTrendRefresh(n => n + 1)   // scan baru tersimpan → muat ulang tabel tren
     } catch (e) {
       setErrFor(view, e instanceof Error ? e.message : 'Gagal menyimpan')
     } finally {
@@ -322,6 +423,21 @@ export default function PostureScanPanel({ visitId, patientId }: { visitId: stri
       {!patientId && (
         <p style={{ color: 'var(--red)', fontSize: 13, marginBottom: 12 }}>Data pasien tidak tersedia — scan tidak bisa disimpan.</p>
       )}
+
+      {/* ── Tren riwayat scan pasien (Stage 3) — di atas area capture ── */}
+      <div style={{ marginBottom: 14 }}>
+        <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 6 }}>Riwayat Scan Postur</div>
+        {trend === null ? (
+          <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>Memuat riwayat scan…</p>
+        ) : trend.length === 0 ? (
+          <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>Belum ada riwayat scan sebelumnya.</p>
+        ) : (
+          <>
+            <TrendTable label="Depan" rows={trend.filter(r => r.view === 'depan')} />
+            <TrendTable label="Belakang" rows={trend.filter(r => r.view === 'belakang')} />
+          </>
+        )}
+      </div>
 
       {/* Panduan level HP (opsional; sembunyi kalau device tak punya sensor). */}
       <LevelGuide />
