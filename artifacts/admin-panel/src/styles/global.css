@@ -45,7 +45,10 @@
   --glass-border: rgba(255, 255, 255, 0.90);
   --bg-card:        var(--glass-strong);
   --bg-card-hover:  rgba(255, 255, 255, 0.88);
-  --bg-input:       rgba(255, 255, 255, 0.60);
+  /* Inputs are a filled tint (not near-white) + inset shadow so they read as
+     clearly clickable fields against the light cards. */
+  --bg-input:       #ECE7EC;
+  --input-shadow:   inset 0 1px 2px rgba(20, 20, 30, 0.08);
   --bg-elevated:    rgba(255, 255, 255, 0.85);
   /* Opaque surfaces — modals sit over a dark scrim so they must NOT be
      translucent (else the scrim bleeds through and looks muddy). Mobile sidebar
@@ -121,6 +124,7 @@
   --bg-card:        rgba(255, 255, 255, 0.06);
   --bg-card-hover:  rgba(255, 255, 255, 0.11);
   --bg-input:       rgba(255, 255, 255, 0.06);
+  --input-shadow:   inset 0 1px 2px rgba(0, 0, 0, 0.28);
   --bg-elevated:    rgba(255, 255, 255, 0.12);
   --bg-modal:         #1E1E22;
   --bg-sidebar-solid: #131315;
@@ -1555,4 +1559,18 @@ button.unit-card:hover:not(.disabled):not(:disabled) {
     border-radius: 0 0 26px 26px;
     box-shadow: 0 18px 34px -18px rgba(20,20,30,0.22);
   }
+}
+
+/* ============================================================================
+   FORM FIELD AFFORDANCE
+   Fields were reading as flat white on the light cards. A soft inset shadow
+   (--input-shadow) + the filled --bg-input tint makes them look recessed and
+   obviously clickable. Focus rules (below, higher specificity) still win.
+   ============================================================================ */
+.filter-bar input, .filter-bar select,
+.form-group input, .form-group select, .form-group textarea,
+.login-card input,
+.layout-clinic input:not([type="checkbox"]):not([type="radio"]),
+.layout-clinic select, .layout-clinic textarea {
+  box-shadow: var(--input-shadow);
 }
