@@ -1404,7 +1404,7 @@ export default function ClinicDokter() {
                           </span>
                         </div>
                         {c.signed_by_name && <div style={{ fontSize: 12, color: '#6B7280', marginTop: 4 }}>Ditandatangani: {c.signed_by_name} · {c.signed_at ? fmtDateTime(c.signed_at) : '-'}</div>}
-                        {c.signature_data && <img src={c.signature_data} alt="Tanda tangan" style={{ marginTop: 8, maxHeight: 60, border: '1px solid #E5E7EB', borderRadius: 4 }} />}
+                        {c.signature_data && <img src={c.signature_data} alt="Tanda tangan" style={{ marginTop: 8, maxHeight: 60, maxWidth: '100%', border: '1px solid #E5E7EB', borderRadius: 4 }} />}
                       </div>
                     ))}
                   </div>
