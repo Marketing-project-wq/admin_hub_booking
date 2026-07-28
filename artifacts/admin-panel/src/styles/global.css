@@ -1500,8 +1500,21 @@ button.unit-card:hover:not(.disabled):not(:disabled) {
   border-color: var(--glass-border);
 }
 
-/* NOTE: The rounded floating "shell" frame was removed — a fixed/sticky frame
-   loses its rounding as soon as the page scrolls (reads as a square box). Per
-   design direction the rounding lives on the sidebar CONTENTS (the pill menu
-   items), not the outer frame. The sidebar stays a normal full-height flush
-   panel (base .sidebar rules), so scrolling never squares anything off. */
+/* ============================================================================
+   ROUNDED CONTENT PANEL (desktop)
+   Only the CONTENT area is a rounded, softly-elevated panel (inset from the
+   viewport with a small gap from the sidebar). The sidebar stays a normal
+   full-height flush panel. Because the content scrolls with the page (it is
+   NOT fixed/sticky like the old frame), its rounded corners never "square off"
+   on scroll — they simply scroll with the content like any card.
+   ============================================================================ */
+@media (min-width: 769px) {
+  .main-content {
+    margin: 14px 14px 14px calc(240px + 14px);  /* 240 sidebar + 14 gap */
+    border-radius: 26px;
+    background: var(--content-panel-bg);
+    box-shadow: var(--shadow-card);
+    min-height: calc(100vh - 28px);
+  }
+  .layout-clinic .main-content { margin-left: calc(220px + 14px); }
+}
