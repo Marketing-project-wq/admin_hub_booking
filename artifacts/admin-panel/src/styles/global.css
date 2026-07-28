@@ -47,6 +47,11 @@
   --bg-card-hover:  rgba(255, 255, 255, 0.88);
   --bg-input:       rgba(255, 255, 255, 0.60);
   --bg-elevated:    rgba(255, 255, 255, 0.85);
+  /* Opaque surfaces — modals sit over a dark scrim so they must NOT be
+     translucent (else the scrim bleeds through and looks muddy). Mobile sidebar
+     drawer slides over content so it must be opaque too. */
+  --bg-modal:         #FFFFFF;
+  --bg-sidebar-solid: #FBF7F8;
 
   /* Borders */
   --border:        rgba(20, 20, 30, 0.08);
@@ -117,6 +122,8 @@
   --bg-card-hover:  rgba(255, 255, 255, 0.11);
   --bg-input:       rgba(255, 255, 255, 0.06);
   --bg-elevated:    rgba(255, 255, 255, 0.12);
+  --bg-modal:         #1E1E22;
+  --bg-sidebar-solid: #131315;
 
   --border:        rgba(255, 255, 255, 0.10);
   --border-strong: rgba(255, 255, 255, 0.18);
@@ -162,6 +169,8 @@
   --bg-card-hover:  #1e2d4a;
   --bg-input:       #152034;
   --bg-elevated:    #243352;
+  --bg-modal:         #1a2740;
+  --bg-sidebar-solid: #0a1628;
   --border:         rgba(255,255,255,0.08);
   --border-strong:  rgba(255,255,255,0.15);
   --red:            #C0392B;
@@ -767,10 +776,8 @@ button.unit-card:hover:not(.disabled):not(:disabled) {
   display: grid; place-items: center; z-index: 1000; padding: 24px;
 }
 .modal-box {
-  background: var(--bg-card);
-  -webkit-backdrop-filter: var(--glass-filter);
-  backdrop-filter: var(--glass-filter);
-  border: 1px solid var(--glass-border);
+  background: var(--bg-modal);
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius);
   box-shadow: var(--shadow-elevated);
   width: 100%; max-width: 560px; max-height: 90vh; overflow-y: auto; padding: 32px;
@@ -908,8 +915,13 @@ tr.row-selected { background: var(--red-soft) !important; }
 }
 
 @media (max-width: 768px) {
-  .sidebar { transform: translateX(-100%); transition: transform .22s ease; box-shadow: var(--shadow-elevated); }
+  /* Drawer must be OPAQUE (it slides over page content) and full-height square. */
+  .sidebar {
+    transform: translateX(-100%); transition: transform .22s ease; box-shadow: var(--shadow-elevated);
+    background: var(--bg-sidebar-solid); border-radius: 0; top: 0; bottom: 0;
+  }
   .sidebar.open { transform: translateX(0); }
+  .layout-clinic .sidebar { background: var(--bg-sidebar-solid); border-radius: 0; }
   .main-content { margin-left: 0; padding: 16px; padding-top: 16px; }
   /* Clinic's desktop overrides (.layout-clinic .main-content) are more specific
      than the base rule above, so re-assert the mobile layout at equal specificity. */
@@ -930,6 +942,9 @@ tr.row-selected { background: var(--red-soft) !important; }
   .filter-bar { flex-direction: column; align-items: stretch; }
   .filter-bar input, .filter-bar select { width: 100%; }
   .form-row { grid-template-columns: 1fr; }
+  /* Arena dashboard revenue+gauge split → stack on mobile (the fixed 280px
+     column otherwise clips under .main-content's overflow-x:hidden). */
+  .arena-split { grid-template-columns: 1fr !important; }
   .modal-box { padding: 24px 20px; }
   .landing-header { padding: 56px 20px 16px; }
   .landing-header .brand { font-size: 42px; }
@@ -1061,7 +1076,7 @@ tr.row-selected { background: var(--red-soft) !important; }
   backdrop-filter: blur(4px);
 }
 .layout-clinic .modal-box, .layout-clinic .modal-content {
-  background: var(--bg-card);
+  background: var(--bg-modal);
   border: 1px solid var(--border-strong);
   border-radius: 16px;
   box-shadow: var(--shadow-elevated);
@@ -1192,8 +1207,8 @@ tr.row-selected { background: var(--red-soft) !important; }
 /* Semua modal/dialog content */
 .layout-clinic .modal-content,
 .layout-clinic .modal {
-  background: var(--bg-card) !important;
-  border: 1px solid rgba(255,255,255,0.1) !important;
+  background: var(--bg-modal) !important;
+  border: 1px solid var(--border-strong) !important;
   color: var(--text-primary) !important;
 }
 
@@ -1459,6 +1474,9 @@ tr.row-selected { background: var(--red-soft) !important; }
   .layout-clinic .sidebar { transform: translateX(-100%); }
   .layout-clinic .sidebar.open { transform: translateX(0); }
   .layout-clinic .page-container { padding: 16px !important; }
+  /* Opaque, square drawer for clinic too (wins over the non-media clinic
+     sidebar gradient by source order). */
+  .layout-clinic .sidebar { background: var(--bg-sidebar-solid); border-radius: 0; bottom: 0; }
 }
 
 /* ============================================================================
@@ -1475,14 +1493,11 @@ tr.row-selected { background: var(--red-soft) !important; }
 .chart-card,
 .table-wrap,
 .filter-bar,
-.modal-box,
 .login-card,
 .unit-card, button.unit-card,
 .theme-fab,
 .layout-clinic .card,
-.layout-clinic .kpi-card,
-.layout-clinic .modal-box,
-.layout-clinic .modal-content {
+.layout-clinic .kpi-card {
   background-image: var(--glass-sheen);
   background-repeat: no-repeat;
 }

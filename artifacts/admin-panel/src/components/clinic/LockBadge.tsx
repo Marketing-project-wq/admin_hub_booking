@@ -66,7 +66,7 @@ export default function LockBadge({
             padding: '3px 10px', borderRadius: 999, fontWeight: 600,
           }} title={lockedBy ? `oleh ${lockedBy}` : undefined}>
             🔒 Terkunci
-            {lockedAt && <span style={{ fontWeight: 400, color: '#9CA3AF', marginLeft: 4 }}>{fmtDateTime(lockedAt)}</span>}
+            {lockedAt && <span style={{ fontWeight: 400, color: 'var(--text-muted)', marginLeft: 4 }}>{fmtDateTime(lockedAt)}</span>}
           </span>
           {(canUnlock ?? isSuperAdmin) && (
             <button
