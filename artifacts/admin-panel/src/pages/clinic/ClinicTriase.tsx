@@ -10,7 +10,7 @@ import {
   lockRecord,
   type ClinicConsent, type ClinicVitalSigns,
 } from '../../lib/clinic'
-import LockBadge from '../../components/clinic/LockBadge'
+import LockBadge, { LockedBanner } from '../../components/clinic/LockBadge'
 
 // ─── Narrow shapes used by the screening/consent forms ───────────────────────────
 interface PatientInfo {
@@ -603,6 +603,7 @@ function ScreeningTab({ visit, patient, onToast, onSaved, isLocked, recordId, lo
           <LockBadge isLocked={isLocked} lockedAt={lockedAt} lockedBy={lockedBy} recordId={recordId} table="clinic_screenings" onUnlocked={onUnlocked} onRelocked={onRelocked} />
         </div>
       )}
+      {isLocked && <LockedBanner />}
 
       <fieldset disabled={isLocked} style={{ border: 'none', padding: 0, margin: 0 }}>
 
@@ -847,6 +848,7 @@ function ConsentTab({ visit, onToast, onSaved, isLocked, recordId, lockedAt, loc
                 <LockBadge isLocked={isLocked} lockedAt={lockedAt} lockedBy={lockedBy} recordId={recordId} table="clinic_consents" onUnlocked={onUnlocked} onRelocked={onRelocked} />
               </div>
             )}
+            {isLocked && <LockedBanner />}
 
             {existingSigned && !reSigning ? (
               <div>

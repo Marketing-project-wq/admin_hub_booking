@@ -164,3 +164,19 @@ export default function LockBadge({
     </>
   )
 }
+
+/** Banner eksplisit di atas form yang terkunci — pill LockBadge saja mudah terlewat.
+ *  Teks aksi mengikuti ketersediaan tombol "Buka Kunci": beri `canUnlock` kalau
+ *  pemanggil memakai kebijakan sendiri (mis. dokter pemilik); default = super_admin. */
+export function LockedBanner({ canUnlock }: { canUnlock?: boolean }) {
+  const { user } = useAuth()
+  const hasUnlockButton = canUnlock ?? user?.role === 'super_admin'
+  return (
+    <p style={{ fontSize: 12, color: 'var(--text-primary)', background: 'rgba(245,158,11,0.12)', borderLeft: '3px solid #f59e0b', borderRadius: 6, padding: '8px 10px', margin: '0 0 12px', lineHeight: 1.4 }}>
+      🔒 Form ini terkunci dan tidak bisa diedit.{' '}
+      {hasUnlockButton
+        ? "Klik 'Buka Kunci' di atas untuk mengubah."
+        : 'Hubungi super admin atau dokter penanggung jawab untuk membuka kunci.'}
+    </p>
+  )
+}
