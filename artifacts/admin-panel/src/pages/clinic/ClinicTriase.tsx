@@ -1350,10 +1350,11 @@ export default function ClinicTriase() {
             </div>
 
             {/* Tab bar */}
-            <div style={{ display: 'flex', borderBottom: '2px solid var(--border)', background: 'var(--bg-deep)', flexShrink: 0 }}>
+            <div style={{ display: 'flex', flexWrap: 'nowrap', overflowX: 'auto', borderBottom: '2px solid var(--border)', background: 'var(--bg-deep)', flexShrink: 0 }}>
               {(['screening', 'consent'] as const).map(t => (
                 <button key={t} onClick={() => setModalTab(t)}
                   style={{
+                    flexShrink: 0,
                     padding: '12px 20px', border: 'none', background: 'none', cursor: 'pointer', fontSize: 13,
                     fontWeight: modalTab === t ? 700 : 400,
                     color: modalTab === t ? 'var(--red)' : 'var(--text-muted)',
@@ -1364,6 +1365,7 @@ export default function ClinicTriase() {
               {screeningStatus[selectedVisit.id] && consentStatus[selectedVisit.id] && (
                 <button onClick={() => setModalTab('assessment')}
                   style={{
+                    flexShrink: 0,
                     padding: '12px 20px', border: 'none', background: 'none', cursor: 'pointer', fontSize: 13,
                     fontWeight: modalTab === 'assessment' ? 700 : 400,
                     color: modalTab === 'assessment' ? 'var(--red)' : 'var(--text-muted)',
