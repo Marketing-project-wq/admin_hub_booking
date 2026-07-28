@@ -34,10 +34,10 @@
   --text-muted:     var(--ink-soft);
   --text-faint:     var(--ink-faint);
 
-  /* Page gradient — cool soft lavender / periwinkle (image-1 vibe) */
-  --bg-grad-a: #F4F3FB;
-  --bg-grad-b: #E8E7F4;
-  --bg-page:   #EEEDF7;
+  /* Page gradient — 20FIT warm neutral off-white (whisper of brand-red warmth) */
+  --bg-grad-a: #FAF6F6;
+  --bg-grad-b: #F0E8EA;
+  --bg-page:   #F5EEEF;
 
   /* Glass surfaces */
   --glass:        rgba(255, 255, 255, 0.55);
@@ -54,7 +54,9 @@
 
   /* Sidebar — seamless translucent gradient (blends into the page gradient via
      backdrop-blur) in light mode, dark in dark mode (theme-aware) */
-  --bg-sidebar: linear-gradient(160deg, rgba(246,245,253,0.60) 0%, rgba(234,233,247,0.24) 100%);
+  /* Vertical gradient: transparent at top (seamless with the page) → more opaque
+     toward the bottom so the sidebar's card shape is revealed lower down. */
+  --bg-sidebar: linear-gradient(180deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.30) 44%, rgba(255,255,255,0.82) 100%);
   --sidebar-edge: transparent;
   --sidebar-text:        #55555A;
   --sidebar-text-strong: #1D1D1F;
@@ -119,7 +121,7 @@
   --border:        rgba(255, 255, 255, 0.10);
   --border-strong: rgba(255, 255, 255, 0.18);
 
-  --bg-sidebar: linear-gradient(160deg, rgba(22,22,26,0.86) 0%, rgba(10,10,12,0.92) 100%);
+  --bg-sidebar: linear-gradient(180deg, rgba(24,24,28,0) 0%, rgba(16,16,20,0.55) 44%, rgba(10,10,12,0.92) 100%);
   --sidebar-edge: rgba(255,255,255,0.06);
   --sidebar-text:        rgba(255,255,255,0.62);
   --sidebar-text-strong: #FFFFFF;
@@ -153,7 +155,7 @@
 
 :root[data-theme="dark"] .layout-clinic {
   --bg-page:        #0f1923;
-  --bg-sidebar:     linear-gradient(160deg, #0d1c34 0%, #0a1628 100%);
+  --bg-sidebar:     linear-gradient(180deg, rgba(10,22,40,0) 0%, rgba(11,25,45,0.6) 44%, #0a1628 100%);
   --bg-deep:        #0a1628;
   --content-panel-bg: #111d2e;
   --bg-card:        #1a2740;
@@ -1520,4 +1522,12 @@ button.unit-card:hover:not(.disabled):not(:disabled) {
     min-height: calc(100vh - 28px);
   }
   .layout-clinic .main-content { margin-left: calc(220px + 14px); }
+
+  /* Sidebar: flush/seamless at top, but inset + rounded at the bottom with a
+     soft bottom-weighted shadow so the "card" is revealed lower down. */
+  .sidebar {
+    bottom: 14px;
+    border-radius: 0 0 26px 26px;
+    box-shadow: 0 18px 34px -18px rgba(20,20,30,0.22);
+  }
 }
