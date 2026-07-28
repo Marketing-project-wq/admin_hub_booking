@@ -374,8 +374,8 @@ export default function ClinicVisits() {
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           zIndex: 1000, padding: 16 }}>
-          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)',
-            borderRadius: 16, padding: 24, width: '100%', maxWidth: 400 }}>
+          <div style={{ background: 'var(--bg-modal)', border: '1px solid var(--border-strong)',
+            borderRadius: 16, padding: 24, width: '100%', maxWidth: 400, maxHeight: '90vh', overflowY: 'auto' }}>
 
             {/* Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between',

@@ -472,7 +472,7 @@ export default function ClinicCloseBillModal({
                   <button key={m} type="button" onClick={() => setMethod(m)}
                     style={on ? {
                       flex: '1 1 80px', padding: '8px 14px', borderRadius: 8,
-                      border: '1px solid var(--red)', background: 'rgba(192,57,43,0.15)',
+                      border: '1px solid var(--red)', background: 'var(--red)',
                       color: '#fff', cursor: 'pointer', fontWeight: 600, fontSize: 13,
                     } : {
                       flex: '1 1 80px', padding: '8px 14px', borderRadius: 8,

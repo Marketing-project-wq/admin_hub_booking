@@ -865,8 +865,8 @@ export default function ClinicBookings() {
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)',
           display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
           padding: 16 }}>
-          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)',
-            borderRadius: 16, padding: 24, width: '100%', maxWidth: 440 }}>
+          <div style={{ background: 'var(--bg-modal)', border: '1px solid var(--border-strong)',
+            borderRadius: 16, padding: 24, width: '100%', maxWidth: 440, maxHeight: '90vh', overflowY: 'auto' }}>
 
             {/* Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between',

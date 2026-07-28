@@ -431,7 +431,7 @@ export default function ArenaDashboard() {
           ))}
         </div>
 
-        <div style={{ background: '#FEF3F2', padding: '0 24px 24px', display: 'grid', gridTemplateColumns: '1fr 280px', gap: 20 }}>
+        <div className="arena-split" style={{ background: '#FEF3F2', padding: '0 24px 24px', display: 'grid', gridTemplateColumns: '1fr 280px', gap: 20 }}>
           <div style={{ background: '#fff', borderRadius: 10, padding: 20, boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
             <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Revenue per Hari</div>
             <RevenueLineChart data={revenueChartData} />

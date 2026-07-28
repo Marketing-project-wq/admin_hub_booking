@@ -1272,7 +1272,7 @@ export default function ClinicDokter() {
                   {selectedVisit.services.map(s => s.service_name).join(' · ') || '-'} · {fmtTime(selectedVisit.visit_time ?? '')}
                 </div>
               </div>
-              <button onClick={() => setShowVisitModal(false)} style={{ background: 'none', border: 'none', color: '#fff', fontSize: 20, cursor: 'pointer' }}>×</button>
+              <button onClick={() => setShowVisitModal(false)} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', fontSize: 20, cursor: 'pointer' }}>×</button>
             </div>
 
             {/* Tab Bar */}
@@ -1300,12 +1300,12 @@ export default function ClinicDokter() {
 
               {/* TAB SCREENING - read only */}
               {modalTab === 'screening' && (
-                loadingScreening ? <p style={{ color: '#9CA3AF', textAlign: 'center', padding: 40 }}>Memuat data screening...</p>
+                loadingScreening ? <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: 40 }}>Memuat data screening...</p>
                 : !screeningData ? (
                   <div style={{ textAlign: 'center', padding: 40 }}>
                     <div style={{ fontSize: 40, marginBottom: 12 }}>📋</div>
-                    <p style={{ color: '#9CA3AF' }}>Screening belum diisi</p>
-                    <p style={{ color: '#9CA3AF', fontSize: 12 }}>Admin/registrasi perlu mengisi screening terlebih dahulu</p>
+                    <p style={{ color: 'var(--text-muted)' }}>Screening belum diisi</p>
+                    <p style={{ color: 'var(--text-muted)', fontSize: 12 }}>Admin/registrasi perlu mengisi screening terlebih dahulu</p>
                   </div>
                 ) : (
                   <div>
@@ -1328,7 +1328,7 @@ export default function ClinicDokter() {
                     {/* Chief Complaint */}
                     {screeningData.chief_complaint && (
                       <div style={{ marginBottom: 12, padding: 12, background: '#FFF5F5', borderRadius: 8, borderLeft: '3px solid var(--red)' }}>
-                        <div style={{ fontSize: 11, color: '#9CA3AF', textTransform: 'uppercase', marginBottom: 4 }}>Keluhan Utama</div>
+                        <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 4 }}>Keluhan Utama</div>
                         <div style={{ fontSize: 14, color: '#111' }}>{screeningData.chief_complaint}</div>
                       </div>
                     )}
@@ -1384,7 +1384,7 @@ export default function ClinicDokter() {
                       </div>
                     )}
 
-                    <div style={{ fontSize: 11, color: '#9CA3AF', textAlign: 'right' }}>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'right' }}>
                       Diisi: {fmtDateTime(screeningData.updated_at)}
                     </div>
                   </div>
@@ -1393,11 +1393,11 @@ export default function ClinicDokter() {
 
               {/* TAB CONSENT - read only */}
               {modalTab === 'consent' && (
-                loadingConsent ? <p style={{ color: '#9CA3AF', textAlign: 'center', padding: 40 }}>Memuat data consent...</p>
+                loadingConsent ? <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: 40 }}>Memuat data consent...</p>
                 : consentData.length === 0 ? (
                   <div style={{ textAlign: 'center', padding: 40 }}>
                     <div style={{ fontSize: 40, marginBottom: 12 }}>📝</div>
-                    <p style={{ color: '#9CA3AF' }}>Consent belum diisi</p>
+                    <p style={{ color: 'var(--text-muted)' }}>Consent belum diisi</p>
                   </div>
                 ) : (
                   <div>
@@ -1421,7 +1421,7 @@ export default function ClinicDokter() {
 
               {/* TAB ASSESSMENT - editable */}
               {modalTab === 'assessment' && (
-                loadingAssessment ? <p style={{ color: '#9CA3AF', textAlign: 'center', padding: 40 }}>Memuat data assessment...</p>
+                loadingAssessment ? <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: 40 }}>Memuat data assessment...</p>
                 : (
                   <div>
                     {assessmentError && (
@@ -1583,7 +1583,7 @@ export default function ClinicDokter() {
                         <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
                           <input type="range" min={0} max={10} value={pain.nrs_score ?? 0}
                             onChange={e => patchPain({ nrs_score: Number(e.target.value) })}
-                            style={{ flex: 1, accentColor: pain.nrs_score != null ? intensityColor(pain.nrs_score) : '#9CA3AF' }} />
+                            style={{ flex: 1, accentColor: pain.nrs_score != null ? intensityColor(pain.nrs_score) : 'var(--text-muted)' }} />
                           <span style={{ minWidth: 40, textAlign: 'center', fontWeight: 700, fontSize: 16, color: pain.nrs_score != null ? intensityColor(pain.nrs_score) : 'var(--text-muted)' }}>{pain.nrs_score ?? '-'}</span>
                         </div>
                         <div style={{ height: 6, borderRadius: 4, marginTop: 6, background: 'linear-gradient(to right, #16A34A, #CA8A04, #EA580C, #DC2626)' }} />
@@ -1926,11 +1926,11 @@ export default function ClinicDokter() {
               {modalTab === 'riwayat' && (
                 <div style={{ padding: '16px 0' }}>
                   {historyLoading ? (
-                    <div style={{ textAlign: 'center', padding: 40, color: '#9CA3AF' }}>Memuat riwayat...</div>
+                    <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>Memuat riwayat...</div>
                   ) : medicalHistory.length === 0 ? (
                     <div style={{ textAlign: 'center', padding: 40 }}>
                       <div style={{ fontSize: 32, marginBottom: 8 }}>📋</div>
-                      <div style={{ color: '#9CA3AF', fontSize: 13 }}>Belum ada riwayat kunjungan sebelumnya</div>
+                      <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Belum ada riwayat kunjungan sebelumnya</div>
                     </div>
                   ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -1947,7 +1947,7 @@ export default function ClinicDokter() {
                             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                           }}>
                             <div>
-                              <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 900, fontStyle: 'italic', fontSize: 11, color: '#9CA3AF', letterSpacing: 1, textTransform: 'uppercase' }}>
+                              <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 900, fontStyle: 'italic', fontSize: 11, color: 'var(--text-muted)', letterSpacing: 1, textTransform: 'uppercase' }}>
                                 Kunjungan #{medicalHistory.length - i}
                               </div>
                               <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 13, color: 'var(--text-primary)', fontWeight: 600 }}>
@@ -1956,7 +1956,7 @@ export default function ClinicDokter() {
                               </div>
                             </div>
                             {h.assessment?.handled_by && (
-                              <div style={{ fontSize: 11, color: '#9CA3AF' }}>{h.assessment.handled_by}</div>
+                              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{h.assessment.handled_by}</div>
                             )}
                           </div>
 
@@ -1964,7 +1964,7 @@ export default function ClinicDokter() {
                             {/* Keluhan */}
                             {h.chief_complaint && (
                               <div>
-                                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: '#9CA3AF', marginBottom: 4 }}>Keluhan</div>
+                                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 4 }}>Keluhan</div>
                                 <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6 }}>{h.chief_complaint}</div>
                               </div>
                             )}
@@ -1972,7 +1972,7 @@ export default function ClinicDokter() {
                             {/* Layanan */}
                             {h.services.length > 0 && (
                               <div>
-                                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: '#9CA3AF', marginBottom: 4 }}>Layanan</div>
+                                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 4 }}>Layanan</div>
                                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                                   {h.services.map(s => (
                                     <span key={s.service_name} style={{
@@ -1990,7 +1990,7 @@ export default function ClinicDokter() {
                             {/* Assessment dokter */}
                             {h.assessment && (
                               <div style={{ background: 'var(--bg-elevated)', borderRadius: 8, padding: '10px 12px' }}>
-                                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: '#9CA3AF', marginBottom: 8 }}>Kesimpulan Dokter</div>
+                                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 8 }}>Kesimpulan Dokter</div>
 
                                 {h.assessment.diagnosis && (() => {
                                   const d = h.assessment.diagnosis

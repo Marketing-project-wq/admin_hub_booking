@@ -1348,7 +1348,7 @@ export default function ClinicTriase() {
                   {selectedVisit.services.map(s => s.service_name).join(' · ') || '-'} · {selectedVisit.visit_time ? fmtTime(selectedVisit.visit_time) : '—'}
                 </div>
               </div>
-              <button onClick={() => setShowModal(false)} style={{ background: 'none', border: 'none', color: '#fff', fontSize: 22, cursor: 'pointer', lineHeight: 1 }}>×</button>
+              <button onClick={() => setShowModal(false)} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', fontSize: 22, cursor: 'pointer', lineHeight: 1 }}>×</button>
             </div>
 
             {/* Tab bar */}
