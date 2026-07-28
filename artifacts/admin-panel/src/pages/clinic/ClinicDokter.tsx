@@ -4,6 +4,7 @@ import { fmtDate, fmtTime, fmtDateTime } from '../../lib/format'
 import { useAuth } from '../../context/AuthContext'
 import { lockRecord, orIlike } from '../../lib/clinic'
 import LockBadge from '../../components/clinic/LockBadge'
+import PostureScanPanel from './PostureScanPanel'
 
 // ─── Subjective (EMR) ────────────────────────────────────────────────────────
 // Daftar tetap sengaja didefinisikan di kode (bukan di database) supaya gampang diedit.
@@ -562,7 +563,7 @@ interface ClinicConsentData {
   signed_by_name: string | null
 }
 
-type ModalTab = 'screening' | 'consent' | 'assessment' | 'riwayat'
+type ModalTab = 'screening' | 'consent' | 'assessment' | 'riwayat' | 'postur'
 
 interface MedicalHistory {
   visit_id: string
@@ -1267,12 +1268,13 @@ export default function ClinicDokter() {
             </div>
 
             {/* Tab Bar */}
-            <div style={{ display: 'flex', borderBottom: '2px solid var(--border)', background: 'var(--bg-deep)', flexShrink: 0 }}>
-              {(['screening', 'consent', 'assessment', 'riwayat'] as const).map(t => (
+            <div style={{ display: 'flex', flexWrap: 'nowrap', overflowX: 'auto', borderBottom: '2px solid var(--border)', background: 'var(--bg-deep)', flexShrink: 0 }}>
+              {(['screening', 'consent', 'assessment', 'riwayat', 'postur'] as const).map(t => (
                 <button
                   key={t}
                   onClick={() => setModalTab(t)}
                   style={{
+                    flexShrink: 0, whiteSpace: 'nowrap',
                     padding: '12px 20px', border: 'none', background: 'none', cursor: 'pointer', fontSize: 13,
                     fontWeight: modalTab === t ? 700 : 400,
                     color: modalTab === t ? 'var(--red)' : 'var(--text-muted)',
@@ -1280,7 +1282,7 @@ export default function ClinicDokter() {
                     marginBottom: -2, textTransform: 'capitalize',
                   }}
                 >
-                  {t === 'screening' ? 'Screening' : t === 'consent' ? 'Consent' : t === 'assessment' ? 'Assessment' : 'Riwayat'}
+                  {t === 'screening' ? 'Screening' : t === 'consent' ? 'Consent' : t === 'assessment' ? 'Assessment' : t === 'riwayat' ? 'Riwayat' : 'Scan Postur'}
                 </button>
               ))}
             </div>
@@ -2019,6 +2021,9 @@ export default function ClinicDokter() {
                     </div>
                   )}
                 </div>
+              )}
+              {modalTab === 'postur' && selectedVisit && (
+                <PostureScanPanel visitId={selectedVisit.id} patientId={selectedVisit.patient?.id ?? ''} />
               )}
             </div>
 

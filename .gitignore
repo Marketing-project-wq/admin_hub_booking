@@ -59,3 +59,7 @@ artifacts/admin-panel/public/images/body-diagram/*.jpeg
 
 # Data import ICD-10 sekali pakai (dataset besar, bukan bagian aplikasi)
 artifacts/admin-panel/scripts/*.csv
+
+# WASM MediaPipe (~32MB) — di-copy dari node_modules saat build (vite plugin copyMediapipeWasm).
+# JANGAN di-commit. Model .task (public/models/) TETAP di-commit.
+artifacts/admin-panel/public/mediapipe-wasm/
