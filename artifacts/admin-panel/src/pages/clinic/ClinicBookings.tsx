@@ -145,7 +145,7 @@ export default function ClinicBookings() {
       if ((checkinBooking as any).patient_id && checkinKtp.trim()) {
         await supabase
           .from('clinic_patients')
-          .update({ id_number: checkinKtp.trim(), id_type: 'KTP' })
+          .update({ id_number: checkinKtp.trim(), id_type: 'nik' })
           .eq('id', (checkinBooking as any).patient_id)
       }
 
@@ -348,7 +348,7 @@ export default function ClinicBookings() {
     setManualError(null)
     setManualPatientMode('search')
     setNewPatientForm({ full_name: '', phone: '', gender: 'male',
-      date_of_birth: '', id_type: 'KTP', id_number: '' })
+      date_of_birth: '', id_type: 'nik', id_number: '' })
     setPatientActivePackages([])
     setUsePackageId(null)
     setPackageServiceId(null)
