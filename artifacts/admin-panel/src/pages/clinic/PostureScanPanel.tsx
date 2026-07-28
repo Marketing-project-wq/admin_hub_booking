@@ -450,10 +450,12 @@ export default function PostureScanPanel({ visitId, patientId }: { visitId: stri
           const conf = scan?.angles.detection_confidence
           const low = conf != null && conf < VIS_THRESHOLD
           return (
-            <div key={v.key} style={{ border: '1px solid var(--border)', borderRadius: 10, padding: 12, background: 'var(--bg-elevated)' }}>
+            <div key={v.key} style={{ border: scan && !scan.saved ? '1.5px dashed #f59e0b' : '1px solid var(--border)', borderRadius: 10, padding: 12, background: 'var(--bg-elevated)' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
                 <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{v.label}</span>
-                {scan?.saved && <span className="badge" style={{ background: 'rgba(16,185,129,0.15)', color: '#6EE7B7' }}>Tersimpan</span>}
+                {scan && (scan.saved
+                  ? <span className="badge" style={{ background: 'rgba(16,185,129,0.15)', color: '#6EE7B7' }}>✓ Tersimpan</span>
+                  : <span className="badge" style={{ background: 'rgba(245,158,11,0.15)', color: '#FCD34D' }}>⚠ Preview — belum disimpan</span>)}
               </div>
               <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '0 0 10px', lineHeight: 1.4 }}>{v.instruksi}</p>
 
@@ -500,6 +502,11 @@ export default function PostureScanPanel({ visitId, patientId }: { visitId: stri
                     )}
                     {fileInput(v.key, scan.saved ? 'Scan ulang' : 'Ganti foto')}
                   </div>
+                  {!scan.saved && (
+                    <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '6px 0 0' }}>
+                      Foto &amp; hasil deteksi ini belum masuk rekam — klik Simpan.
+                    </p>
+                  )}
                 </>
               ) : (
                 <div style={{ border: '1px dashed var(--border-strong)', borderRadius: 8, padding: 20, textAlign: 'center' }}>
