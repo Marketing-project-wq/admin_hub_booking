@@ -11,10 +11,14 @@ interface LockBadgeProps {
   table: LockableTable
   onUnlocked: () => void
   onRelocked: () => void
+  // Siapa yang boleh melihat tombol "Buka Kunci". Dihitung PEMANGGIL (kebijakan per
+  // pemakaian — mis. Assessment: super_admin ATAU dokter pemilik handled_by).
+  // Tidak diisi → default lama: hanya super_admin (Triase dkk tidak berubah).
+  canUnlock?: boolean
 }
 
 export default function LockBadge({
-  isLocked, lockedAt, lockedBy, recordId, table, onUnlocked, onRelocked,
+  isLocked, lockedAt, lockedBy, recordId, table, onUnlocked, onRelocked, canUnlock,
 }: LockBadgeProps) {
   const { user } = useAuth()
   const isSuperAdmin = user?.role === 'super_admin'
@@ -64,7 +68,7 @@ export default function LockBadge({
             🔒 Terkunci
             {lockedAt && <span style={{ fontWeight: 400, color: '#9CA3AF', marginLeft: 4 }}>{fmtDateTime(lockedAt)}</span>}
           </span>
-          {isSuperAdmin && (
+          {(canUnlock ?? isSuperAdmin) && (
             <button
               onClick={() => setShowUnlockModal(true)}
               style={{

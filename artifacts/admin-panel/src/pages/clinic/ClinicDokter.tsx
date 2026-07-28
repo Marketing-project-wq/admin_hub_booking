@@ -3,7 +3,7 @@ import { supabase } from '../../lib/supabase'
 import { fmtDate, fmtTime, fmtDateTime } from '../../lib/format'
 import { useAuth } from '../../context/AuthContext'
 import { lockRecord, orIlike } from '../../lib/clinic'
-import LockBadge from '../../components/clinic/LockBadge'
+import LockBadge, { LockedBanner } from '../../components/clinic/LockBadge'
 import PostureScanPanel from './PostureScanPanel'
 
 // ─── Subjective (EMR) ────────────────────────────────────────────────────────
@@ -1123,6 +1123,14 @@ export default function ClinicDokter() {
   const patchPlan = (patch: Partial<PlanData>) =>
     setAssessment(p => ({ ...p, plan: { ...p.plan, ...patch } }))
 
+  // Kebijakan unlock Assessment (Opsi B): super_admin bebas; dokter HANYA untuk
+  // assessment miliknya (handled_by == nama user login). Role di AuthContext ber-tipe
+  // sempit padahal nilai nyata termasuk 'dokter' → lebarkan ke string (pola Sidebar).
+  const userRole: string | undefined = user?.role
+  const canUnlockAssessment =
+    userRole === 'super_admin' ||
+    (userRole === 'dokter' && !!assessment.handled_by && assessment.handled_by === user?.full_name)
+
   // Gender pasien menentukan file gambar; selain 'male'/'female' (atau kosong) → default 'male'.
   const patientGender: 'male' | 'female' = selectedVisit?.patient?.gender === 'female' ? 'female' : 'male'
   const bodyImageKey = `${bodyView}-${patientGender}`
@@ -1424,9 +1432,10 @@ export default function ClinicDokter() {
 
                     {assessmentId && (
                       <div style={{ marginBottom: 14 }}>
-                        <LockBadge isLocked={assessmentLocked} lockedAt={assessmentLockedAt} lockedBy={assessmentLockedBy} recordId={assessmentId} table="clinic_assessments" onUnlocked={() => setAssessmentLocked(false)} onRelocked={() => setAssessmentLocked(true)} />
+                        <LockBadge isLocked={assessmentLocked} lockedAt={assessmentLockedAt} lockedBy={assessmentLockedBy} recordId={assessmentId} table="clinic_assessments" onUnlocked={() => setAssessmentLocked(false)} onRelocked={() => setAssessmentLocked(true)} canUnlock={canUnlockAssessment} />
                       </div>
                     )}
+                    {assessmentLocked && <LockedBanner canUnlock={canUnlockAssessment} />}
 
                     <fieldset disabled={assessmentLocked} style={{ border: 'none', padding: 0, margin: 0 }}>
 
