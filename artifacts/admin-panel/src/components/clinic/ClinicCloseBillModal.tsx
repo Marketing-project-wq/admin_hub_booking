@@ -277,7 +277,7 @@ export default function ClinicCloseBillModal({
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-box" style={{ maxWidth: 480, width: '100%', maxHeight: '90vh', overflowY: 'auto', background: '#1a2740', color: '#F0F4FF' }} onClick={e => e.stopPropagation()}>
+      <div className="modal-box" style={{ maxWidth: 480, width: '100%', maxHeight: '90vh', overflowY: 'auto', background: 'var(--bg-card)', color: 'var(--text-primary)' }} onClick={e => e.stopPropagation()}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
           <h3 className="modal-title" style={{ margin: 0 }}>Close Bill</h3>
           <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: 'var(--text-muted)', lineHeight: 1 }}>×</button>
@@ -286,17 +286,17 @@ export default function ClinicCloseBillModal({
         {error && <p style={{ color: 'var(--red)', fontSize: 13, marginBottom: 12 }}>{error}</p>}
 
         {/* Visit header */}
-        <div style={{ background: '#243352', borderRadius: 10, padding: 14, marginBottom: 16 }}>
-          <div style={{ fontWeight: 700, color: '#F0F4FF' }}>{patientName}</div>
-          <div style={{ fontSize: 12, color: '#A8B8D8', fontFamily: 'monospace' }}>{patientCode}</div>
+        <div style={{ background: 'var(--bg-elevated)', borderRadius: 10, padding: 14, marginBottom: 16 }}>
+          <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{patientName}</div>
+          <div style={{ fontSize: 12, color: 'var(--text-secondary)', fontFamily: 'monospace' }}>{patientCode}</div>
         </div>
 
         {/* Info paket aktif (jika ada) */}
         {patientPackages.length > 0 && (
           <div style={{ marginBottom: 16, padding: 12, background: 'rgba(5,150,105,0.1)', borderRadius: 10, border: '1px solid rgba(5,150,105,0.2)' }}>
-            <div style={{ fontSize: 12, fontWeight: 600, color: '#34D399', marginBottom: 6 }}>✓ Paket Aktif Pasien</div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--green)', marginBottom: 6 }}>✓ Paket Aktif Pasien</div>
             {patientPackages.map(pp => (
-              <div key={pp.id} style={{ fontSize: 12, color: '#F0F4FF', marginBottom: 2 }}>
+              <div key={pp.id} style={{ fontSize: 12, color: 'var(--text-primary)', marginBottom: 2 }}>
                 {pp.package?.name} — Sisa {pp.remaining_sessions} sesi
               </div>
             ))}
@@ -310,19 +310,19 @@ export default function ClinicCloseBillModal({
           {paidWithVoucher ? (
             services.map(s => (
               <div key={s.service_name} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 }}>
-                <span style={{ textDecoration: 'line-through', color: '#6B7A99' }}>
+                <span style={{ textDecoration: 'line-through', color: 'var(--text-muted)' }}>
                   {s.service_name} — Rp {s.price.toLocaleString('id-ID')}
                 </span>
-                <span style={{ color: '#FCD34D', fontWeight: 600 }}>VOUCHER</span>
+                <span style={{ color: 'var(--amber)', fontWeight: 600 }}>VOUCHER</span>
               </div>
             ))
           ) : (
             <>
               {coveredServices.length > 0 && (
                 <div style={{ marginBottom: 8 }}>
-                  <div style={{ fontSize: 11, color: '#34D399', fontWeight: 600, marginBottom: 4 }}>✓ Ter-cover Paket</div>
+                  <div style={{ fontSize: 11, color: 'var(--green)', fontWeight: 600, marginBottom: 4 }}>✓ Ter-cover Paket</div>
                   {coveredServices.map(s => (
-                    <div key={s.service_name} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#A8B8D8', textDecoration: 'line-through' }}>
+                    <div key={s.service_name} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: 'var(--text-secondary)', textDecoration: 'line-through' }}>
                       <span>{s.service_name}</span>
                       <span>{fmtRp(s.price)}</span>
                     </div>
@@ -340,43 +340,43 @@ export default function ClinicCloseBillModal({
           )}
 
           {selectedNewPkg && (
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 4, color: '#93C5FD' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 4, color: 'var(--blue)' }}>
               <span>📦 {selectedNewPkg.name}</span>
               <span>{fmtRp(selectedNewPkg.package_price)}</span>
             </div>
           )}
 
           {discount > 0 && (
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#FC8181', marginBottom: 4 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: 'var(--red)', marginBottom: 4 }}>
               <span>Diskon</span>
               <span>-{fmtRp(discount)}</span>
             </div>
           )}
 
           {paidWithVoucher ? (
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 8, marginTop: 4 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, borderTop: '1px solid var(--border)', paddingTop: 8, marginTop: 4 }}>
               <span>Total</span>
               <div style={{ textAlign: 'right' }}>
-                <div style={{ textDecoration: 'line-through', color: '#6B7A99', fontSize: 12 }}>
+                <div style={{ textDecoration: 'line-through', color: 'var(--text-muted)', fontSize: 12 }}>
                   Rp {services.reduce((s, i) => s + i.price, 0).toLocaleString('id-ID')}
                 </div>
-                <div style={{ color: '#FCD34D', fontSize: 16 }}>{fmtRp(buyingPackage ? packageSubtotal : 0)}</div>
+                <div style={{ color: 'var(--amber)', fontSize: 16 }}>{fmtRp(buyingPackage ? packageSubtotal : 0)}</div>
               </div>
             </div>
           ) : (
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 15, borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 8, marginTop: 4 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 15, borderTop: '1px solid var(--border)', paddingTop: 8, marginTop: 4 }}>
               <span>Total</span>
-              <span style={{ color: '#C0392B' }}>{fmtRp(grandTotal)}</span>
+              <span style={{ color: 'var(--red)' }}>{fmtRp(grandTotal)}</span>
             </div>
           )}
         </div>
 
         {/* Section beli paket baru — disembunyikan untuk pembayaran online */}
         {!paidOnline && (
-        <div style={{ marginBottom: 16, padding: 14, background: '#243352', borderRadius: 10, border: '1px solid rgba(255,255,255,0.1)' }}>
+        <div style={{ marginBottom: 16, padding: 14, background: 'var(--bg-elevated)', borderRadius: 10, border: '1px solid var(--border)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
             <input type="checkbox" id="buyPkg" checked={buyingPackage} onChange={e => setBuyingPackage(e.target.checked)} />
-            <label htmlFor="buyPkg" style={{ fontSize: 13, fontWeight: 600, color: '#F0F4FF', cursor: 'pointer' }}>
+            <label htmlFor="buyPkg" style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', cursor: 'pointer' }}>
               📦 Tambah pembelian paket
             </label>
           </div>
@@ -401,7 +401,7 @@ export default function ClinicCloseBillModal({
               </select>
 
               {selectedNewPkg && (
-                <div style={{ fontSize: 12, color: '#93C5FD', background: 'rgba(59,130,246,0.1)', padding: '8px 12px', borderRadius: 8, marginBottom: 8 }}>
+                <div style={{ fontSize: 12, color: 'var(--blue)', background: 'rgba(59,130,246,0.1)', padding: '8px 12px', borderRadius: 8, marginBottom: 8 }}>
                   Harga paket: <strong>{fmtRp(selectedNewPkg.package_price)}</strong> untuk {selectedNewPkg.sessions} sesi
                   (hemat {fmtRp(selectedNewPkg.retail_price - selectedNewPkg.package_price)})
                 </div>
@@ -426,10 +426,10 @@ export default function ClinicCloseBillModal({
             marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ fontSize: 18 }}>✅</span>
             <div>
-              <div style={{ fontSize: 13, fontWeight: 600, color: '#34D399' }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--green)' }}>
                 Sudah Dibayar Online
               </div>
-              <div style={{ fontSize: 11, color: '#A8B8D8' }}>
+              <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
                 Pembayaran via Mayar sudah terkonfirmasi
               </div>
             </div>
@@ -443,10 +443,10 @@ export default function ClinicCloseBillModal({
             marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ fontSize: 18 }}>🎟️</span>
             <div>
-              <div style={{ fontSize: 13, fontWeight: 600, color: '#FCD34D' }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--amber)' }}>
                 Sudah Dibayar dengan Voucher
               </div>
-              <div style={{ fontSize: 11, color: '#A8B8D8' }}>
+              <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
                 Pasien menggunakan voucher 100% — tidak ada biaya tambahan
               </div>
             </div>
@@ -464,7 +464,7 @@ export default function ClinicCloseBillModal({
         {/* Payment method */}
         {!paidOnline && (!paidWithVoucher || buyingPackage) && (
           <>
-            <label style={{ fontSize: 11, fontWeight: 600, display: 'block', marginBottom: 8, color: '#A8B8D8', textTransform: 'uppercase', letterSpacing: 1 }}>Metode Pembayaran</label>
+            <label style={{ fontSize: 11, fontWeight: 600, display: 'block', marginBottom: 8, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: 1 }}>Metode Pembayaran</label>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
               {METHODS.map(m => {
                 const on = method === m
@@ -472,12 +472,12 @@ export default function ClinicCloseBillModal({
                   <button key={m} type="button" onClick={() => setMethod(m)}
                     style={on ? {
                       flex: '1 1 80px', padding: '8px 14px', borderRadius: 8,
-                      border: '1px solid #C0392B', background: 'rgba(192,57,43,0.15)',
+                      border: '1px solid var(--red)', background: 'rgba(192,57,43,0.15)',
                       color: '#fff', cursor: 'pointer', fontWeight: 600, fontSize: 13,
                     } : {
                       flex: '1 1 80px', padding: '8px 14px', borderRadius: 8,
-                      border: '1px solid rgba(255,255,255,0.12)', background: '#243352',
-                      color: '#A8B8D8', cursor: 'pointer', fontWeight: 500, fontSize: 13, transition: 'all 0.15s',
+                      border: '1px solid var(--border-strong)', background: 'var(--bg-elevated)',
+                      color: 'var(--text-secondary)', cursor: 'pointer', fontWeight: 500, fontSize: 13, transition: 'all 0.15s',
                     }}>{METHOD_LABEL[m]}</button>
                 )
               })}
@@ -494,7 +494,7 @@ export default function ClinicCloseBillModal({
             {cashReceived > 0 && (
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 12 }}>
                 <span style={{ color: 'var(--text-muted)' }}>Kembalian</span>
-                <span style={{ fontWeight: 700, color: '#34D399' }}>{fmtRp(change)}</span>
+                <span style={{ fontWeight: 700, color: 'var(--green)' }}>{fmtRp(change)}</span>
               </div>
             )}
           </>
@@ -537,43 +537,43 @@ export default function ClinicCloseBillModal({
               type="checkbox"
               checked={scheduleFollowUp}
               onChange={e => setScheduleFollowUp(e.target.checked)}
-              style={{ accentColor: '#C0392B', width: 16, height: 16 }}
+              style={{ accentColor: 'var(--red)', width: 16, height: 16 }}
             />
-            <span style={{ fontSize: 13, fontWeight: 600, color: '#F0F4FF' }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
               📅 Jadwalkan Kunjungan Berikutnya
             </span>
           </label>
 
           {scheduleFollowUp && (
             <div style={{ marginTop: 12, padding: '14px 16px', borderRadius: 10,
-              background: '#152034', border: '1px solid rgba(255,255,255,0.1)' }}>
+              background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
 
               {/* Tanggal & Jam */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
                 <div>
-                  <label style={{ fontSize: 11, color: '#A8B8D8', textTransform: 'uppercase',
+                  <label style={{ fontSize: 11, color: 'var(--text-secondary)', textTransform: 'uppercase',
                     letterSpacing: 1, display: 'block', marginBottom: 4 }}>Tanggal *</label>
                   <input type="date" value={followUpDate}
                     onChange={e => setFollowUpDate(e.target.value)}
                     min={new Date().toISOString().slice(0, 10)}
                     style={{ width: '100%', padding: '8px 10px', borderRadius: 8,
-                      background: '#0f1923', border: '1px solid rgba(255,255,255,0.12)',
-                      color: '#F0F4FF', fontSize: 13, boxSizing: 'border-box' as const }} />
+                      background: 'var(--bg-page)', border: '1px solid var(--border-strong)',
+                      color: 'var(--text-primary)', fontSize: 13, boxSizing: 'border-box' as const }} />
                 </div>
                 <div>
-                  <label style={{ fontSize: 11, color: '#A8B8D8', textTransform: 'uppercase',
+                  <label style={{ fontSize: 11, color: 'var(--text-secondary)', textTransform: 'uppercase',
                     letterSpacing: 1, display: 'block', marginBottom: 4 }}>Jam</label>
                   <input type="time" value={followUpTime}
                     onChange={e => setFollowUpTime(e.target.value)}
                     style={{ width: '100%', padding: '8px 10px', borderRadius: 8,
-                      background: '#0f1923', border: '1px solid rgba(255,255,255,0.12)',
-                      color: '#F0F4FF', fontSize: 13, boxSizing: 'border-box' as const }} />
+                      background: 'var(--bg-page)', border: '1px solid var(--border-strong)',
+                      color: 'var(--text-primary)', fontSize: 13, boxSizing: 'border-box' as const }} />
                 </div>
               </div>
 
               {/* Pilih Layanan */}
               <div>
-                <label style={{ fontSize: 11, color: '#A8B8D8', textTransform: 'uppercase',
+                <label style={{ fontSize: 11, color: 'var(--text-secondary)', textTransform: 'uppercase',
                   letterSpacing: 1, display: 'block', marginBottom: 6 }}>Layanan *</label>
                 <select
                   onChange={e => {
@@ -588,8 +588,8 @@ export default function ClinicCloseBillModal({
                     e.target.value = ''
                   }}
                   style={{ width: '100%', padding: '8px 10px', borderRadius: 8,
-                    background: '#0f1923', border: '1px solid rgba(255,255,255,0.12)',
-                    color: '#F0F4FF', fontSize: 13 }}
+                    background: 'var(--bg-page)', border: '1px solid var(--border-strong)',
+                    color: 'var(--text-primary)', fontSize: 13 }}
                 >
                   <option value="">— Pilih layanan —</option>
                   {allServices?.filter((s: any) => !followUpServices.some(fs => fs.service_id === s.id))
@@ -605,15 +605,15 @@ export default function ClinicCloseBillModal({
                     {followUpServices.map(s => (
                       <span key={s.service_id} style={{
                         padding: '3px 10px', borderRadius: 999,
-                        background: '#243352', border: '1px solid rgba(255,255,255,0.1)',
-                        color: '#F0F4FF', fontSize: 12,
+                        background: 'var(--bg-elevated)', border: '1px solid var(--border)',
+                        color: 'var(--text-primary)', fontSize: 12,
                         display: 'flex', alignItems: 'center', gap: 6,
                       }}>
                         {s.service_name}
                         <button
                           onClick={() => setFollowUpServices(prev =>
                             prev.filter(fs => fs.service_id !== s.service_id))}
-                          style={{ background: 'none', border: 'none', color: '#FC8181',
+                          style={{ background: 'none', border: 'none', color: 'var(--red)',
                             cursor: 'pointer', padding: 0, fontSize: 14, lineHeight: 1 }}
                         >×</button>
                       </span>

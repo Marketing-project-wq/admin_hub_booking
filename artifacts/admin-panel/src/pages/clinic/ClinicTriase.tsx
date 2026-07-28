@@ -852,11 +852,11 @@ function ConsentTab({ visit, onToast, onSaved, isLocked, recordId, lockedAt, loc
 
             {existingSigned && !reSigning ? (
               <div>
-                <div style={{ fontSize: 13, color: '#34D399', fontWeight: 600, marginBottom: 8 }}>
+                <div style={{ fontSize: 13, color: 'var(--green)', fontWeight: 600, marginBottom: 8 }}>
                   ✓ Ditandatangani oleh {existingSigned.signed_by_name} pada {fmtDateTime(existingSigned.signed_at)}
                 </div>
                 {existingSigned.signature_data && (
-                  <img src={existingSigned.signature_data} alt="signature" style={{ display: 'block', marginBottom: 12, border: '2px solid #6EE7B7', borderRadius: 8, background: '#fff', maxWidth: 300 }} />
+                  <img src={existingSigned.signature_data} alt="signature" style={{ display: 'block', marginBottom: 12, border: '2px solid var(--green)', borderRadius: 8, background: '#fff', maxWidth: 300 }} />
                 )}
                 {!isLocked && (
                   <button type="button" className="btn-secondary" style={{ width: 'auto', padding: '6px 12px' }} onClick={() => { setReSigning(true); padRef.current?.clear() }}>Tanda Tangan Ulang</button>
@@ -1021,8 +1021,8 @@ const TRIASE_SELECT = `
 type StepState = 'done' | 'active' | 'todo'
 function StepChip({ label, state }: { label: string; state: StepState }) {
   const palette: Record<StepState, React.CSSProperties> = {
-    done: { background: 'rgba(52,211,153,0.12)', color: '#34D399', border: '1px solid rgba(52,211,153,0.25)' },
-    active: { background: 'rgba(59,130,246,0.12)', color: '#93C5FD', border: '1px solid rgba(59,130,246,0.25)' },
+    done: { background: 'rgba(52,211,153,0.12)', color: 'var(--green)', border: '1px solid rgba(52,211,153,0.25)' },
+    active: { background: 'rgba(59,130,246,0.12)', color: 'var(--blue)', border: '1px solid rgba(59,130,246,0.25)' },
     todo: { background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border)' },
   }
   return <span style={{ ...palette[state], fontSize: 11, padding: '3px 10px', borderRadius: 999, fontWeight: 600, whiteSpace: 'nowrap' }}>{label}</span>

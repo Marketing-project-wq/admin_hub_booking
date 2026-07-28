@@ -613,7 +613,7 @@ export default function ClinicBookings() {
                 )}
 
                 {manualError && (
-                  <div style={{ color: '#FC8181', fontSize: 13, marginBottom: 12 }}>{manualError}</div>
+                  <div style={{ color: 'var(--red)', fontSize: 13, marginBottom: 12 }}>{manualError}</div>
                 )}
 
                 <button
@@ -676,7 +676,7 @@ export default function ClinicBookings() {
                         }}>
                           {s.service_name}
                           <button onClick={() => setManualServices(prev => prev.filter(ms => ms.service_id !== s.service_id))}
-                            style={{ background: 'none', border: 'none', color: '#FC8181', cursor: 'pointer',
+                            style={{ background: 'none', border: 'none', color: 'var(--red)', cursor: 'pointer',
                               padding: 0, fontSize: 14, lineHeight: 1 }}>×</button>
                         </span>
                       ))}
@@ -731,7 +731,7 @@ export default function ClinicBookings() {
                             <div style={{ marginLeft: 24, padding: '10px 12px',
                               background: 'rgba(5,150,105,0.08)', borderRadius: 8,
                               border: '1px solid rgba(5,150,105,0.2)', marginBottom: 8 }}>
-                              <div style={{ fontSize: 11, color: '#34D399', fontWeight: 600,
+                              <div style={{ fontSize: 11, color: 'var(--green)', fontWeight: 600,
                                 marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 }}>
                                 Pilih layanan dari paket:
                               </div>
@@ -745,7 +745,7 @@ export default function ClinicBookings() {
                                     style={{ accentColor: 'var(--red)' }}
                                   />
                                   {s.name}
-                                  <span style={{ color: '#34D399', fontSize: 11, fontWeight: 600 }}>GRATIS</span>
+                                  <span style={{ color: 'var(--green)', fontSize: 11, fontWeight: 600 }}>GRATIS</span>
                                 </label>
                               ))}
                             </div>
@@ -792,7 +792,7 @@ export default function ClinicBookings() {
                 </div>
 
                 {manualError && (
-                  <div style={{ color: '#FC8181', fontSize: 13, marginBottom: 12 }}>{manualError}</div>
+                  <div style={{ color: 'var(--red)', fontSize: 13, marginBottom: 12 }}>{manualError}</div>
                 )}
 
                 <div style={{ display: 'flex', gap: 10 }}>
@@ -921,7 +921,7 @@ export default function ClinicBookings() {
             </div>
 
             {checkinError && (
-              <div style={{ color: '#FC8181', fontSize: 13, marginBottom: 12 }}>{checkinError}</div>
+              <div style={{ color: 'var(--red)', fontSize: 13, marginBottom: 12 }}>{checkinError}</div>
             )}
 
             {/* Buttons */}

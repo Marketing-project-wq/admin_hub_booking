@@ -58,9 +58,17 @@
   /* Shape + depth */
   --radius:     22px;
   --radius-sm:  14px;
+  --radius-pill: 999px;
   --blur:       28px;
-  --shadow-card:     0 8px 30px rgba(20, 20, 30, 0.08), 0 1px 2px rgba(20, 20, 30, 0.04);
-  --shadow-elevated: 0 24px 60px rgba(20, 20, 30, 0.18);
+  /* Liquid-glass filter: blur + saturation lifts the frosted surfaces so the
+     page gradient reads through them with a little more life. */
+  --glass-filter: blur(var(--blur)) saturate(1.4);
+  /* Card/elevated shadows carry an inset top highlight — the thin bright edge
+     that sells the "liquid glass" sheen. */
+  --shadow-card:     0 8px 30px rgba(20, 20, 30, 0.08), 0 1px 2px rgba(20, 20, 30, 0.04), inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  --shadow-elevated: 0 24px 60px rgba(20, 20, 30, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  /* Soft sheen layered over glass surfaces for the modern liquid look. */
+  --glass-sheen: linear-gradient(157deg, rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0.12) 34%, rgba(255, 255, 255, 0) 62%);
 }
 
 /* ---- DARK MODE (global toggle) ---- */
@@ -98,8 +106,9 @@
 
   --bg-sidebar: rgba(10, 10, 12, 0.88);
 
-  --shadow-card:     0 8px 30px rgba(0, 0, 0, 0.45);
-  --shadow-elevated: 0 24px 60px rgba(0, 0, 0, 0.60);
+  --shadow-card:     0 8px 30px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  --shadow-elevated: 0 24px 60px rgba(0, 0, 0, 0.60), inset 0 1px 0 rgba(255, 255, 255, 0.09);
+  --glass-sheen: linear-gradient(157deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 34%, rgba(255, 255, 255, 0) 62%);
 }
 
 /* ---- Clinic: theme-aware. Light mode = design-system glass (inherits :root);
@@ -131,8 +140,8 @@
   --text-secondary: #A8B8D8;
   --text-muted:     #6B7A99;
   --text-faint:     #3D4F6B;
-  --shadow-card:    0 4px 24px rgba(0,0,0,0.4), 0 1px 4px rgba(0,0,0,0.3);
-  --shadow-elevated: 0 8px 32px rgba(0,0,0,0.5);
+  --shadow-card:    0 4px 24px rgba(0,0,0,0.4), 0 1px 4px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.06);
+  --shadow-elevated: 0 8px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.08);
   background: var(--bg-page);
 }
 :root[data-theme="dark"] .layout-clinic .main-content {
@@ -181,8 +190,8 @@ body {
 
 .login-card {
   background: var(--glass-strong);
-  -webkit-backdrop-filter: blur(var(--blur));
-  backdrop-filter: blur(var(--blur));
+  -webkit-backdrop-filter: var(--glass-filter);
+  backdrop-filter: var(--glass-filter);
   border: 1px solid var(--glass-border);
   border-radius: var(--radius);
   box-shadow: var(--shadow-elevated);
@@ -325,8 +334,8 @@ body {
   align-items: center;
   padding: 18px 32px;
   background: var(--glass);
-  -webkit-backdrop-filter: blur(var(--blur));
-  backdrop-filter: blur(var(--blur));
+  -webkit-backdrop-filter: var(--glass-filter);
+  backdrop-filter: var(--glass-filter);
   border-bottom: 1px solid var(--glass-border);
 }
 
@@ -364,8 +373,8 @@ body {
 
 .unit-card, button.unit-card {
   background: var(--glass-strong);
-  -webkit-backdrop-filter: blur(var(--blur));
-  backdrop-filter: blur(var(--blur));
+  -webkit-backdrop-filter: var(--glass-filter);
+  backdrop-filter: var(--glass-filter);
   border: 1px solid var(--glass-border);
   border-radius: var(--radius);
   box-shadow: var(--shadow-card);
@@ -423,24 +432,28 @@ button.unit-card:hover:not(.disabled):not(:disabled) {
   letter-spacing: 0.2em; margin-top: 4px; display: block; font-weight: 700;
 }
 
-.sidebar-menu { flex: 1; padding: 14px 10px; overflow-y: auto; }
+.sidebar-menu { flex: 1; padding: 14px 12px; overflow-y: auto; }
 
 .menu-item {
   display: block;
-  padding: 10px 14px;
+  padding: 10px 18px;
   color: rgba(255,255,255,0.62);
   text-decoration: none;
-  border-radius: var(--radius-sm);
-  margin: 2px 0;
-  transition: background .15s ease, color .15s ease;
+  border-radius: var(--radius-pill);
+  margin: 3px 6px;
+  transition: background .18s ease, color .18s ease, box-shadow .18s ease;
   font-family: var(--font-display);
   font-size: 14px;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
-.menu-item:hover:not(.disabled) { background: rgba(255,255,255,0.06); color: #FFFFFF; }
-.menu-item.active { background: var(--red); color: #FFFFFF; box-shadow: 0 6px 18px var(--red-glow); }
+.menu-item:hover:not(.disabled) { background: rgba(255,255,255,0.08); color: #FFFFFF; }
+.menu-item.active {
+  background: var(--red);
+  color: #FFFFFF;
+  box-shadow: 0 8px 22px var(--red-glow), inset 0 1px 0 rgba(255,255,255,0.28);
+}
 .menu-item.disabled { opacity: 0.4; cursor: not-allowed; }
 
 .menu-divider {
@@ -532,8 +545,8 @@ button.unit-card:hover:not(.disabled):not(:disabled) {
   border-radius: 50%;
   border: 1px solid var(--glass-border);
   background: var(--glass-strong);
-  -webkit-backdrop-filter: blur(var(--blur));
-  backdrop-filter: blur(var(--blur));
+  -webkit-backdrop-filter: var(--glass-filter);
+  backdrop-filter: var(--glass-filter);
   box-shadow: var(--shadow-card);
   cursor: pointer;
   color: var(--text-primary);
@@ -550,8 +563,8 @@ button.unit-card:hover:not(.disabled):not(:disabled) {
   color: rgba(255,255,255,0.4); margin: 0 0 8px; font-weight: 700;
 }
 .switcher-item {
-  display: block; padding: 7px 12px; font-size: 13px; color: rgba(255,255,255,0.62);
-  text-decoration: none; border-radius: var(--radius-sm); margin-bottom: 2px;
+  display: block; padding: 8px 16px; font-size: 13px; color: rgba(255,255,255,0.62);
+  text-decoration: none; border-radius: var(--radius-pill); margin-bottom: 3px;
   font-family: var(--font-display); font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
 }
 .switcher-item:hover { background: rgba(255,255,255,0.06); color: #FFFFFF; }
@@ -568,8 +581,8 @@ button.unit-card:hover:not(.disabled):not(:disabled) {
 .hamburger {
   display: none;
   background: var(--glass-strong);
-  -webkit-backdrop-filter: blur(var(--blur));
-  backdrop-filter: blur(var(--blur));
+  -webkit-backdrop-filter: var(--glass-filter);
+  backdrop-filter: var(--glass-filter);
   border: 1px solid var(--glass-border);
   font-size: 20px;
   cursor: pointer;
@@ -586,8 +599,8 @@ button.unit-card:hover:not(.disabled):not(:disabled) {
    ============================================================================ */
 .card {
   background: var(--bg-card);
-  -webkit-backdrop-filter: blur(var(--blur));
-  backdrop-filter: blur(var(--blur));
+  -webkit-backdrop-filter: var(--glass-filter);
+  backdrop-filter: var(--glass-filter);
   border: 1px solid var(--glass-border);
   border-radius: var(--radius);
   box-shadow: var(--shadow-card);
@@ -628,8 +641,8 @@ button.unit-card:hover:not(.disabled):not(:disabled) {
 .filter-bar {
   display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 20px; padding: 14px 16px;
   background: var(--glass);
-  -webkit-backdrop-filter: blur(var(--blur));
-  backdrop-filter: blur(var(--blur));
+  -webkit-backdrop-filter: var(--glass-filter);
+  backdrop-filter: var(--glass-filter);
   border: 1px solid var(--glass-border);
   border-radius: var(--radius);
   box-shadow: var(--shadow-card);
@@ -657,8 +670,8 @@ button.unit-card:hover:not(.disabled):not(:disabled) {
 
 .kpi-card {
   background: var(--bg-card);
-  -webkit-backdrop-filter: blur(var(--blur));
-  backdrop-filter: blur(var(--blur));
+  -webkit-backdrop-filter: var(--glass-filter);
+  backdrop-filter: var(--glass-filter);
   border: 1px solid var(--glass-border);
   border-radius: var(--radius);
   padding: 20px 22px;
@@ -678,8 +691,8 @@ button.unit-card:hover:not(.disabled):not(:disabled) {
 
 .chart-card {
   background: var(--bg-card);
-  -webkit-backdrop-filter: blur(var(--blur));
-  backdrop-filter: blur(var(--blur));
+  -webkit-backdrop-filter: var(--glass-filter);
+  backdrop-filter: var(--glass-filter);
   border: 1px solid var(--glass-border);
   border-radius: var(--radius);
   padding: 24px;
@@ -712,8 +725,8 @@ button.unit-card:hover:not(.disabled):not(:disabled) {
 }
 .modal-box {
   background: var(--bg-card);
-  -webkit-backdrop-filter: blur(var(--blur));
-  backdrop-filter: blur(var(--blur));
+  -webkit-backdrop-filter: var(--glass-filter);
+  backdrop-filter: var(--glass-filter);
   border: 1px solid var(--glass-border);
   border-radius: var(--radius);
   box-shadow: var(--shadow-elevated);
@@ -743,8 +756,8 @@ button.unit-card:hover:not(.disabled):not(:disabled) {
    ============================================================================ */
 .table-wrap {
   background: var(--bg-card);
-  -webkit-backdrop-filter: blur(var(--blur));
-  backdrop-filter: blur(var(--blur));
+  -webkit-backdrop-filter: var(--glass-filter);
+  backdrop-filter: var(--glass-filter);
   border: 1px solid var(--glass-border);
   border-radius: var(--radius);
   box-shadow: var(--shadow-card);
@@ -1022,26 +1035,27 @@ tr.row-selected { background: var(--red-soft) !important; }
 }
 .layout-clinic .menu-item {
   display: block;
-  padding: 10px 20px;
+  padding: 10px 18px;
   color: var(--text-secondary);
   text-decoration: none;
   font-size: 13px;
   font-weight: 500;
   border-left: none;
-  border-radius: 8px;
-  margin: 2px 8px;
-  transition: all 0.15s ease;
+  border-radius: var(--radius-pill);
+  margin: 3px 8px;
+  transition: background .18s ease, color .18s ease, box-shadow .18s ease;
   letter-spacing: 0.3px;
 }
 .layout-clinic .menu-item:hover:not(.disabled) {
-  background: rgba(255,255,255,0.06);
+  background: rgba(255,255,255,0.08);
   color: var(--text-primary);
 }
 .layout-clinic .menu-item.active {
-  background: var(--red-glow);
+  background: var(--red);
   color: #fff;
-  border-left: 3px solid var(--red);
-  padding-left: 17px;
+  border-left: none;
+  padding-left: 18px;
+  box-shadow: 0 8px 22px var(--red-glow), inset 0 1px 0 rgba(255,255,255,0.28);
 }
 .layout-clinic .menu-divider {
   font-size: 10px;
@@ -1397,4 +1411,48 @@ tr.row-selected { background: var(--red-soft) !important; }
   .layout-clinic .sidebar { transform: translateX(-100%); }
   .layout-clinic .sidebar.open { transform: translateX(0); }
   .layout-clinic .page-container { padding: 16px !important; }
+}
+
+/* ============================================================================
+   MODERN LIQUID-GLASS ITERATION
+   Layers a soft top-left sheen (--glass-sheen) over the frosted surfaces so
+   they read as light-catching glass rather than flat panels. The sheen is a
+   background-IMAGE only, layered over each surface's existing background-COLOR
+   token — so themes/colors are untouched, only the highlight is added.
+   Appended last + includes .layout-clinic variants so it wins the cascade over
+   the earlier `background: var(--bg-card)` shorthands (which reset the image).
+   ============================================================================ */
+.card,
+.kpi-card,
+.chart-card,
+.table-wrap,
+.filter-bar,
+.modal-box,
+.login-card,
+.unit-card, button.unit-card,
+.theme-fab,
+.layout-clinic .card,
+.layout-clinic .kpi-card,
+.layout-clinic .modal-box,
+.layout-clinic .modal-content {
+  background-image: var(--glass-sheen);
+  background-repeat: no-repeat;
+}
+
+/* Keep the sheen from tinting interactive hover surfaces oddly — on hover the
+   surface brightens via its own color token and the sheen simply rides along. */
+.kpi-card:hover,
+.unit-card:hover:not(.disabled):not(:disabled),
+button.unit-card:hover:not(.disabled):not(:disabled) {
+  background-image: var(--glass-sheen);
+}
+
+/* Slightly crisper, glassier hairline borders across the frosted surfaces for
+   the modern minimalist edge. */
+.card,
+.kpi-card,
+.chart-card,
+.table-wrap,
+.filter-bar {
+  border-color: var(--glass-border);
 }
