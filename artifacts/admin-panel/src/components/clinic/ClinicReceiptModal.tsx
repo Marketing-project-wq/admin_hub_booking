@@ -35,7 +35,9 @@ export default function ClinicReceiptModal({ transaction: t, onClose }: Props) {
 
       <div
         className="modal-box receipt-print-area"
-        style={{ maxWidth: 480, width: '100%', maxHeight: '90vh', overflowY: 'auto', fontFamily: 'Georgia, "Times New Roman", serif' }}
+        // A kwitansi is paper — force white bg + dark ink in every theme so it
+        // stays readable in dark mode and prints correctly.
+        style={{ maxWidth: 480, width: '100%', maxHeight: '90vh', overflowY: 'auto', fontFamily: 'Georgia, "Times New Roman", serif', background: '#fff', color: '#1a1a1a', colorScheme: 'light' }}
         onClick={e => e.stopPropagation()}
       >
         {/* Controls — hidden on print */}

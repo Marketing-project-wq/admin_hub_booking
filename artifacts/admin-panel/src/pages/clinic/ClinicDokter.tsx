@@ -856,14 +856,14 @@ const EmptyState = ({ children }: { children: React.ReactNode }) => (
   <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)', background: 'var(--bg-card)', border: '1px dashed var(--border)', borderRadius: 12 }}>{children}</div>
 )
 
-const SCREENING_SECTION_TITLE: React.CSSProperties = { fontWeight: 700, fontSize: 12, color: '#374151', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }
+const SCREENING_SECTION_TITLE: React.CSSProperties = { fontWeight: 700, fontSize: 12, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }
 
 // Baris chips read-only untuk satu kategori. Tidak merender apa pun jika items kosong.
 function ChipRow({ label, items, tone = 'gray' }: { label: string; items: string[]; tone?: 'gray' | 'red' }) {
   if (!items || items.length === 0) return null
   const chip: React.CSSProperties = tone === 'red'
     ? { padding: '2px 8px', background: '#FEE2E2', color: 'var(--red)', borderRadius: 999, fontSize: 11 }
-    : { padding: '2px 8px', background: '#F3F4F6', color: '#374151', borderRadius: 999, fontSize: 11 }
+    : { padding: '2px 8px', background: 'var(--bg-elevated)', color: 'var(--text-secondary)', borderRadius: 999, fontSize: 11 }
   return (
     <div style={{ marginBottom: 8 }}>
       <div style={{ fontSize: 12, color: '#6B7280', marginBottom: 4 }}>{label}</div>
@@ -1352,10 +1352,10 @@ export default function ClinicDokter() {
                     {/* PAR-Q */}
                     {Object.keys(screeningData.par_q).length > 0 && (
                       <div style={{ marginBottom: 12 }}>
-                        <div style={{ fontWeight: 700, fontSize: 12, color: '#374151', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>PAR-Q</div>
+                        <div style={{ fontWeight: 700, fontSize: 12, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>PAR-Q</div>
                         {Object.entries(screeningData.par_q).map(([q, val]) => (
                           <div key={q} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid #F3F4F6', fontSize: 13 }}>
-                            <span style={{ color: '#374151' }}>{q}</span>
+                            <span style={{ color: 'var(--text-secondary)' }}>{q}</span>
                             <span style={{ fontWeight: 700, color: val ? 'var(--red)' : '#065F46' }}>{val ? 'Ya' : 'Tidak'}</span>
                           </div>
                         ))}
@@ -1373,7 +1373,7 @@ export default function ClinicDokter() {
                         <ChipRow label="Karakter Nyeri" items={screeningData.msk_character} />
                         <ChipRow label="Waktu Timbul" items={screeningData.msk_timing} />
                         {screeningData.msk_intensity !== null && (
-                          <div style={{ fontSize: 13, color: '#374151', marginBottom: 8 }}>
+                          <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 8 }}>
                             Intensitas Nyeri: <strong style={{ color: screeningData.msk_intensity >= 7 ? 'var(--red)' : screeningData.msk_intensity >= 4 ? '#F59E0B' : '#065F46' }}>{screeningData.msk_intensity}/10</strong>
                           </div>
                         )}
