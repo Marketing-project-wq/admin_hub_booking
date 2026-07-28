@@ -58,13 +58,21 @@ export default function ClinicDashboard() {
       {/* ── KPI cards ────────────────────────────────────────────────────────── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12, marginBottom: 24 }}>
         {KPI.map(k => (
-          <div key={k.key} className="card" style={{ borderTop: `3px solid ${k.color}`, display: 'flex', alignItems: 'center', gap: 14 }}>
-            <span style={{ fontSize: 26 }}>{k.icon}</span>
+          <div key={k.key} className="card" style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            {/* Apple-style glass chip: soft colour-tinted rounded square, no harsh top line */}
+            <span style={{
+              fontSize: 22,
+              width: 48, height: 48, flex: '0 0 auto',
+              display: 'grid', placeItems: 'center',
+              borderRadius: 16,
+              background: `${k.color}1A`,
+              boxShadow: `inset 0 1px 0 rgba(255,255,255,0.55), 0 4px 12px ${k.color}22`,
+            }}>{k.icon}</span>
             <div>
-              <div style={{ fontWeight: 700, fontSize: 26, color: k.color, lineHeight: 1 }}>
+              <div style={{ fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: 30, color: k.color, lineHeight: 1, letterSpacing: '0.01em' }}>
                 {loading ? '...' : stats[k.key]}
               </div>
-              <div style={{ fontSize: 12, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginTop: 6 }}>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginTop: 6, fontWeight: 700 }}>
                 {k.label}
               </div>
             </div>

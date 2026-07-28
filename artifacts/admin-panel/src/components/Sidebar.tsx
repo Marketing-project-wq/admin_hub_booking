@@ -80,14 +80,14 @@ export default function Sidebar({ currentUnit, open, onClose }: SidebarProps) {
     <aside className={`sidebar${open ? ' open' : ''}`}>
       <div className="sidebar-header" style={{
         padding: '24px 20px 16px',
-        borderBottom: '1px solid rgba(255,255,255,0.06)',
+        borderBottom: '1px solid var(--sidebar-border)',
       }}>
         <h2 className="brand-small" style={{
           fontFamily: "'Anton', sans-serif",
           fontWeight: 400,
           fontSize: 22,
           letterSpacing: 2,
-          color: '#F0F4FF',
+          color: 'var(--sidebar-text-strong)',
           margin: 0,
         }}>20FIT</h2>
         <span className="unit-label" style={{
@@ -96,7 +96,7 @@ export default function Sidebar({ currentUnit, open, onClose }: SidebarProps) {
           fontStyle: 'italic',
           fontSize: 10,
           letterSpacing: 3,
-          color: '#C0392B',
+          color: 'var(--red)',
           textTransform: 'uppercase',
           display: 'block',
           marginTop: 2,
