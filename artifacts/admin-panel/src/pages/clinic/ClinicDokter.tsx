@@ -5,6 +5,7 @@ import { useAuth } from '../../context/AuthContext'
 import { lockRecord, orIlike } from '../../lib/clinic'
 import LockBadge, { LockedBanner } from '../../components/clinic/LockBadge'
 import PostureScanPanel from './PostureScanPanel'
+import { useIsMobile } from '../../hooks/use-mobile'
 
 // ─── Subjective (EMR) ────────────────────────────────────────────────────────
 // Daftar tetap sengaja didefinisikan di kode (bukan di database) supaya gampang diedit.
@@ -783,10 +784,13 @@ function VisitCard({ visit, queue = false, onStatusChange, onOpen, busy }: {
   onOpen: (visit: DokterVisit) => void
   busy: boolean
 }) {
+  const isMobile = useIsMobile()
   const s = visit.status
   const leftColor = s === 'in_progress' ? '#1D4ED8' : s === 'scheduled' ? '#F59E0B' : s === 'completed' ? '#10B981' : 'transparent'
   const cardStyle: React.CSSProperties = {
-    display: 'flex', gap: 14, alignItems: 'center',
+    display: 'flex', gap: isMobile ? 12 : 14,
+    flexDirection: isMobile ? 'column' : 'row',
+    alignItems: isMobile ? 'stretch' : 'center',
     background: queue && s === 'in_progress' ? 'rgba(192,57,43,0.12)' : 'var(--bg-card)',
     border: '1px solid var(--border)',
     borderLeft: `4px solid ${queue && s === 'in_progress' ? 'var(--red)' : leftColor}`,
@@ -795,27 +799,39 @@ function VisitCard({ visit, queue = false, onStatusChange, onOpen, busy }: {
   }
   const timeBox: React.CSSProperties = {
     minWidth: 64, textAlign: 'center', padding: '8px 6px', borderRadius: 8, fontWeight: 700, fontSize: 14,
+    flex: '0 0 auto', alignSelf: isMobile ? 'flex-start' : 'auto',
     background: s === 'in_progress' ? 'rgba(192,57,43,0.2)' : 'var(--bg-elevated)',
     color: s === 'in_progress' ? 'var(--red)' : 'var(--text-secondary)',
   }
 
   return (
     <div style={cardStyle}>
-      <div style={timeBox}>{visit.visit_time ? fmtTime(visit.visit_time) : '—'}</div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{visit.patient?.full_name || '-'}</div>
-        <div style={{ fontSize: 11, color: 'var(--text-secondary)', fontFamily: 'monospace' }}>{visit.patient?.patient_code || '-'}</div>
-        <div style={{ fontSize: 13, marginTop: 2, color: 'var(--text-secondary)' }}>{visit.services.map(s => s.service_name).join(', ') || '-'}</div>
-        {visit.patient_package_id && (
-          <span style={{ display: 'inline-block', marginTop: 4, fontSize: 11, fontWeight: 600, padding: '1px 8px', borderRadius: 999, background: '#DBEAFE', color: '#1D4ED8' }}>📦 Paket</span>
-        )}
-        {visit.chief_complaint && (
-          <div style={{ fontSize: 12, fontStyle: 'italic', color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            {visit.chief_complaint}
-          </div>
-        )}
+      {/* Top block: time + patient info (stays a row even on mobile) */}
+      <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', flex: isMobile ? 'none' : 1, minWidth: 0 }}>
+        <div style={timeBox}>{visit.visit_time ? fmtTime(visit.visit_time) : '—'}</div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{visit.patient?.full_name || '-'}</div>
+          <div style={{ fontSize: 11, color: 'var(--text-secondary)', fontFamily: 'monospace' }}>{visit.patient?.patient_code || '-'}</div>
+          <div style={{ fontSize: 13, marginTop: 2, color: 'var(--text-secondary)' }}>{visit.services.map(s => s.service_name).join(', ') || '-'}</div>
+          {visit.patient_package_id && (
+            <span style={{ display: 'inline-block', marginTop: 4, fontSize: 11, fontWeight: 600, padding: '1px 8px', borderRadius: 999, background: '#DBEAFE', color: '#1D4ED8' }}>📦 Paket</span>
+          )}
+          {visit.chief_complaint && (
+            <div style={{ fontSize: 12, fontStyle: 'italic', color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {visit.chief_complaint}
+            </div>
+          )}
+        </div>
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8, flexShrink: 0 }}>
+      {/* Actions: column on desktop (right), a full-width row on mobile */}
+      <div style={{
+        display: 'flex', flexShrink: 0, gap: 8,
+        flexDirection: isMobile ? 'row' : 'column',
+        alignItems: 'center',
+        justifyContent: isMobile ? 'space-between' : 'flex-start',
+        alignSelf: isMobile ? 'stretch' : 'auto',
+        marginTop: isMobile ? 4 : 0,
+      }}>
         <StatusBadge status={s} />
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
           {s === 'scheduled' && (

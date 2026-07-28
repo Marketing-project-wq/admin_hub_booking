@@ -23,29 +23,33 @@ interface DayPoint { label: string; date: string; total: number }
 
 function SalesBarChart({ data }: { data: DayPoint[] }) {
   if (!data || data.length === 0) return (
-    <div style={{ textAlign: 'center', padding: 40, color: 'rgba(255,255,255,0.3)', fontSize: 13 }}>
+    <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-faint)', fontSize: 13 }}>
       Tidak ada data
     </div>
   )
   const maxVal = Math.max(...data.map(d => d.total), 1)
   return (
-    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, height: 120, padding: '0 4px' }}>
+    // alignItems:stretch → each column fills the 140px height, so the bar's
+    // percentage height resolves against a definite-height parent (was 0 before).
+    <div style={{ display: 'flex', alignItems: 'stretch', gap: 4, height: 140, padding: '0 4px' }}>
       {data.map((d, i) => {
-        const h = Math.max((d.total / maxVal) * 100, d.total > 0 ? 4 : 0)
+        const h = d.total > 0 ? Math.max((d.total / maxVal) * 100, 3) : 0
         return (
-          <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-            <div
-              title={`${d.label}: ${fmtRp(d.total)}`}
-              style={{
-                width: '100%', height: `${h}%`,
-                background: 'linear-gradient(180deg, #C0392B 0%, #922B21 100%)',
-                borderRadius: '3px 3px 0 0', minHeight: d.total > 0 ? 4 : 0,
-                alignSelf: 'flex-end', cursor: 'pointer', transition: 'opacity 0.15s',
-              }}
-              onMouseEnter={e => (e.currentTarget.style.opacity = '0.8')}
-              onMouseLeave={e => (e.currentTarget.style.opacity = '1')}
-            />
-            <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)', whiteSpace: 'nowrap' }}>{d.label}</div>
+          <div key={i} style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            <div style={{ flex: 1, width: '100%', display: 'flex', alignItems: 'flex-end' }}>
+              <div
+                title={`${d.label}: ${fmtRp(d.total)}`}
+                style={{
+                  width: '100%', height: `${h}%`,
+                  background: 'linear-gradient(180deg, var(--red) 0%, var(--red-dark) 100%)',
+                  borderRadius: '4px 4px 0 0', minHeight: d.total > 0 ? 3 : 0,
+                  cursor: 'pointer', transition: 'opacity 0.15s',
+                }}
+                onMouseEnter={e => (e.currentTarget.style.opacity = '0.8')}
+                onMouseLeave={e => (e.currentTarget.style.opacity = '1')}
+              />
+            </div>
+            <div style={{ fontSize: 9, color: 'var(--text-faint)', whiteSpace: 'nowrap', marginTop: 4 }}>{d.label}</div>
           </div>
         )
       })}
@@ -368,83 +372,86 @@ export default function ArenaDashboard() {
         </span>
       </div>
 
-      {/* ── SALES — dark theme ────────────────────────────────────────────── */}
-      <div className="panel-dark" style={{ borderRadius: 12, overflow: 'hidden', marginBottom: 24 }}>
-        <div style={{ background: '#111', padding: '16px 24px', display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ fontSize: 18 }}>💰</span>
+      {/* ── SALES — light glass card ──────────────────────────────────────── */}
+      <div className="card" style={{ padding: 0, overflow: 'hidden', marginBottom: 24 }}>
+        <div style={{ padding: '18px 22px', display: 'flex', alignItems: 'center', gap: 12, borderBottom: '1px solid var(--border)' }}>
+          <span style={{ width: 44, height: 44, flex: '0 0 auto', display: 'grid', placeItems: 'center', borderRadius: 14, fontSize: 20, background: 'rgba(28,138,75,0.14)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.5)' }}>💰</span>
           <div>
-            <div style={{ fontWeight: 700, fontSize: 16, color: '#fff' }}>Sales</div>
-            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)' }}>Uang masuk berdasarkan tanggal transaksi</div>
+            <div style={{ fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: 17, textTransform: 'uppercase', letterSpacing: '0.03em', color: 'var(--text-primary)' }}>Sales</div>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Uang masuk berdasarkan tanggal transaksi</div>
           </div>
         </div>
 
-        <div style={{ background: '#1a1a1a', padding: '20px 24px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12 }}>
+        <div style={{ padding: '18px 22px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12 }}>
           {([
-            { label: 'Total Sales', value: sales.total,   sub: `${salesCount} transaksi`,  color: '#fff' },
-            { label: 'Class',       value: sales.class,   sub: 'Class booking',            color: '#60A5FA' },
-            { label: 'Slot',        value: sales.slot,    sub: 'Individual',               color: '#34D399' },
-            { label: 'Venue',       value: sales.venue,   sub: 'Korporasi',                color: '#F87171' },
-            { label: 'Package',     value: sales.package, sub: 'Package orders',           color: '#A78BFA' },
+            { label: 'Total Sales', value: sales.total,   sub: `${salesCount} transaksi`,  color: 'var(--red)' },
+            { label: 'Class',       value: sales.class,   sub: 'Class booking',            color: 'var(--blue)' },
+            { label: 'Slot',        value: sales.slot,    sub: 'Individual',               color: 'var(--green)' },
+            { label: 'Venue',       value: sales.venue,   sub: 'Korporasi',                color: 'var(--amber)' },
+            { label: 'Package',     value: sales.package, sub: 'Package orders',           color: '#7C3AED' },
           ] as { label: string; value: number; sub: string; color: string }[]).map((k, i) => (
-            <div key={i} style={{ background: '#2a2a2a', borderRadius: 10, padding: '14px 16px', borderTop: `3px solid ${k.color}` }}>
-              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>{k.label}</div>
-              <div style={{ fontWeight: 700, fontSize: 18, color: k.color }}>{loadingSales ? '...' : fmtRp(k.value)}</div>
-              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 4 }}>{k.sub}</div>
+            <div key={i} style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 14, padding: '14px 16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 8 }}>
+                <span style={{ width: 8, height: 8, borderRadius: 999, background: k.color, flex: '0 0 auto' }} />
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700 }}>{k.label}</div>
+              </div>
+              <div style={{ fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: 20, color: 'var(--text-primary)' }}>{loadingSales ? '...' : fmtRp(k.value)}</div>
+              <div style={{ fontSize: 11, color: 'var(--text-faint)', marginTop: 4 }}>{k.sub}</div>
             </div>
           ))}
         </div>
 
-        <div style={{ background: '#111', padding: '20px 24px' }}>
-          <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginBottom: 16, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+        <div style={{ padding: '0 22px 22px' }}>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 14, textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700 }}>
             Sales per Hari
           </div>
           <SalesBarChart data={salesChartData} />
         </div>
       </div>
 
-      {/* ── REVENUE — red/light theme ─────────────────────────────────────── */}
-      <div className="panel-light" style={{ borderRadius: 12, overflow: 'hidden', marginBottom: 24 }}>
-        <div style={{
-          background: 'linear-gradient(135deg, var(--red) 0%, #922B21 100%)',
-          padding: '16px 24px', display: 'flex', alignItems: 'center', gap: 10,
-        }}>
-          <span style={{ fontSize: 18 }}>📈</span>
+      {/* ── REVENUE — light glass card ────────────────────────────────────── */}
+      <div className="card" style={{ padding: 0, overflow: 'hidden', marginBottom: 24 }}>
+        <div style={{ padding: '18px 22px', display: 'flex', alignItems: 'center', gap: 12, borderBottom: '1px solid var(--border)' }}>
+          <span style={{ width: 44, height: 44, flex: '0 0 auto', display: 'grid', placeItems: 'center', borderRadius: 14, fontSize: 20, background: 'var(--red-soft)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.5)' }}>📈</span>
           <div>
-            <div style={{ fontWeight: 700, fontSize: 16, color: '#fff' }}>Revenue</div>
-            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)' }}>Layanan terdelivered berdasarkan tanggal kelas/booking</div>
+            <div style={{ fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: 17, textTransform: 'uppercase', letterSpacing: '0.03em', color: 'var(--text-primary)' }}>Revenue</div>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Layanan terdelivered berdasarkan tanggal kelas/booking</div>
           </div>
         </div>
 
-        <div style={{ background: '#FEF3F2', padding: '20px 24px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12 }}>
+        <div style={{ padding: '18px 22px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12 }}>
           {([
-            { label: 'Total Revenue', value: revenue.total,   sub: `${revenueCount} layanan`,  color: 'var(--text-primary)' },
-            { label: 'Class',         value: revenue.class,   sub: 'Kelas berjalan',           color: '#2563EB' },
-            { label: 'Slot',          value: revenue.slot,    sub: 'Individual',               color: '#059669' },
-            { label: 'Venue',         value: revenue.venue,   sub: 'Korporasi',                color: 'var(--red)' },
+            { label: 'Total Revenue', value: revenue.total,   sub: `${revenueCount} layanan`,  color: 'var(--red)' },
+            { label: 'Class',         value: revenue.class,   sub: 'Kelas berjalan',           color: 'var(--blue)' },
+            { label: 'Slot',          value: revenue.slot,    sub: 'Individual',               color: 'var(--green)' },
+            { label: 'Venue',         value: revenue.venue,   sub: 'Korporasi',                color: 'var(--amber)' },
             { label: 'Package',       value: revenue.package, sub: 'Sesi terpakai',            color: '#7C3AED' },
           ] as { label: string; value: number; sub: string; color: string }[]).map((k, i) => (
-            <div key={i} style={{ background: '#fff', borderRadius: 10, padding: '14px 16px', borderTop: `3px solid ${k.color}`, boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>{k.label}</div>
-              <div style={{ fontWeight: 700, fontSize: 18, color: k.color }}>{loadingRevenue ? '...' : fmtRp(k.value)}</div>
+            <div key={i} style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 14, padding: '14px 16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 8 }}>
+                <span style={{ width: 8, height: 8, borderRadius: 999, background: k.color, flex: '0 0 auto' }} />
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700 }}>{k.label}</div>
+              </div>
+              <div style={{ fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: 20, color: 'var(--text-primary)' }}>{loadingRevenue ? '...' : fmtRp(k.value)}</div>
               <div style={{ fontSize: 11, color: 'var(--text-faint)', marginTop: 4 }}>{k.sub}</div>
             </div>
           ))}
         </div>
 
-        <div className="arena-split" style={{ background: '#FEF3F2', padding: '0 24px 24px', display: 'grid', gridTemplateColumns: '1fr 280px', gap: 20 }}>
-          <div style={{ background: '#fff', borderRadius: 10, padding: 20, boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
-            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Revenue per Hari</div>
+        <div className="arena-split" style={{ padding: '0 22px 22px', display: 'grid', gridTemplateColumns: '1fr 280px', gap: 16 }}>
+          <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 14, padding: 18 }}>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 16, textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700 }}>Revenue per Hari</div>
             <RevenueLineChart data={revenueChartData} />
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <div style={{ background: '#fff', borderRadius: 10, padding: 20, flex: 1, boxShadow: '0 1px 4px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12 }}>Venue Occupancy</div>
+            <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 14, padding: 18, flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 12, fontWeight: 700 }}>Venue Occupancy</div>
               <OccupancyGauge value={venueOccupancy} color="var(--red)" />
               <div style={{ fontSize: 11, color: 'var(--text-faint)', marginTop: 8 }}>dari 14 jam/hari</div>
             </div>
-            <div style={{ background: '#fff', borderRadius: 10, padding: 20, flex: 1, boxShadow: '0 1px 4px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12 }}>Class Occupancy</div>
-              <OccupancyGauge value={classOccupancy} color="#2563EB" />
+            <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 14, padding: 18, flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 12, fontWeight: 700 }}>Class Occupancy</div>
+              <OccupancyGauge value={classOccupancy} color="var(--blue)" />
               <div style={{ fontSize: 11, color: 'var(--text-faint)', marginTop: 8 }}>dari 40 peserta/kelas</div>
             </div>
           </div>
