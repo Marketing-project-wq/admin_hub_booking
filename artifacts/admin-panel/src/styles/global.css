@@ -449,10 +449,14 @@ button.unit-card:hover:not(.disabled):not(:disabled) {
   text-transform: uppercase;
 }
 .menu-item:hover:not(.disabled) { background: rgba(255,255,255,0.08); color: #FFFFFF; }
+/* Active = frosted glass pill (lifted, minimalist) with a whisper of brand-red
+   glow underneath — clean, not a loud solid fill. */
 .menu-item.active {
-  background: var(--red);
+  background: rgba(255,255,255,0.14);
+  -webkit-backdrop-filter: var(--glass-filter);
+  backdrop-filter: var(--glass-filter);
   color: #FFFFFF;
-  box-shadow: 0 8px 22px var(--red-glow), inset 0 1px 0 rgba(255,255,255,0.28);
+  box-shadow: 0 8px 22px rgba(0,0,0,0.28), 0 2px 12px var(--red-glow), inset 0 1px 0 rgba(255,255,255,0.30);
 }
 .menu-item.disabled { opacity: 0.4; cursor: not-allowed; }
 
@@ -568,7 +572,13 @@ button.unit-card:hover:not(.disabled):not(:disabled) {
   font-family: var(--font-display); font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
 }
 .switcher-item:hover { background: rgba(255,255,255,0.06); color: #FFFFFF; }
-.switcher-item.active { background: var(--red); color: #FFFFFF; }
+.switcher-item.active {
+  background: rgba(255,255,255,0.12);
+  -webkit-backdrop-filter: var(--glass-filter);
+  backdrop-filter: var(--glass-filter);
+  color: #FFFFFF;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.24);
+}
 
 /* Main content */
 .main-content {
@@ -1051,11 +1061,13 @@ tr.row-selected { background: var(--red-soft) !important; }
   color: var(--text-primary);
 }
 .layout-clinic .menu-item.active {
-  background: var(--red);
+  background: rgba(255,255,255,0.10);
+  -webkit-backdrop-filter: var(--glass-filter);
+  backdrop-filter: var(--glass-filter);
   color: #fff;
   border-left: none;
   padding-left: 18px;
-  box-shadow: 0 8px 22px var(--red-glow), inset 0 1px 0 rgba(255,255,255,0.28);
+  box-shadow: 0 8px 22px rgba(0,0,0,0.30), 0 2px 12px var(--red-glow), inset 0 1px 0 rgba(255,255,255,0.22);
 }
 .layout-clinic .menu-divider {
   font-size: 10px;
