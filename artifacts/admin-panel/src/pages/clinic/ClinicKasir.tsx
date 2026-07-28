@@ -39,6 +39,7 @@ interface PendingVisit {
   booking_payment_method?: string | null
   booking_status?: string | null
   booking_price?: number | null
+  booking_service_id?: string | null
 }
 
 export default function ClinicKasir() {
@@ -72,7 +73,7 @@ export default function ClinicKasir() {
           id, visit_code, visit_date, visit_time, status, payment_status,
           patient:clinic_patients(id, full_name, patient_code, phone),
           services:clinic_visit_services(id, service_id, service_name, price),
-          bookings:clinic_bookings!clinic_bookings_visit_id_fkey(payment_method, status, price)
+          bookings:clinic_bookings!clinic_bookings_visit_id_fkey(payment_method, status, price, service_id)
         `)
         .eq('payment_status', 'unpaid')
         .in('status', ['in_progress', 'completed'])
@@ -84,6 +85,7 @@ export default function ClinicKasir() {
         booking_payment_method: v.bookings?.[0]?.payment_method ?? null,
         booking_status: v.bookings?.[0]?.status ?? null,
         booking_price: v.bookings?.[0]?.price ?? null,
+        booking_service_id: v.bookings?.[0]?.service_id ?? null,
       }))
       setPendingVisits(visits as unknown as PendingVisit[])
     } catch (e) {
@@ -296,6 +298,7 @@ export default function ClinicKasir() {
           services={closeBillVisit.services.map(s => ({ service_id: s.service_id, service_name: s.service_name, price: s.price }))}
           paidOnline={closeBillVisit.booking_payment_method === 'mayar'}
           paidWithVoucher={closeBillVisit.booking_payment_method === 'voucher' && closeBillVisit.booking_price === 0}
+          bookingServiceId={closeBillVisit.booking_service_id ?? null}
           onClose={() => setCloseBillVisit(null)}
           onSuccess={() => { setCloseBillVisit(null); fetchPending(); fetchData() }}
         />

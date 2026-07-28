@@ -18,6 +18,9 @@ interface Props {
   services: { service_id: string; service_name: string; price: number }[]
   paidOnline?: boolean
   paidWithVoucher?: boolean
+  // service_id dari booking online — voucher HANYA menutup baris servis ini (bug fix:
+  // sebelumnya voucher meng-gratiskan SEMUA servis di visit, termasuk tambahan on-site).
+  bookingServiceId?: string | null
   onClose: () => void
   onSuccess: (transaction: ClinicTransaction) => void
 }
@@ -26,7 +29,7 @@ const METHODS = ['cash', 'transfer', 'qris', 'debit', 'kredit'] as const
 const METHOD_LABEL: Record<string, string> = { cash: 'Cash', transfer: 'Transfer', qris: 'QRIS', debit: 'Debit', kredit: 'Kredit' }
 
 export default function ClinicCloseBillModal({
-  visitId, patientId, patientName, patientCode, patientPhone, services, paidOnline, paidWithVoucher, onClose, onSuccess,
+  visitId, patientId, patientName, patientCode, patientPhone, services, paidOnline, paidWithVoucher, bookingServiceId, onClose, onSuccess,
 }: Props) {
   const { user } = useAuth()
   const [discount, setDiscount] = useState(0)
@@ -86,16 +89,31 @@ export default function ClinicCloseBillModal({
   const activePerformancePackage = patientPackages.find(pp => pp.package?.category === 'Performance') ?? null
   const activeMedicPackage = patientPackages.find(pp => pp.package?.category === 'Medic') ?? null
 
+  // ── Voucher (bug fix) ───────────────────────────────────────────────────────
+  // Voucher HANYA menutup SATU baris servis yang service_id-nya cocok dengan booking —
+  // BUKAN seluruh visit. Duplikat service_id: hanya kemunculan pertama yang ditutup.
+  const voucherService = paidWithVoucher && bookingServiceId
+    ? services.find(s => s.service_id === bookingServiceId) ?? null
+    : null
+  // Voucher aktif tapi servis booking tidak ada di visit (mis. terhapus saat edit visit)
+  // → JANGAN diam-diam apply ke servis lain / diam-diam skip: tampilkan warning eksplisit
+  // dan hitung SEMUA servis bayar normal (kasir cek manual).
+  const voucherMissing = !!paidWithVoucher && !voucherService
+  const voucherAmount = voucherService?.price ?? 0
+
   // Layanan yang ter-cover paket aktif vs yang bayar normal.
   const coveredServices = services.filter(s => {
     if (paidOnline) return false // pembayaran online: tanpa coverage paket (bayar penuh)
+    if (voucherService && s === voucherService) return false // sudah ditutup voucher
     if (activePerformancePackage && isPerformanceService(s.service_name)) return true
     if (activeMedicPackage && isMedicService(s.service_name)) return true
     return false
   })
   const uncoveredServices = services.filter(s => !coveredServices.includes(s))
+  // Baris yang benar-benar ditagih = uncovered minus baris yang ditutup voucher.
+  const payableServices = uncoveredServices.filter(s => s !== voucherService)
 
-  const visitSubtotal = uncoveredServices.reduce((sum, s) => sum + (Number(s.price) || 0), 0)
+  const visitSubtotal = payableServices.reduce((sum, s) => sum + (Number(s.price) || 0), 0)
   const selectedNewPkg = buyingPackage && selectedNewPackageId
     ? packages.find(p => p.id === selectedNewPackageId) ?? null
     : null
@@ -106,9 +124,14 @@ export default function ClinicCloseBillModal({
   const change = method === 'cash' && cashReceived > grandTotal ? cashReceived - grandTotal : 0
   const isCard = method === 'debit' || method === 'kredit'
 
+  // Voucher menutup segalanya (tak ada sisa tagihan & tak beli paket) → metode 'voucher'
+  // tanpa pilih metode. Selain itu — termasuk voucherMissing — metode pembayaran wajib.
+  const voucherFullyCovers = !!voucherService && grandTotal === 0 && !buyingPackage
+  const needsMethod = !paidOnline && !voucherFullyCovers
+
   const handleConfirm = async () => {
     setError('')
-    if (!paidOnline && !((paidWithVoucher && !buyingPackage) || method)) { setError('Pilih metode pembayaran.'); return }
+    if (needsMethod && !method) { setError('Pilih metode pembayaran.'); return }
     setSaving(true)
     try {
       const payment_detail: Record<string, string> = {}
@@ -123,29 +146,27 @@ export default function ClinicCloseBillModal({
       ].filter(Boolean).join(' + ') || '-'
 
       // Booking online (Mayar) → metode 'mayar', total penuh.
-      // Voucher 100% tanpa paket → metode 'voucher', total 0, diskon penuh.
-      // Voucher + beli paket → metode terpilih (bayar paket), total = harga paket.
+      // Voucher → HANYA baris servis booking yang ditutup (voucherAmount masuk diskon);
+      // sisa servis dibayar normal (grandTotal). Metode 'voucher' hanya saat voucher
+      // menutup semuanya tanpa sisa & tanpa beli paket.
       const finalPaymentMethod = paidOnline
         ? 'mayar'
-        : paidWithVoucher
-          ? (buyingPackage ? method : 'voucher')
+        : voucherFullyCovers
+          ? 'voucher'
           : method
       const finalTotal = paidOnline
         ? services.reduce((sum, s) => sum + s.price, 0)
-        : paidWithVoucher
-          ? (buyingPackage ? packageSubtotal : 0)
-          : grandTotal
-      const finalDiscount = paidWithVoucher
-        ? services.reduce((sum, s) => sum + s.price, 0)
-        : paidOnline ? 0 : (Number(discount) || 0)
+        : grandTotal
+      const finalDiscount = paidOnline ? 0 : (Number(discount) || 0) + voucherAmount
 
       // Sesi paket yang dipotong: 1 per kategori ter-cover (Performance & Medic), maks 2.
-      // Lewati jika dibayar voucher 100%.
+      // coveredServices sudah mengecualikan baris voucher, jadi coverage paket untuk
+      // servis lain tetap berjalan normal walau visit memakai voucher.
       const usePackageIds: string[] = []
-      if (!paidWithVoucher && activePerformancePackage && coveredServices.some(s => isPerformanceService(s.service_name))) {
+      if (activePerformancePackage && coveredServices.some(s => isPerformanceService(s.service_name))) {
         usePackageIds.push(activePerformancePackage.id)
       }
-      if (!paidWithVoucher && activeMedicPackage && coveredServices.some(s => isMedicService(s.service_name))) {
+      if (activeMedicPackage && coveredServices.some(s => isMedicService(s.service_name))) {
         usePackageIds.push(activeMedicPackage.id)
       }
 
@@ -159,7 +180,9 @@ export default function ClinicCloseBillModal({
         p_patient_id: patientId,
         p_service_id: services[0]?.service_id ?? null,
         p_service_name: serviceName,
-        p_service_price: visitSubtotal + packageSubtotal,
+        // Gross termasuk baris voucher — voucherAmount tercatat sebagai diskon, dan
+        // guard RPC (discount <= service_price) tetap terpenuhi.
+        p_service_price: visitSubtotal + voucherAmount + packageSubtotal,
         p_discount: finalDiscount,
         p_total_amount: finalTotal,
         p_payment_method: finalPaymentMethod,
@@ -307,37 +330,34 @@ export default function ClinicCloseBillModal({
         <div style={{ marginBottom: 16 }}>
           <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8 }}>Rincian Biaya</div>
 
-          {paidWithVoucher ? (
-            services.map(s => (
-              <div key={s.service_name} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 }}>
-                <span style={{ textDecoration: 'line-through', color: 'var(--text-muted)' }}>
-                  {s.service_name} — Rp {s.price.toLocaleString('id-ID')}
-                </span>
-                <span style={{ color: 'var(--amber)', fontWeight: 600 }}>VOUCHER</span>
-              </div>
-            ))
-          ) : (
-            <>
-              {coveredServices.length > 0 && (
-                <div style={{ marginBottom: 8 }}>
-                  <div style={{ fontSize: 11, color: 'var(--green)', fontWeight: 600, marginBottom: 4 }}>✓ Ter-cover Paket</div>
-                  {coveredServices.map(s => (
-                    <div key={s.service_name} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: 'var(--text-secondary)', textDecoration: 'line-through' }}>
-                      <span>{s.service_name}</span>
-                      <span>{fmtRp(s.price)}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
+          {/* Baris yang ditutup voucher — HANYA servis yang cocok dengan booking */}
+          {voucherService && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 }}>
+              <span style={{ textDecoration: 'line-through', color: 'var(--text-muted)' }}>
+                {voucherService.service_name} — Rp {voucherService.price.toLocaleString('id-ID')}
+              </span>
+              <span style={{ color: 'var(--amber)', fontWeight: 600 }}>VOUCHER</span>
+            </div>
+          )}
 
-              {uncoveredServices.map(s => (
-                <div key={s.service_name} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 4 }}>
+          {coveredServices.length > 0 && (
+            <div style={{ marginBottom: 8 }}>
+              <div style={{ fontSize: 11, color: 'var(--green)', fontWeight: 600, marginBottom: 4 }}>✓ Ter-cover Paket</div>
+              {coveredServices.map(s => (
+                <div key={s.service_name} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: 'var(--text-secondary)', textDecoration: 'line-through' }}>
                   <span>{s.service_name}</span>
                   <span>{fmtRp(s.price)}</span>
                 </div>
               ))}
-            </>
+            </div>
           )}
+
+          {payableServices.map(s => (
+            <div key={s.service_name} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 4 }}>
+              <span>{s.service_name}</span>
+              <span>{fmtRp(s.price)}</span>
+            </div>
+          ))}
 
           {selectedNewPkg && (
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 4, color: 'var(--blue)' }}>
@@ -353,22 +373,17 @@ export default function ClinicCloseBillModal({
             </div>
           )}
 
-          {paidWithVoucher ? (
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, borderTop: '1px solid var(--border)', paddingTop: 8, marginTop: 4 }}>
-              <span>Total</span>
-              <div style={{ textAlign: 'right' }}>
-                <div style={{ textDecoration: 'line-through', color: 'var(--text-muted)', fontSize: 12 }}>
-                  Rp {services.reduce((s, i) => s + i.price, 0).toLocaleString('id-ID')}
-                </div>
-                <div style={{ color: 'var(--amber)', fontSize: 16 }}>{fmtRp(buyingPackage ? packageSubtotal : 0)}</div>
-              </div>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 15, borderTop: '1px solid var(--border)', paddingTop: 8, marginTop: 4 }}>
-              <span>Total</span>
-              <span style={{ color: 'var(--red)' }}>{fmtRp(grandTotal)}</span>
+          {voucherAmount > 0 && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: 'var(--amber)', marginBottom: 4 }}>
+              <span>🎟️ Voucher ({voucherService!.service_name})</span>
+              <span>-{fmtRp(voucherAmount)}</span>
             </div>
           )}
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 15, borderTop: '1px solid var(--border)', paddingTop: 8, marginTop: 4 }}>
+            <span>Total</span>
+            <span style={{ color: voucherFullyCovers ? 'var(--amber)' : 'var(--red)' }}>{fmtRp(grandTotal)}</span>
+          </div>
         </div>
 
         {/* Section beli paket baru — disembunyikan untuk pembayaran online */}
@@ -436,33 +451,61 @@ export default function ClinicCloseBillModal({
           </div>
         )}
 
-        {/* Banner: sudah dibayar dengan voucher */}
-        {paidWithVoucher && (
+        {/* Banner voucher — 3 varian: servis booking hilang (warning), voucher parsial, voucher menutup semua */}
+        {voucherMissing && (
+          <div style={{ padding: '12px 14px', borderRadius: 10,
+            background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.4)',
+            marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 18 }}>⚠️</span>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: '#FC8181' }}>
+                Servis booking asli tidak ditemukan di visit ini
+              </div>
+              <div style={{ fontSize: 11, color: '#A8B8D8' }}>
+                Booking memakai voucher, tapi servis yang di-booking sudah tidak ada di daftar layanan —
+                voucher TIDAK diterapkan otomatis. Cek manual sebelum menagih.
+              </div>
+            </div>
+          </div>
+        )}
+        {voucherService && (
           <div style={{ padding: '12px 14px', borderRadius: 10,
             background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)',
             marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ fontSize: 18 }}>🎟️</span>
             <div>
               <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--amber)' }}>
-                Sudah Dibayar dengan Voucher
+                {voucherFullyCovers ? 'Sudah Dibayar dengan Voucher' : 'Voucher Menutup Sebagian'}
               </div>
               <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
-                Pasien menggunakan voucher 100% — tidak ada biaya tambahan
+                {voucherFullyCovers
+                  ? `Voucher menutup ${voucherService.service_name} — tidak ada biaya tambahan`
+                  : `Voucher hanya menutup ${voucherService.service_name} (${fmtRp(voucherAmount)}) — layanan lain dibayar normal`}
               </div>
             </div>
           </div>
         )}
 
         {/* Discount */}
-        {!paidOnline && !paidWithVoucher && (
+        {!paidOnline && !voucherFullyCovers && (
           <div className="form-group">
             <label>Diskon (Rp)</label>
-            <input type="number" min={0} max={maxDiscount} value={discount} onChange={e => setDiscount(Math.max(0, Math.min(Number(e.target.value), maxDiscount)))} />
+            {/* type=text + inputMode=numeric: keyboard angka di HP tanpa spinner; select()
+                saat fokus supaya ketikan menimpa nilai lama (bukan nempel di belakang "0"). */}
+            <input
+              type="text" inputMode="numeric" pattern="[0-9]*"
+              value={discount}
+              onFocus={e => e.currentTarget.select()}
+              onChange={e => {
+                const n = Number(e.target.value.replace(/[^0-9]/g, '')) || 0
+                setDiscount(Math.max(0, Math.min(n, maxDiscount)))
+              }}
+            />
           </div>
         )}
 
         {/* Payment method */}
-        {!paidOnline && (!paidWithVoucher || buyingPackage) && (
+        {needsMethod && (
           <>
             <label style={{ fontSize: 11, fontWeight: 600, display: 'block', marginBottom: 8, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: 1 }}>Metode Pembayaran</label>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
@@ -627,8 +670,8 @@ export default function ClinicCloseBillModal({
 
         <div className="modal-footer">
           <button className="btn-secondary" onClick={onClose}>Batal</button>
-          <button className="btn-primary" onClick={handleConfirm} disabled={saving || (!paidOnline && !((paidWithVoucher && !buyingPackage) || method))}>
-            {saving ? 'Memproses...' : (paidOnline ? 'Konfirmasi & Selesai →' : paidWithVoucher ? 'Konfirmasi Voucher & Selesai →' : 'Konfirmasi Pembayaran →')}
+          <button className="btn-primary" onClick={handleConfirm} disabled={saving || (needsMethod && !method)}>
+            {saving ? 'Memproses...' : (paidOnline ? 'Konfirmasi & Selesai →' : voucherFullyCovers ? 'Konfirmasi Voucher & Selesai →' : 'Konfirmasi Pembayaran →')}
           </button>
         </div>
       </div>
