@@ -107,7 +107,7 @@ export default function LockBadge({
                 <button
                   onClick={handleUnlock}
                   disabled={loading || !reason.trim()}
-                  style={{ padding: '8px 20px', background: '#C0392B', color: '#fff', border: 'none', borderRadius: 8, cursor: loading ? 'default' : 'pointer', fontWeight: 600, opacity: loading || !reason.trim() ? 0.6 : 1 }}
+                  style={{ padding: '8px 20px', background: 'var(--red)', color: '#fff', border: 'none', borderRadius: 8, cursor: loading ? 'default' : 'pointer', fontWeight: 600, opacity: loading || !reason.trim() ? 0.6 : 1 }}
                 >
                   {loading ? 'Memproses...' : 'Buka Kunci'}
                 </button>
@@ -135,7 +135,7 @@ export default function LockBadge({
             onClick={() => setShowRelockConfirm(true)}
             style={{
               fontSize: 11, padding: '3px 10px', background: '#F0FFF4',
-              color: '#065F46', border: '1px solid #6EE7B7',
+              color: '#065F46', border: '1px solid var(--green)',
               borderRadius: 999, cursor: 'pointer', fontWeight: 600,
             }}
           >

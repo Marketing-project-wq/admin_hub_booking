@@ -400,7 +400,7 @@ export default function ClinicVisits() {
                 Memuat slot tersedia...
               </div>
             ) : availableSlots.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: 24, color: '#FC8181' }}>
+              <div style={{ textAlign: 'center', padding: 24, color: 'var(--red)' }}>
                 Tidak ada slot tersedia untuk tanggal ini.
               </div>
             ) : (
@@ -430,7 +430,7 @@ export default function ClinicVisits() {
             )}
 
             {assignSlotError && (
-              <div style={{ color: '#FC8181', fontSize: 13, marginBottom: 12 }}>
+              <div style={{ color: 'var(--red)', fontSize: 13, marginBottom: 12 }}>
                 {assignSlotError}
               </div>
             )}
@@ -729,7 +729,7 @@ function VisitFormModal({ mode, visit, defaultPatientId, onClose, onSaved }: {
                   <div key={s.service_id} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 8, padding: '6px 10px' }}>
                     <span style={{ flex: 1, fontSize: 13 }}>{s.service_name}</span>
                     <span style={{ fontSize: 13, fontWeight: 600 }}>{fmtRp(s.price)}</span>
-                    <button type="button" className="action-btn cancel" style={{ color: '#FC8181', background: 'transparent' }} onClick={() => removeService(s.service_id)}>×</button>
+                    <button type="button" className="action-btn cancel" style={{ color: 'var(--red)', background: 'transparent' }} onClick={() => removeService(s.service_id)}>×</button>
                   </div>
                 ))}
                 <div style={{ display: 'flex', justifyContent: 'flex-end', fontSize: 13, fontWeight: 600 }}>

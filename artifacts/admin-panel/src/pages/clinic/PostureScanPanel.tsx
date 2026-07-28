@@ -648,7 +648,7 @@ export default function PostureScanPanel({ visitId, patientId }: { visitId: stri
   return (
     <div>
       <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-        <span style={{ padding: '2px 10px', borderRadius: 999, background: 'rgba(16,185,129,0.15)', color: '#6EE7B7', fontSize: 12, fontWeight: 700 }}>Scan Postur</span>
+        <span style={{ padding: '2px 10px', borderRadius: 999, background: 'rgba(16,185,129,0.15)', color: 'var(--green)', fontSize: 12, fontWeight: 700 }}>Scan Postur</span>
       </label>
       {!patientId && (
         <p style={{ color: 'var(--red)', fontSize: 13, marginBottom: 12 }}>Data pasien tidak tersedia — scan tidak bisa disimpan.</p>
@@ -684,8 +684,8 @@ export default function PostureScanPanel({ visitId, patientId }: { visitId: stri
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
                 <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{v.label}</span>
                 {scan && (scan.saved
-                  ? <span className="badge" style={{ background: 'rgba(16,185,129,0.15)', color: '#6EE7B7' }}>✓ Tersimpan</span>
-                  : <span className="badge" style={{ background: 'rgba(245,158,11,0.15)', color: '#FCD34D' }}>⚠ Preview — belum disimpan</span>)}
+                  ? <span className="badge" style={{ background: 'rgba(16,185,129,0.15)', color: 'var(--green)' }}>✓ Tersimpan</span>
+                  : <span className="badge" style={{ background: 'rgba(245,158,11,0.15)', color: 'var(--amber)' }}>⚠ Preview — belum disimpan</span>)}
               </div>
               <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '0 0 10px', lineHeight: 1.4 }}>{v.instruksi}</p>
 

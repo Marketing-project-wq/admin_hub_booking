@@ -52,15 +52,36 @@
   --border:        rgba(20, 20, 30, 0.08);
   --border-strong: rgba(20, 20, 30, 0.14);
 
-  /* Sidebar (dark glass in both themes for brand consistency) */
-  --bg-sidebar: rgba(17, 17, 19, 0.86);
+  /* Sidebar — light frosted glass in light mode, dark in dark mode (theme-aware) */
+  --bg-sidebar: rgba(255, 255, 255, 0.72);
+  --sidebar-text:        #55555A;
+  --sidebar-text-strong: #1D1D1F;
+  --sidebar-text-faint:  #9A9A9E;
+  --sidebar-border:      rgba(20, 20, 30, 0.07);
+  --sidebar-hover:       rgba(20, 20, 30, 0.05);
+  --sidebar-active-bg:   #FFFFFF;
+  --sidebar-active-text: #1D1D1F;
+  --sidebar-toggle-bg:     rgba(20, 20, 30, 0.04);
+  --sidebar-toggle-border: rgba(20, 20, 30, 0.10);
+  --sidebar-toggle-track:  rgba(20, 20, 30, 0.18);
+  --sidebar-active-shadow: 0 6px 18px rgba(20,20,30,0.12), 0 2px 10px var(--red-glow), inset 0 1px 0 rgba(255,255,255,0.9);
+  /* Content panel (rounded floating shell) */
+  --content-panel-bg: rgba(255, 255, 255, 0.50);
 
   /* Shape + depth */
   --radius:     22px;
   --radius-sm:  14px;
+  --radius-pill: 999px;
   --blur:       28px;
-  --shadow-card:     0 8px 30px rgba(20, 20, 30, 0.08), 0 1px 2px rgba(20, 20, 30, 0.04);
-  --shadow-elevated: 0 24px 60px rgba(20, 20, 30, 0.18);
+  /* Liquid-glass filter: blur + saturation lifts the frosted surfaces so the
+     page gradient reads through them with a little more life. */
+  --glass-filter: blur(var(--blur)) saturate(1.4);
+  /* Card/elevated shadows carry an inset top highlight — the thin bright edge
+     that sells the "liquid glass" sheen. */
+  --shadow-card:     0 8px 30px rgba(20, 20, 30, 0.08), 0 1px 2px rgba(20, 20, 30, 0.04), inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  --shadow-elevated: 0 24px 60px rgba(20, 20, 30, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  /* Soft sheen layered over glass surfaces for the modern liquid look. */
+  --glass-sheen: linear-gradient(157deg, rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0.12) 34%, rgba(255, 255, 255, 0) 62%);
 }
 
 /* ---- DARK MODE (global toggle) ---- */
@@ -97,9 +118,22 @@
   --border-strong: rgba(255, 255, 255, 0.18);
 
   --bg-sidebar: rgba(10, 10, 12, 0.88);
+  --sidebar-text:        rgba(255,255,255,0.62);
+  --sidebar-text-strong: #FFFFFF;
+  --sidebar-text-faint:  rgba(255,255,255,0.35);
+  --sidebar-border:      rgba(255,255,255,0.07);
+  --sidebar-hover:       rgba(255,255,255,0.08);
+  --sidebar-active-bg:   rgba(255,255,255,0.14);
+  --sidebar-active-text: #FFFFFF;
+  --sidebar-toggle-bg:     rgba(255,255,255,0.04);
+  --sidebar-toggle-border: rgba(255,255,255,0.10);
+  --sidebar-toggle-track:  rgba(255,255,255,0.12);
+  --sidebar-active-shadow: 0 8px 22px rgba(0,0,0,0.28), 0 2px 12px var(--red-glow), inset 0 1px 0 rgba(255,255,255,0.30);
+  --content-panel-bg: rgba(255, 255, 255, 0.035);
 
-  --shadow-card:     0 8px 30px rgba(0, 0, 0, 0.45);
-  --shadow-elevated: 0 24px 60px rgba(0, 0, 0, 0.60);
+  --shadow-card:     0 8px 30px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  --shadow-elevated: 0 24px 60px rgba(0, 0, 0, 0.60), inset 0 1px 0 rgba(255, 255, 255, 0.09);
+  --glass-sheen: linear-gradient(157deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 34%, rgba(255, 255, 255, 0) 62%);
 }
 
 /* ---- Clinic: theme-aware. Light mode = design-system glass (inherits :root);
@@ -118,6 +152,7 @@
   --bg-page:        #0f1923;
   --bg-sidebar:     #0a1628;
   --bg-deep:        #0a1628;
+  --content-panel-bg: #111d2e;
   --bg-card:        #1a2740;
   --bg-card-hover:  #1e2d4a;
   --bg-input:       #152034;
@@ -131,8 +166,8 @@
   --text-secondary: #A8B8D8;
   --text-muted:     #6B7A99;
   --text-faint:     #3D4F6B;
-  --shadow-card:    0 4px 24px rgba(0,0,0,0.4), 0 1px 4px rgba(0,0,0,0.3);
-  --shadow-elevated: 0 8px 32px rgba(0,0,0,0.5);
+  --shadow-card:    0 4px 24px rgba(0,0,0,0.4), 0 1px 4px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.06);
+  --shadow-elevated: 0 8px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.08);
   background: var(--bg-page);
 }
 :root[data-theme="dark"] .layout-clinic .main-content {
@@ -181,8 +216,8 @@ body {
 
 .login-card {
   background: var(--glass-strong);
-  -webkit-backdrop-filter: blur(var(--blur));
-  backdrop-filter: blur(var(--blur));
+  -webkit-backdrop-filter: var(--glass-filter);
+  backdrop-filter: var(--glass-filter);
   border: 1px solid var(--glass-border);
   border-radius: var(--radius);
   box-shadow: var(--shadow-elevated);
@@ -325,8 +360,8 @@ body {
   align-items: center;
   padding: 18px 32px;
   background: var(--glass);
-  -webkit-backdrop-filter: blur(var(--blur));
-  backdrop-filter: blur(var(--blur));
+  -webkit-backdrop-filter: var(--glass-filter);
+  backdrop-filter: var(--glass-filter);
   border-bottom: 1px solid var(--glass-border);
 }
 
@@ -364,8 +399,8 @@ body {
 
 .unit-card, button.unit-card {
   background: var(--glass-strong);
-  -webkit-backdrop-filter: blur(var(--blur));
-  backdrop-filter: blur(var(--blur));
+  -webkit-backdrop-filter: var(--glass-filter);
+  backdrop-filter: var(--glass-filter);
   border: 1px solid var(--glass-border);
   border-radius: var(--radius);
   box-shadow: var(--shadow-card);
@@ -404,10 +439,10 @@ button.unit-card:hover:not(.disabled):not(:disabled) {
 .sidebar {
   width: 240px;
   background: var(--bg-sidebar);
-  -webkit-backdrop-filter: blur(22px);
-  backdrop-filter: blur(22px);
-  border-right: 1px solid rgba(255, 255, 255, 0.06);
-  color: #FFFFFF;
+  -webkit-backdrop-filter: blur(22px) saturate(1.4);
+  backdrop-filter: blur(22px) saturate(1.4);
+  border-right: 1px solid var(--sidebar-border);
+  color: var(--sidebar-text-strong);
   position: fixed;
   top: 0; left: 0; bottom: 0;
   display: flex;
@@ -415,43 +450,51 @@ button.unit-card:hover:not(.disabled):not(:disabled) {
   z-index: 100;
 }
 
-.sidebar-header { padding: 24px 20px 16px; border-bottom: 1px solid rgba(255,255,255,0.06); }
-.sidebar-header .brand-small { color: #FFFFFF; }
+.sidebar-header { padding: 24px 20px 16px; border-bottom: 1px solid var(--sidebar-border); }
+.sidebar-header .brand-small { color: var(--sidebar-text-strong); }
 .sidebar-header .unit-label {
   font-family: var(--font-display);
   font-size: 11px; color: var(--red); text-transform: uppercase;
   letter-spacing: 0.2em; margin-top: 4px; display: block; font-weight: 700;
 }
 
-.sidebar-menu { flex: 1; padding: 14px 10px; overflow-y: auto; }
+.sidebar-menu { flex: 1; padding: 14px 12px; overflow-y: auto; }
 
 .menu-item {
   display: block;
-  padding: 10px 14px;
-  color: rgba(255,255,255,0.62);
+  padding: 10px 18px;
+  color: var(--sidebar-text);
   text-decoration: none;
-  border-radius: var(--radius-sm);
-  margin: 2px 0;
-  transition: background .15s ease, color .15s ease;
+  border-radius: var(--radius-pill);
+  margin: 3px 8px;
+  transition: background .18s ease, color .18s ease, box-shadow .18s ease;
   font-family: var(--font-display);
   font-size: 14px;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
-.menu-item:hover:not(.disabled) { background: rgba(255,255,255,0.06); color: #FFFFFF; }
-.menu-item.active { background: var(--red); color: #FFFFFF; box-shadow: 0 6px 18px var(--red-glow); }
+.menu-item:hover:not(.disabled) { background: var(--sidebar-hover); color: var(--sidebar-text-strong); }
+/* Active = frosted glass pill (lifted, minimalist) — a clean white card in light
+   mode / translucent glass in dark, with a whisper of brand-red glow underneath. */
+.menu-item.active {
+  background: var(--sidebar-active-bg);
+  -webkit-backdrop-filter: var(--glass-filter);
+  backdrop-filter: var(--glass-filter);
+  color: var(--sidebar-active-text);
+  box-shadow: var(--sidebar-active-shadow);
+}
 .menu-item.disabled { opacity: 0.4; cursor: not-allowed; }
 
 .menu-divider {
   font-family: var(--font-display);
   font-size: 10px; text-transform: uppercase; letter-spacing: 0.18em;
-  color: rgba(255,255,255,0.35); padding: 16px 14px 6px; pointer-events: none; font-weight: 700;
+  color: var(--sidebar-text-faint); padding: 16px 14px 6px; pointer-events: none; font-weight: 700;
 }
 
-.sidebar-footer { padding: 14px 16px; border-top: 1px solid rgba(255,255,255,0.06); }
+.sidebar-footer { padding: 14px 16px; border-top: 1px solid var(--sidebar-border); }
 .sidebar-user { font-size: 13px; margin: 12px 0; font-family: var(--font-body); }
-.sidebar-user-name { color: #FFFFFF; font-weight: 700; }
+.sidebar-user-name { color: var(--sidebar-text-strong); font-weight: 700; }
 .sidebar-user-role {
   font-family: var(--font-display);
   color: var(--red); font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em; margin-top: 2px; font-weight: 700;
@@ -460,9 +503,9 @@ button.unit-card:hover:not(.disabled):not(:disabled) {
 .sidebar-footer .logout-btn,
 .sidebar-footer > button:last-child {
   width: 100%;
-  background: rgba(255,255,255,0.05);
-  border: 1px solid rgba(255,255,255,0.14);
-  color: #FFFFFF;
+  background: var(--sidebar-toggle-bg);
+  border: 1px solid var(--sidebar-toggle-border);
+  color: var(--sidebar-text-strong);
   padding: 9px;
   border-radius: 999px;
   font-family: var(--font-display);
@@ -474,7 +517,7 @@ button.unit-card:hover:not(.disabled):not(:disabled) {
   transition: background .15s ease;
 }
 .sidebar-footer .logout-btn:hover,
-.sidebar-footer > button:last-child:hover { background: rgba(255,255,255,0.12); }
+.sidebar-footer > button:last-child:hover { background: var(--sidebar-hover); }
 
 /* Theme toggle */
 .theme-toggle {
@@ -482,20 +525,20 @@ button.unit-card:hover:not(.disabled):not(:disabled) {
   display: flex;
   align-items: center;
   gap: 12px;
-  background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(255,255,255,0.10);
+  background: var(--sidebar-toggle-bg);
+  border: 1px solid var(--sidebar-toggle-border);
   border-radius: 999px;
   padding: 7px 12px 7px 8px;
   cursor: pointer;
   margin-bottom: 4px;
   transition: background .15s ease;
 }
-.theme-toggle:hover { background: rgba(255,255,255,0.09); }
+.theme-toggle:hover { background: var(--sidebar-hover); }
 .theme-toggle-track {
   position: relative;
   width: 46px; height: 24px;
   border-radius: 999px;
-  background: rgba(255,255,255,0.12);
+  background: var(--sidebar-toggle-track);
   flex: 0 0 auto;
   display: block;
   transition: background .2s ease;
@@ -512,16 +555,18 @@ button.unit-card:hover:not(.disabled):not(:disabled) {
 .theme-toggle-track.on .theme-toggle-thumb { transform: translateX(22px); }
 .theme-toggle-icon {
   position: absolute; top: 0; height: 24px; display: flex; align-items: center;
-  font-size: 12px; line-height: 1; color: #FFFFFF;
+  font-size: 12px; line-height: 1; color: var(--sidebar-text-strong);
 }
 .theme-toggle-icon.sun  { left: 6px; opacity: 1; }
 .theme-toggle-icon.moon { right: 6px; opacity: 0.55; }
+/* Track ON = dark mode active → icons sit on the red track, force white. */
+.theme-toggle-track.on .theme-toggle-icon { color: #FFFFFF; }
 .theme-toggle-track.on .theme-toggle-icon.sun  { opacity: 0.55; }
 .theme-toggle-track.on .theme-toggle-icon.moon { opacity: 1; }
 .theme-toggle-label {
   font-family: var(--font-display);
   font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
-  color: rgba(255,255,255,0.78);
+  color: var(--sidebar-text);
 }
 
 /* Floating theme toggle (public pages) */
@@ -532,8 +577,8 @@ button.unit-card:hover:not(.disabled):not(:disabled) {
   border-radius: 50%;
   border: 1px solid var(--glass-border);
   background: var(--glass-strong);
-  -webkit-backdrop-filter: blur(var(--blur));
-  backdrop-filter: blur(var(--blur));
+  -webkit-backdrop-filter: var(--glass-filter);
+  backdrop-filter: var(--glass-filter);
   box-shadow: var(--shadow-card);
   cursor: pointer;
   color: var(--text-primary);
@@ -543,19 +588,25 @@ button.unit-card:hover:not(.disabled):not(:disabled) {
 .theme-fab:hover { transform: translateY(-2px); box-shadow: var(--shadow-elevated); }
 
 /* Unit switcher */
-.unit-switcher { margin-bottom: 14px; padding-bottom: 14px; border-bottom: 1px solid rgba(255,255,255,0.06); }
+.unit-switcher { margin-bottom: 14px; padding-bottom: 14px; border-bottom: 1px solid var(--sidebar-border); }
 .switcher-label {
   font-family: var(--font-display);
   font-size: 10px; text-transform: uppercase; letter-spacing: 0.14em;
-  color: rgba(255,255,255,0.4); margin: 0 0 8px; font-weight: 700;
+  color: var(--sidebar-text-faint); margin: 0 0 8px; font-weight: 700;
 }
 .switcher-item {
-  display: block; padding: 7px 12px; font-size: 13px; color: rgba(255,255,255,0.62);
-  text-decoration: none; border-radius: var(--radius-sm); margin-bottom: 2px;
+  display: block; padding: 8px 16px; font-size: 13px; color: var(--sidebar-text);
+  text-decoration: none; border-radius: var(--radius-pill); margin-bottom: 3px;
   font-family: var(--font-display); font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
 }
-.switcher-item:hover { background: rgba(255,255,255,0.06); color: #FFFFFF; }
-.switcher-item.active { background: var(--red); color: #FFFFFF; }
+.switcher-item:hover { background: var(--sidebar-hover); color: var(--sidebar-text-strong); }
+.switcher-item.active {
+  background: var(--sidebar-active-bg);
+  -webkit-backdrop-filter: var(--glass-filter);
+  backdrop-filter: var(--glass-filter);
+  color: var(--sidebar-active-text);
+  box-shadow: var(--sidebar-active-shadow);
+}
 
 /* Main content */
 .main-content {
@@ -568,8 +619,8 @@ button.unit-card:hover:not(.disabled):not(:disabled) {
 .hamburger {
   display: none;
   background: var(--glass-strong);
-  -webkit-backdrop-filter: blur(var(--blur));
-  backdrop-filter: blur(var(--blur));
+  -webkit-backdrop-filter: var(--glass-filter);
+  backdrop-filter: var(--glass-filter);
   border: 1px solid var(--glass-border);
   font-size: 20px;
   cursor: pointer;
@@ -586,8 +637,8 @@ button.unit-card:hover:not(.disabled):not(:disabled) {
    ============================================================================ */
 .card {
   background: var(--bg-card);
-  -webkit-backdrop-filter: blur(var(--blur));
-  backdrop-filter: blur(var(--blur));
+  -webkit-backdrop-filter: var(--glass-filter);
+  backdrop-filter: var(--glass-filter);
   border: 1px solid var(--glass-border);
   border-radius: var(--radius);
   box-shadow: var(--shadow-card);
@@ -628,8 +679,8 @@ button.unit-card:hover:not(.disabled):not(:disabled) {
 .filter-bar {
   display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 20px; padding: 14px 16px;
   background: var(--glass);
-  -webkit-backdrop-filter: blur(var(--blur));
-  backdrop-filter: blur(var(--blur));
+  -webkit-backdrop-filter: var(--glass-filter);
+  backdrop-filter: var(--glass-filter);
   border: 1px solid var(--glass-border);
   border-radius: var(--radius);
   box-shadow: var(--shadow-card);
@@ -657,8 +708,8 @@ button.unit-card:hover:not(.disabled):not(:disabled) {
 
 .kpi-card {
   background: var(--bg-card);
-  -webkit-backdrop-filter: blur(var(--blur));
-  backdrop-filter: blur(var(--blur));
+  -webkit-backdrop-filter: var(--glass-filter);
+  backdrop-filter: var(--glass-filter);
   border: 1px solid var(--glass-border);
   border-radius: var(--radius);
   padding: 20px 22px;
@@ -678,8 +729,8 @@ button.unit-card:hover:not(.disabled):not(:disabled) {
 
 .chart-card {
   background: var(--bg-card);
-  -webkit-backdrop-filter: blur(var(--blur));
-  backdrop-filter: blur(var(--blur));
+  -webkit-backdrop-filter: var(--glass-filter);
+  backdrop-filter: var(--glass-filter);
   border: 1px solid var(--glass-border);
   border-radius: var(--radius);
   padding: 24px;
@@ -712,8 +763,8 @@ button.unit-card:hover:not(.disabled):not(:disabled) {
 }
 .modal-box {
   background: var(--bg-card);
-  -webkit-backdrop-filter: blur(var(--blur));
-  backdrop-filter: blur(var(--blur));
+  -webkit-backdrop-filter: var(--glass-filter);
+  backdrop-filter: var(--glass-filter);
   border: 1px solid var(--glass-border);
   border-radius: var(--radius);
   box-shadow: var(--shadow-elevated);
@@ -743,8 +794,8 @@ button.unit-card:hover:not(.disabled):not(:disabled) {
    ============================================================================ */
 .table-wrap {
   background: var(--bg-card);
-  -webkit-backdrop-filter: blur(var(--blur));
-  backdrop-filter: blur(var(--blur));
+  -webkit-backdrop-filter: var(--glass-filter);
+  backdrop-filter: var(--glass-filter);
   border: 1px solid var(--glass-border);
   border-radius: var(--radius);
   box-shadow: var(--shadow-card);
@@ -1014,7 +1065,7 @@ tr.row-selected { background: var(--red-soft) !important; }
 /* Sidebar */
 .layout-clinic .sidebar {
   background: var(--bg-sidebar);
-  border-right: 1px solid rgba(255,255,255,0.05);
+  border-right: 1px solid var(--sidebar-border);
   width: 220px;
 }
 .layout-clinic .main-content {
@@ -1022,26 +1073,29 @@ tr.row-selected { background: var(--red-soft) !important; }
 }
 .layout-clinic .menu-item {
   display: block;
-  padding: 10px 20px;
+  padding: 10px 18px;
   color: var(--text-secondary);
   text-decoration: none;
   font-size: 13px;
   font-weight: 500;
   border-left: none;
-  border-radius: 8px;
-  margin: 2px 8px;
-  transition: all 0.15s ease;
+  border-radius: var(--radius-pill);
+  margin: 3px 8px;
+  transition: background .18s ease, color .18s ease, box-shadow .18s ease;
   letter-spacing: 0.3px;
 }
 .layout-clinic .menu-item:hover:not(.disabled) {
-  background: rgba(255,255,255,0.06);
-  color: var(--text-primary);
+  background: var(--sidebar-hover);
+  color: var(--sidebar-text-strong);
 }
 .layout-clinic .menu-item.active {
-  background: var(--red-glow);
-  color: #fff;
-  border-left: 3px solid var(--red);
-  padding-left: 17px;
+  background: var(--sidebar-active-bg);
+  -webkit-backdrop-filter: var(--glass-filter);
+  backdrop-filter: var(--glass-filter);
+  color: var(--sidebar-active-text);
+  border-left: none;
+  padding-left: 18px;
+  box-shadow: var(--sidebar-active-shadow);
 }
 .layout-clinic .menu-divider {
   font-size: 10px;
@@ -1068,21 +1122,24 @@ tr.row-selected { background: var(--red-soft) !important; }
   text-transform: uppercase;
   margin-top: 2px;
 }
-.layout-clinic .sidebar-footer button {
+/* Scoped to the logout button only — must not catch the theme-toggle button. */
+.layout-clinic .sidebar-footer .logout-btn,
+.layout-clinic .sidebar-footer > button:last-child {
   width: 100%;
   margin-top: 12px;
-  padding: 8px;
-  background: rgba(192,57,43,0.1);
-  border: 1px solid rgba(192,57,43,0.2);
-  border-radius: 8px;
+  padding: 9px;
+  background: var(--red-soft);
+  border: 1px solid var(--red-glow);
+  border-radius: var(--radius-pill);
   color: var(--red);
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
   transition: all 0.15s;
 }
-.layout-clinic .sidebar-footer button:hover {
-  background: rgba(192,57,43,0.2);
+.layout-clinic .sidebar-footer .logout-btn:hover,
+.layout-clinic .sidebar-footer > button:last-child:hover {
+  background: var(--red-glow);
 }
 
 /* Page container & headers */
@@ -1397,4 +1454,93 @@ tr.row-selected { background: var(--red-soft) !important; }
   .layout-clinic .sidebar { transform: translateX(-100%); }
   .layout-clinic .sidebar.open { transform: translateX(0); }
   .layout-clinic .page-container { padding: 16px !important; }
+}
+
+/* ============================================================================
+   MODERN LIQUID-GLASS ITERATION
+   Layers a soft top-left sheen (--glass-sheen) over the frosted surfaces so
+   they read as light-catching glass rather than flat panels. The sheen is a
+   background-IMAGE only, layered over each surface's existing background-COLOR
+   token — so themes/colors are untouched, only the highlight is added.
+   Appended last + includes .layout-clinic variants so it wins the cascade over
+   the earlier `background: var(--bg-card)` shorthands (which reset the image).
+   ============================================================================ */
+.card,
+.kpi-card,
+.chart-card,
+.table-wrap,
+.filter-bar,
+.modal-box,
+.login-card,
+.unit-card, button.unit-card,
+.theme-fab,
+.layout-clinic .card,
+.layout-clinic .kpi-card,
+.layout-clinic .modal-box,
+.layout-clinic .modal-content {
+  background-image: var(--glass-sheen);
+  background-repeat: no-repeat;
+}
+
+/* Keep the sheen from tinting interactive hover surfaces oddly — on hover the
+   surface brightens via its own color token and the sheen simply rides along. */
+.kpi-card:hover,
+.unit-card:hover:not(.disabled):not(:disabled),
+button.unit-card:hover:not(.disabled):not(:disabled) {
+  background-image: var(--glass-sheen);
+}
+
+/* Slightly crisper, glassier hairline borders across the frosted surfaces for
+   the modern minimalist edge. */
+.card,
+.kpi-card,
+.chart-card,
+.table-wrap,
+.filter-bar {
+  border-color: var(--glass-border);
+}
+
+/* ============================================================================
+   ROUNDED FLOATING SHELL (desktop) — image-1 style
+   The sidebar + content are inset from the viewport into one rounded frame
+   floating on the page gradient, so nothing runs sharp to the top edge.
+   Sidebar rounds its left corners, content rounds its right corners; they
+   abut (sidebar border-right = the seam) to read as a single rounded card.
+   Scoped to desktop; the mobile block (max-width:768px) keeps the sliding
+   full-bleed sidebar untouched.
+   ============================================================================ */
+@media (min-width: 769px) {
+  /* ONE unified rounded frame floating on the page gradient. The sidebar is
+     in-flow (sticky) and flush-LEFT inside the frame — it is NOT a separate
+     rounded/floating panel; it shares the frame's outer corners and meets the
+     content with a straight seam (its own border-right). */
+  .layout {
+    margin: 14px;
+    min-height: calc(100vh - 28px);
+    border-radius: 28px;
+    background: var(--content-panel-bg);
+    box-shadow: var(--shadow-elevated);
+    align-items: stretch;
+  }
+  .sidebar {
+    position: sticky;
+    top: 14px;
+    left: auto; bottom: auto;
+    align-self: flex-start;
+    height: calc(100vh - 28px);
+    border-radius: 28px 0 0 28px;   /* frame's left corners only */
+    border-right: 1px solid var(--sidebar-border);
+    overflow: hidden;
+    z-index: 10;
+  }
+  .main-content {
+    margin: 0;                       /* flush against the sidebar — no gap */
+    flex: 1;
+    min-width: 0;
+    background: transparent;         /* the frame (.layout) surface shows through */
+    box-shadow: none;
+    border-radius: 0 28px 28px 0;    /* frame's right corners only */
+    min-height: calc(100vh - 28px);
+  }
+  .layout-clinic .main-content { margin-left: 0; }
 }

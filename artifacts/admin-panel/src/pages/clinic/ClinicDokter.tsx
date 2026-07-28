@@ -1311,7 +1311,7 @@ export default function ClinicDokter() {
                   <div>
                     {/* Vital Signs */}
                     {screeningData.vital_signs && Object.values(screeningData.vital_signs).some(v => v) && (
-                      <div style={{ marginBottom: 16, padding: 16, background: '#F0FFF4', borderRadius: 10, border: '1px solid #6EE7B7' }}>
+                      <div style={{ marginBottom: 16, padding: 16, background: '#F0FFF4', borderRadius: 10, border: '1px solid var(--green)' }}>
                         <div style={{ fontWeight: 700, fontSize: 13, color: '#065F46', marginBottom: 12, textTransform: 'uppercase', letterSpacing: 1 }}>Vital Signs</div>
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
                           {screeningData.vital_signs.blood_pressure && <div><span style={{ fontSize: 11, color: '#6B7280' }}>Tekanan Darah</span><div style={{ fontWeight: 600 }}>{screeningData.vital_signs.blood_pressure} mmHg</div></div>}
@@ -1442,7 +1442,7 @@ export default function ClinicDokter() {
                     {/* ── Subjective (terstruktur) ──────────────────────────────────── */}
                     <div style={{ marginBottom: 18 }}>
                       <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                        <span style={{ padding: '2px 10px', borderRadius: 999, background: 'rgba(59,130,246,0.15)', color: '#93C5FD', fontSize: 12, fontWeight: 700 }}>Keluhan Subjektif Pasien</span>
+                        <span style={{ padding: '2px 10px', borderRadius: 999, background: 'rgba(59,130,246,0.15)', color: 'var(--blue)', fontSize: 12, fontWeight: 700 }}>Keluhan Subjektif Pasien</span>
                       </label>
 
                       <EmrBlock label="Data Kesehatan">
@@ -1526,7 +1526,7 @@ export default function ClinicDokter() {
                     {/* ── Objective (terstruktur) — Tahap A ─────────────────────────── */}
                     <div style={{ marginBottom: 18 }}>
                       <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                        <span style={{ padding: '2px 10px', borderRadius: 999, background: 'rgba(5,150,105,0.15)', color: '#34D399', fontSize: 12, fontWeight: 700 }}>Temuan Pemeriksaan Fisik</span>
+                        <span style={{ padding: '2px 10px', borderRadius: 999, background: 'rgba(5,150,105,0.15)', color: 'var(--green)', fontSize: 12, fontWeight: 700 }}>Temuan Pemeriksaan Fisik</span>
                       </label>
 
                       {obj.legacy_text && (
@@ -1775,7 +1775,7 @@ export default function ClinicDokter() {
                         ke bawah Diagnosis, markup & perilaku Plan tak berubah) */}
                     <div style={{ marginBottom: 14 }}>
                       <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                        <span style={{ padding: '2px 10px', borderRadius: 999, background: 'rgba(245,158,11,0.15)', color: '#FCD34D', fontSize: 12, fontWeight: 700 }}>Clinical Impression / Assessment</span>
+                        <span style={{ padding: '2px 10px', borderRadius: 999, background: 'rgba(245,158,11,0.15)', color: 'var(--amber)', fontSize: 12, fontWeight: 700 }}>Clinical Impression / Assessment</span>
                       </label>
                       <textarea
                         value={assessment.assessment}
