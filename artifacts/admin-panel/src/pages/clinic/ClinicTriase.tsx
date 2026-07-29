@@ -515,12 +515,34 @@ function ScreeningTab({ visit, patient, onToast, onSaved, isLocked, recordId, lo
           physical_activity_type: data.physical_activity_type ?? '',
         })
       } else {
+        // Layanan SEGAR langsung dari clinic_visit_services — prop defaultServices
+        // adalah snapshot daftar parent saat modal dibuka, bisa basi kalau layanan
+        // ditambah setelahnya (insiden VST-MS5LB1FW). Prop hanya fallback.
+        let freshServices: string[] = defaultServices ?? []
+        try {
+          const { data: svcRows } = await supabase
+            .from('clinic_visit_services')
+            .select('service_name')
+            .eq('visit_id', visit.id)
+          const names = ((svcRows ?? []) as { service_name: string }[])
+            .map(r => r.service_name).filter(Boolean)
+          if (names.length > 0) freshServices = names
+        } catch { /* fallback ke prop snapshot */ }
+        if (!active) return
+
         const draft = localStorage.getItem(draftKey)
         if (draft) {
-          try { setForm({ ...emptyScreening(), ...JSON.parse(draft) }) } catch { /* ignore */ }
-        } else if (defaultServices && defaultServices.length > 0) {
-          // Pre-fill layanan dari visit.services untuk screening baru.
-          setForm({ ...emptyScreening(), selected_services: defaultServices })
+          try {
+            const parsed = JSON.parse(draft)
+            // Draft TIDAK menang mutlak: isian lain dipertahankan, tapi layanan visit
+            // yang belum ada di draft ikut tercentang (default true — bagian visit sekarang).
+            const draftSvcs: string[] = Array.isArray(parsed.selected_services) ? parsed.selected_services : []
+            const merged = [...draftSvcs, ...freshServices.filter(s => !draftSvcs.includes(s))]
+            setForm({ ...emptyScreening(), ...parsed, selected_services: merged })
+          } catch { /* ignore */ }
+        } else if (freshServices.length > 0) {
+          // Pre-fill layanan dari clinic_visit_services untuk screening baru.
+          setForm({ ...emptyScreening(), selected_services: freshServices })
         }
       }
 
