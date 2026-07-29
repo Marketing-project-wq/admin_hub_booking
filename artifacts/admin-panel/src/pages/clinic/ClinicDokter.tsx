@@ -1220,7 +1220,7 @@ export default function ClinicDokter() {
                     marginBottom: -2, textTransform: 'capitalize',
                   }}
                 >
-                  {t === 'screening' ? 'Screening' : t === 'consent' ? 'Consent' : t === 'assessment' ? 'Assessment' : t === 'riwayat' ? 'Riwayat' : 'Scan Postur'}
+                  {t === 'screening' ? 'Screening' : t === 'consent' ? 'Consent' : t === 'assessment' ? 'Assessment Dokter' : t === 'riwayat' ? 'Riwayat' : 'Scan Postur'}
                 </button>
               ))}
             </div>
