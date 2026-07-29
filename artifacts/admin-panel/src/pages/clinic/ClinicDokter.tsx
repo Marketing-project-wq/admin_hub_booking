@@ -10,17 +10,6 @@ import { useIsMobile } from '../../hooks/use-mobile'
 
 // ─── Subjective (EMR) ────────────────────────────────────────────────────────
 // Daftar tetap sengaja didefinisikan di kode (bukan di database) supaya gampang diedit.
-const ILLNESS_HISTORY_OPTIONS = [
-  'Hipertensi', 'Diabetes', 'Penyakit Jantung', 'Asma', 'Osteoarthritis',
-  'Rheumatoid Arthritis', 'Osteoporosis', 'Riwayat Cedera Olahraga',
-  'Riwayat Operasi Ortopedi', 'Riwayat Patah Tulang', 'Gangguan Ginjal',
-  'Gangguan Tiroid', 'Tidak Ada',
-]
-const OTHER_ALLERGY_OPTIONS = [
-  'Alergi Makanan', 'Alergi Debu', 'Alergi Dingin',
-  'Alergi Lateks/Getah', 'Alergi Serbuk Sari', 'Tidak Ada',
-]
-const BLOOD_TYPE_OPTIONS = ['A', 'B', 'AB', 'O']
 const ADDITIONAL_NOTE_TYPES = [
   { value: 'psikologis', label: 'Psikologis' },
   { value: 'ekonomi', label: 'Ekonomi' },
@@ -29,59 +18,34 @@ const ADDITIONAL_NOTE_TYPES = [
 
 type AdditionalNoteType = (typeof ADDITIONAL_NOTE_TYPES)[number]['value']
 
-interface SubjectiveGeneral {
-  blood_type: string
-  is_smoker: boolean
-  is_pregnant: boolean
-  is_lactating: boolean
-}
 interface SubjectiveAdditionalNote {
   type: AdditionalNoteType
   value: string
 }
+/** Data kesehatan (gol. darah, merokok, riwayat penyakit, alergi) kini diisi di
+ *  Screening (ClinicTriase) — Subjective dokter tinggal keluhan + isian tambahan. */
 interface SubjectiveData {
-  general: SubjectiveGeneral
   chief_complaint: string
-  illness_history: string[]
-  illness_other: string
-  illness_notes: string
-  drug_allergies: string
-  other_allergies: string[]
-  allergy_other: string
-  allergy_notes: string
   additional_notes: SubjectiveAdditionalNote[]
 }
 
-const emptySubjective = (): SubjectiveData => ({
-  general: { blood_type: '', is_smoker: false, is_pregnant: false, is_lactating: false },
-  chief_complaint: '',
-  illness_history: [], illness_other: '', illness_notes: '',
-  drug_allergies: '',
-  other_allergies: [], allergy_other: '', allergy_notes: '',
-  additional_notes: [],
-})
+const emptySubjective = (): SubjectiveData => ({ chief_complaint: '', additional_notes: [] })
 
 /**
  * Normalisasi kolom `subjective` jadi SubjectiveData. Tahan tiga bentuk:
  * jsonb terstruktur (baru), hasil migrasi legacy ({chief_complaint, legacy_migrated}),
- * dan plain text (kalau migrasi SQL belum dijalankan).
+ * dan plain text (kalau migrasi SQL belum dijalankan). Baris lama bisa masih
+ * membawa field kesehatan (general/illness/alergi) yang sudah pindah ke
+ * Screening — field itu diabaikan, bukan error.
  */
 function parseSubjective(raw: unknown): SubjectiveData {
   const base = emptySubjective()
   if (raw == null) return base
   if (typeof raw === 'string') return { ...base, chief_complaint: raw }
   if (typeof raw !== 'object') return base
-  const r = raw as Partial<SubjectiveData> & { general?: Partial<SubjectiveGeneral> }
+  const r = raw as Partial<SubjectiveData>
   return {
-    general: { ...base.general, ...(r.general ?? {}) },
     chief_complaint: r.chief_complaint ?? '',
-    illness_history: Array.isArray(r.illness_history) ? r.illness_history : [],
-    illness_other: r.illness_other ?? '',
-    illness_notes: r.illness_notes ?? '',
-    drug_allergies: r.drug_allergies ?? '',
-    other_allergies: Array.isArray(r.other_allergies) ? r.other_allergies : [],
-    allergy_other: r.allergy_other ?? '',
-    allergy_notes: r.allergy_notes ?? '',
     additional_notes: Array.isArray(r.additional_notes) ? r.additional_notes : [],
   }
 }
@@ -154,15 +118,6 @@ interface ObjectiveData {
 const BODY_IMAGE_EXTS = ['png', 'jpg', 'jpeg'] as const
 
 const newPointId = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4)
-/** Kolom `vital_signs` TERPISAH dari `objective` (bukan bagian dari jsonb objective). */
-interface VitalSigns {
-  temperature: number | null       // celcius
-  systolic: number | null          // mmHg
-  diastolic: number | null         // mmHg
-  pulse: number | null             // /menit
-  respiratory_rate: number | null  // /menit
-}
-
 const emptyPainAssessment = (): PainAssessmentData => ({
   nrs_score: null, locations: [], cause: '', duration: '', frequency: null,
 })
@@ -199,10 +154,6 @@ function parsePainAssessment(raw: unknown): PainAssessmentData {
     frequency: freqValid ? (r.frequency as PainFrequency) : null,
   }
 }
-const emptyVitalSigns = (): VitalSigns => ({
-  temperature: null, systolic: null, diastolic: null, pulse: null, respiratory_rate: null,
-})
-
 /** Normalisasi kolom `objective`: jsonb baru, hasil migrasi legacy, atau plain text lama. */
 function parseObjective(raw: unknown): ObjectiveData {
   const base = emptyObjective()
@@ -237,22 +188,6 @@ function parseObjective(raw: unknown): ObjectiveData {
   }
 }
 
-/** Normalisasi kolom `vital_signs` (kolom tersendiri di clinic_assessments). */
-function parseVitalSigns(raw: unknown): VitalSigns {
-  const base = emptyVitalSigns()
-  if (raw == null || typeof raw !== 'object') return base
-  const r = raw as Record<string, unknown>
-  const num = (v: unknown): number | null =>
-    v === null || v === undefined || v === '' || Number.isNaN(Number(v)) ? null : Number(v)
-  return {
-    temperature: num(r.temperature),
-    systolic: num(r.systolic),
-    diastolic: num(r.diastolic),
-    pulse: num(r.pulse),
-    respiratory_rate: num(r.respiratory_rate),
-  }
-}
-
 /** Warna skala nyeri — replikasi persis intensityColor() di ClinicTriase.tsx:470. */
 function intensityColor(v: number): string {
   if (v <= 2) return '#16A34A'
@@ -278,30 +213,6 @@ function EmrBlock({ label, children }: { label: React.ReactNode; children: React
       <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: 0.3, marginBottom: 8 }}>{label}</div>
       {children}
     </div>
-  )
-}
-
-/** Checkbox group — pola & styling sama persis dgn MultiCheck di ClinicTriase.tsx. */
-function MultiCheck({ options, value, onChange }: { options: string[]; value: string[]; onChange: (v: string[]) => void }) {
-  const toggle = (opt: string) => onChange(value.includes(opt) ? value.filter(o => o !== opt) : [...value, opt])
-  return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
-      {options.map(opt => (
-        <label key={opt} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
-          <input type="checkbox" checked={value.includes(opt)} onChange={() => toggle(opt)} style={{ width: 'auto', accentColor: 'var(--red)' }} />
-          {opt}
-        </label>
-      ))}
-    </div>
-  )
-}
-
-function CheckRow({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
-      <input type="checkbox" checked={checked} onChange={e => onChange(e.target.checked)} style={{ width: 'auto', accentColor: 'var(--red)' }} />
-      {label}
-    </label>
   )
 }
 
@@ -511,7 +422,6 @@ function parsePlan(raw: unknown): PlanData {
 interface AssessmentForm {
   subjective: SubjectiveData
   objective: ObjectiveData
-  vital_signs: VitalSigns
   assessment: string
   plan: PlanData
   diagnosis: DiagnosisData
@@ -626,7 +536,6 @@ async function fetchAssessment(visitId: string): Promise<AssessmentRecord | null
     form: {
       subjective: parseSubjective(data.subjective),
       objective: parseObjective(data.objective),
-      vital_signs: parseVitalSigns(data.vital_signs),
       assessment: data.assessment ?? '',
       plan: parsePlan(data.plan),
       diagnosis: parseDiagnosis(data.diagnosis),
@@ -902,7 +811,7 @@ export default function ClinicDokter() {
   const [medicalHistory, setMedicalHistory] = useState<MedicalHistory[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
   const [assessment, setAssessment] = useState<AssessmentForm>({
-    subjective: emptySubjective(), objective: emptyObjective(), vital_signs: emptyVitalSigns(),
+    subjective: emptySubjective(), objective: emptyObjective(),
     assessment: '', plan: emptyPlan(), diagnosis: emptyDiagnosis(), follow_up_date: '', notes: '', handled_by: '',
   })
   const [loadingAssessment, setLoadingAssessment] = useState(false)
@@ -1033,7 +942,7 @@ export default function ClinicDokter() {
         setAssessmentLockedBy(existingAssessment.lockedBy)
       } else {
         setAssessment({
-          subjective: emptySubjective(), objective: emptyObjective(), vital_signs: emptyVitalSigns(),
+          subjective: emptySubjective(), objective: emptyObjective(),
           assessment: '', plan: emptyPlan(), diagnosis: emptyDiagnosis(), follow_up_date: '', notes: '',
           handled_by: user?.full_name ?? '',
         })
@@ -1055,8 +964,6 @@ export default function ClinicDokter() {
   const subj = assessment.subjective
   const patchSubj = (patch: Partial<SubjectiveData>) =>
     setAssessment(p => ({ ...p, subjective: { ...p.subjective, ...patch } }))
-  const patchGeneral = (patch: Partial<SubjectiveGeneral>) =>
-    setAssessment(p => ({ ...p, subjective: { ...p.subjective, general: { ...p.subjective.general, ...patch } } }))
   const addNote = () =>
     setAssessment(p => ({ ...p, subjective: { ...p.subjective, additional_notes: [...p.subjective.additional_notes, { type: newNoteType, value: '' }] } }))
   const updateNote = (i: number, value: string) =>
@@ -1066,11 +973,8 @@ export default function ClinicDokter() {
 
   // ── Objective helpers ─────────────────────────────────────────────────────
   const obj = assessment.objective
-  const vitals = assessment.vital_signs
   const patchObj = (patch: Partial<ObjectiveData>) =>
     setAssessment(p => ({ ...p, objective: { ...p.objective, ...patch } }))
-  const patchVital = (k: keyof VitalSigns, v: string) =>
-    setAssessment(p => ({ ...p, vital_signs: { ...p.vital_signs, [k]: v === '' ? null : Number(v) } }))
   const pain = obj.pain_assessment
   const patchPain = (patch: Partial<PainAssessmentData>) =>
     setAssessment(p => ({ ...p, objective: { ...p.objective, pain_assessment: { ...p.objective.pain_assessment, ...patch } } }))
@@ -1468,23 +1372,6 @@ export default function ClinicDokter() {
                         <span style={{ padding: '2px 10px', borderRadius: 999, background: 'rgba(59,130,246,0.15)', color: 'var(--blue)', fontSize: 12, fontWeight: 700 }}>Keluhan Subjektif Pasien</span>
                       </label>
 
-                      <EmrBlock label="Data Kesehatan">
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 12, alignItems: 'start' }}>
-                          <div>
-                            <label style={emrSubLabel}>Golongan Darah</label>
-                            <select value={subj.general.blood_type} onChange={e => patchGeneral({ blood_type: e.target.value })} style={emrField}>
-                              <option value="">— Pilih —</option>
-                              {BLOOD_TYPE_OPTIONS.map(b => <option key={b} value={b}>{b}</option>)}
-                            </select>
-                          </div>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 22 }}>
-                            <CheckRow label="Merokok" checked={subj.general.is_smoker} onChange={v => patchGeneral({ is_smoker: v })} />
-                            <CheckRow label="Hamil" checked={subj.general.is_pregnant} onChange={v => patchGeneral({ is_pregnant: v })} />
-                            <CheckRow label="Menyusui" checked={subj.general.is_lactating} onChange={v => patchGeneral({ is_lactating: v })} />
-                          </div>
-                        </div>
-                      </EmrBlock>
-
                       <EmrBlock label={<>Keluhan Utama <span style={{ color: 'var(--red)' }}>*</span></>}>
                         <textarea
                           value={subj.chief_complaint}
@@ -1493,34 +1380,6 @@ export default function ClinicDokter() {
                           rows={3}
                           style={{ ...emrField, resize: 'vertical' }}
                         />
-                      </EmrBlock>
-
-                      <EmrBlock label="Riwayat Penyakit">
-                        <MultiCheck options={ILLNESS_HISTORY_OPTIONS} value={subj.illness_history} onChange={v => patchSubj({ illness_history: v })} />
-                        <div style={{ marginTop: 10 }}>
-                          <label style={emrSubLabel}>Lainnya</label>
-                          <input type="text" value={subj.illness_other} onChange={e => patchSubj({ illness_other: e.target.value })} placeholder="Riwayat penyakit lain..." style={emrField} />
-                        </div>
-                        <div style={{ marginTop: 10 }}>
-                          <label style={emrSubLabel}>Catatan</label>
-                          <textarea value={subj.illness_notes} onChange={e => patchSubj({ illness_notes: e.target.value })} rows={2} placeholder="Catatan riwayat penyakit..." style={{ ...emrField, resize: 'vertical' }} />
-                        </div>
-                      </EmrBlock>
-
-                      <EmrBlock label="Riwayat Alergi Obat">
-                        <textarea value={subj.drug_allergies} onChange={e => patchSubj({ drug_allergies: e.target.value })} rows={2} placeholder="Tulis alergi obat yang diketahui..." style={{ ...emrField, resize: 'vertical' }} />
-                      </EmrBlock>
-
-                      <EmrBlock label="Riwayat Alergi Lainnya">
-                        <MultiCheck options={OTHER_ALLERGY_OPTIONS} value={subj.other_allergies} onChange={v => patchSubj({ other_allergies: v })} />
-                        <div style={{ marginTop: 10 }}>
-                          <label style={emrSubLabel}>Lainnya</label>
-                          <input type="text" value={subj.allergy_other} onChange={e => patchSubj({ allergy_other: e.target.value })} placeholder="Alergi lain..." style={emrField} />
-                        </div>
-                        <div style={{ marginTop: 10 }}>
-                          <label style={emrSubLabel}>Catatan</label>
-                          <textarea value={subj.allergy_notes} onChange={e => patchSubj({ allergy_notes: e.target.value })} rows={2} placeholder="Catatan alergi..." style={{ ...emrField, resize: 'vertical' }} />
-                        </div>
                       </EmrBlock>
 
                       <EmrBlock label="Isian Tambahan">
@@ -1570,26 +1429,6 @@ export default function ClinicDokter() {
                         </div>
                       </EmrBlock>
 
-                      <EmrBlock label="Vital Signs">
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 10 }}>
-                          {([
-                            { k: 'temperature', label: 'Suhu', unit: 'celcius', step: '0.1' },
-                            { k: 'systolic', label: 'Sistole', unit: 'mmHg', step: '1' },
-                            { k: 'diastolic', label: 'Diastole', unit: 'mmHg', step: '1' },
-                            { k: 'pulse', label: 'Nadi', unit: '/menit', step: '1' },
-                            { k: 'respiratory_rate', label: 'Frekuensi Pernafasan', unit: '/menit', step: '1' },
-                          ] as const).map(({ k, label, unit, step }) => (
-                            <div key={k}>
-                              <label style={emrSubLabel}>{label}</label>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                <input type="number" step={step} value={vitals[k] ?? ''} onChange={e => patchVital(k, e.target.value)} placeholder="-" style={{ ...emrField, flex: 1 }} />
-                                <span style={{ fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap', minWidth: 52 }}>{unit}</span>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </EmrBlock>
-
                       <EmrBlock label="Pemeriksaan Fisik">
                         <BodyPartStatusList
                           parts={SPORTS_BODY_PARTS}
@@ -1601,7 +1440,7 @@ export default function ClinicDokter() {
 
                       {/* ── Pain Assessment — Tahap B ──────────────────────────────── */}
                       <EmrBlock label="Pain Assessment">
-                        {/* NRS Score — pola D.4 Intensitas Nyeri (ClinicTriase:684-696) */}
+                        {/* NRS Score — pola E.4 Intensitas Nyeri di section E. MSK Screening (ClinicTriase) */}
                         <label style={emrSubLabel}>NRS Score (0–10)</label>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
                           <input type="range" min={0} max={10} value={pain.nrs_score ?? 0}

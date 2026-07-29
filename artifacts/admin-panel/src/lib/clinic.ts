@@ -1431,6 +1431,8 @@ export interface ClinicScreening {
   msk_function: string[]
   msk_additional: string[]
   msk_history: string[]
+  blood_type: string | null
+  is_smoker: boolean | null
   health_cardiovascular: string[]
   health_metabolic: string[]
   health_respiratory: string[]
@@ -1439,6 +1441,7 @@ export interface ClinicScreening {
   health_female: string[]
   health_medications: string | null
   health_allergies: string[]
+  drug_allergy_detail: string | null
   health_surgeries: string | null
   physical_activity_level: string | null
   physical_activity_type: string | null

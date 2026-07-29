@@ -60,13 +60,14 @@ const MSK_FUNCTION = ['Bisa gerakan penuh tanpa keluhan', 'Bisa gerakan penuh de
 const MSK_ADDITIONAL = ['Bengkak/memar', 'Panas/kemerahan', 'Bunyi klik/pop', 'Sendi terkunci', 'Tidak ada gejala tambahan']
 const MSK_HISTORY = ['Belum pernah diobati', 'Pernah ke dokter umum', 'Dokter spesialis', 'Fisioterapi di tempat lain', 'Pernah MRI/X-Ray/USG', 'Pernah operasi']
 
-const HEALTH_CARDIOVASCULAR = ['Hipertensi', 'Penyakit jantung koroner', 'Gagal jantung', 'Aritmia/gangguan irama jantung', 'Riwayat serangan jantung', 'Riwayat stroke', 'Kolesterol tinggi', 'Tidak ada']
-const HEALTH_METABOLIC = ['Diabetes tipe 1', 'Diabetes tipe 2', 'Gangguan tiroid', 'Obesitas', 'Asam urat', 'Tidak ada']
-const HEALTH_RESPIRATORY = ['Asma', 'PPOK', 'Sesak napas saat aktivitas', 'Epilepsi/kejang', 'Vertigo', 'Migrain', 'Tidak ada']
-const HEALTH_MUSCULOSKELETAL = ['Osteoporosis', 'Osteoarthritis', 'Rheumatoid arthritis', 'Hernia/HNP', 'Skoliosis', 'Cedera ligamen/otot kronis', 'Tidak ada']
-const HEALTH_SPECIAL = ['Pacemaker/implan logam', 'Kanker/sedang kemoterapi', 'Gangguan pembekuan darah', 'Penyakit kulit di area treatment', 'Baru selesai operasi (< 3 bulan)', 'Tidak ada']
+const HEALTH_CARDIOVASCULAR = ['Hipertensi', 'Penyakit jantung koroner', 'Gagal jantung', 'Aritmia/gangguan irama jantung', 'Riwayat serangan jantung', 'Riwayat stroke', 'Kolesterol tinggi', 'Tidak Tahu', 'Tidak ada']
+const HEALTH_METABOLIC = ['Diabetes tipe 1', 'Diabetes tipe 2', 'Gangguan tiroid', 'Obesitas', 'Asam urat', 'Tidak Tahu', 'Tidak ada']
+const HEALTH_RESPIRATORY = ['Asma', 'PPOK', 'Sesak napas saat aktivitas', 'Epilepsi/kejang', 'Vertigo', 'Migrain', 'Tidak Tahu', 'Tidak ada']
+const HEALTH_MUSCULOSKELETAL = ['Osteoporosis', 'Osteoarthritis', 'Rheumatoid arthritis', 'Hernia/HNP', 'Skoliosis', 'Cedera ligamen/otot kronis', 'Riwayat Cedera Olahraga', 'Riwayat Operasi Ortopedi', 'Riwayat Patah Tulang', 'Tidak Tahu', 'Tidak ada']
+const HEALTH_SPECIAL = ['Pacemaker/implan logam', 'Kanker/sedang kemoterapi', 'Gangguan pembekuan darah', 'Penyakit kulit di area treatment', 'Baru selesai operasi (< 3 bulan)', 'Gangguan Ginjal', 'Tidak Tahu', 'Tidak ada']
 const HEALTH_FEMALE = ['Sedang hamil', 'Sedang menstruasi', 'Menyusui', 'Menggunakan KB hormonal', 'Tidak ada']
-const HEALTH_ALLERGIES = ['Obat-obatan', 'Makanan', 'Latex', 'Plester/perekat', 'Antiseptik', 'Tidak ada']
+const HEALTH_ALLERGIES = ['Obat-obatan', 'Makanan', 'Latex', 'Plester/perekat', 'Antiseptik', 'Debu', 'Dingin', 'Serbuk Sari', 'Tidak ada']
+const BLOOD_TYPES = ['A', 'B', 'AB', 'O', 'Tidak tahu']
 const ACTIVITY_LEVELS = ['Rendah', 'Sedang', 'Tinggi', 'Atlet']
 
 const CONSENT_TITLE: Record<string, string> = {
@@ -445,6 +446,8 @@ interface ScreeningForm {
   msk_function: string[]
   msk_additional: string[]
   msk_history: string[]
+  blood_type: string
+  is_smoker: boolean
   health_cardiovascular: string[]
   health_metabolic: string[]
   health_respiratory: string[]
@@ -453,6 +456,7 @@ interface ScreeningForm {
   health_female: string[]
   health_medications: string
   health_allergies: string[]
+  drug_allergy_detail: string
   health_surgeries: string
   physical_activity_level: string
   physical_activity_type: string
@@ -462,8 +466,9 @@ const emptyScreening = (): ScreeningForm => ({
   selected_services: [], chief_complaint: '', vital_signs: {}, par_q: {},
   msk_location: [], msk_character: [], msk_timing: [], msk_intensity: null,
   msk_function: [], msk_additional: [], msk_history: [],
+  blood_type: '', is_smoker: false,
   health_cardiovascular: [], health_metabolic: [], health_respiratory: [], health_musculoskeletal: [],
-  health_special: [], health_female: [], health_medications: '', health_allergies: [], health_surgeries: '',
+  health_special: [], health_female: [], health_medications: '', health_allergies: [], drug_allergy_detail: '', health_surgeries: '',
   physical_activity_level: '', physical_activity_type: '',
 })
 
@@ -506,10 +511,12 @@ function ScreeningTab({ visit, patient, onToast, onSaved, isLocked, recordId, lo
           msk_timing: data.msk_timing ?? [], msk_intensity: data.msk_intensity ?? null,
           msk_function: data.msk_function ?? [], msk_additional: data.msk_additional ?? [],
           msk_history: data.msk_history ?? [],
+          blood_type: data.blood_type ?? '', is_smoker: data.is_smoker ?? false,
           health_cardiovascular: data.health_cardiovascular ?? [], health_metabolic: data.health_metabolic ?? [],
           health_respiratory: data.health_respiratory ?? [], health_musculoskeletal: data.health_musculoskeletal ?? [],
           health_special: data.health_special ?? [], health_female: data.health_female ?? [],
           health_medications: data.health_medications ?? '', health_allergies: data.health_allergies ?? [],
+          drug_allergy_detail: data.drug_allergy_detail ?? '',
           health_surgeries: data.health_surgeries ?? '',
           physical_activity_level: data.physical_activity_level ?? '',
           physical_activity_type: data.physical_activity_type ?? '',
@@ -596,10 +603,12 @@ function ScreeningTab({ visit, patient, onToast, onSaved, isLocked, recordId, lo
         msk_location: form.msk_location, msk_character: form.msk_character, msk_timing: form.msk_timing,
         msk_intensity: form.msk_intensity, msk_function: form.msk_function,
         msk_additional: form.msk_additional, msk_history: form.msk_history,
+        blood_type: form.blood_type || null, is_smoker: form.is_smoker,
         health_cardiovascular: form.health_cardiovascular, health_metabolic: form.health_metabolic,
         health_respiratory: form.health_respiratory, health_musculoskeletal: form.health_musculoskeletal,
         health_special: form.health_special, health_female: form.health_female,
         health_medications: form.health_medications || null, health_allergies: form.health_allergies,
+        drug_allergy_detail: form.drug_allergy_detail || null,
         health_surgeries: form.health_surgeries || null,
         physical_activity_level: form.physical_activity_level || null,
         physical_activity_type: form.physical_activity_type || null,
@@ -698,13 +707,63 @@ function ScreeningTab({ visit, patient, onToast, onSaved, isLocked, recordId, lo
         )}
       </Collapsible>
 
-      {/* Section D — MSK */}
+      {/* Section D — Riwayat Kesehatan */}
+      {showHealth && (
+        <Collapsible title="D. Riwayat Kesehatan" defaultOpen>
+          <Sub label="Golongan Darah">
+            <select value={form.blood_type} onChange={e => set('blood_type', e.target.value)} style={{ width: 'auto', minWidth: 180 }}>
+              <option value="">— Pilih —</option>
+              {BLOOD_TYPES.map(b => <option key={b} value={b}>{b}</option>)}
+            </select>
+          </Sub>
+          <Sub label="Kebiasaan Merokok">
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
+              <input type="checkbox" checked={form.is_smoker} onChange={e => set('is_smoker', e.target.checked)} style={{ width: 'auto', accentColor: 'var(--red)' }} />
+              Merokok
+            </label>
+          </Sub>
+          <Sub label="D.1 Kardiovaskular"><ChipSelect options={HEALTH_CARDIOVASCULAR} value={form.health_cardiovascular} onChange={v => set('health_cardiovascular', v)} /></Sub>
+          <Sub label="D.2 Metabolik"><ChipSelect options={HEALTH_METABOLIC} value={form.health_metabolic} onChange={v => set('health_metabolic', v)} /></Sub>
+          <Sub label="D.3 Pernapasan & Neurologi"><ChipSelect options={HEALTH_RESPIRATORY} value={form.health_respiratory} onChange={v => set('health_respiratory', v)} /></Sub>
+          <Sub label="D.4 Muskuloskeletal"><ChipSelect options={HEALTH_MUSCULOSKELETAL} value={form.health_musculoskeletal} onChange={v => set('health_musculoskeletal', v)} /></Sub>
+          <Sub label="D.5 Kondisi Khusus"><ChipSelect options={HEALTH_SPECIAL} value={form.health_special} onChange={v => set('health_special', v)} /></Sub>
+          {patient?.gender === 'female' && (
+            <Sub label="D.6 Khusus Perempuan"><ChipSelect options={HEALTH_FEMALE} value={form.health_female} onChange={v => set('health_female', v)} /></Sub>
+          )}
+          <Sub label="D.7 Obat yang Dikonsumsi">
+            <textarea value={form.health_medications} onChange={e => set('health_medications', e.target.value)} rows={2} style={{ width: '100%' }} />
+          </Sub>
+          <Sub label="D.8 Alergi">
+            <ChipSelect options={HEALTH_ALLERGIES} value={form.health_allergies} onChange={v => set('health_allergies', v)} />
+            <div style={{ marginTop: 10 }}>
+              <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>Detail Alergi Obat (nama obat, jika ada)</label>
+              <textarea value={form.drug_allergy_detail} onChange={e => set('drug_allergy_detail', e.target.value)} rows={2} style={{ width: '100%' }} />
+            </div>
+          </Sub>
+          <Sub label="D.9 Riwayat Operasi">
+            <textarea value={form.health_surgeries} onChange={e => set('health_surgeries', e.target.value)} rows={2} style={{ width: '100%' }} />
+          </Sub>
+          <Sub label="D.10 Tingkat Aktivitas Fisik">
+            <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 10 }}>
+              {ACTIVITY_LEVELS.map(lvl => (
+                <label key={lvl} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}>
+                  <input type="radio" name="activity_level" checked={form.physical_activity_level === lvl} onChange={() => set('physical_activity_level', lvl)} style={{ width: 'auto', accentColor: 'var(--red)' }} />
+                  {lvl}
+                </label>
+              ))}
+            </div>
+            <textarea placeholder="Jenis olahraga / aktivitas" value={form.physical_activity_type} onChange={e => set('physical_activity_type', e.target.value)} rows={2} style={{ width: '100%' }} />
+          </Sub>
+        </Collapsible>
+      )}
+
+      {/* Section E — MSK */}
       {showMSK && (
-        <Collapsible title="D. MSK Screening" defaultOpen>
-          <Sub label="D.1 Lokasi Nyeri"><ChipSelect options={MSK_LOCATION} value={form.msk_location} onChange={v => set('msk_location', v)} /></Sub>
-          <Sub label="D.2 Karakter Nyeri"><ChipSelect options={MSK_CHARACTER} value={form.msk_character} onChange={v => set('msk_character', v)} /></Sub>
-          <Sub label="D.3 Waktu Timbul"><ChipSelect options={MSK_TIMING} value={form.msk_timing} onChange={v => set('msk_timing', v)} /></Sub>
-          <Sub label="D.4 Intensitas Nyeri (0–10)">
+        <Collapsible title="E. MSK Screening">
+          <Sub label="E.1 Lokasi Nyeri"><ChipSelect options={MSK_LOCATION} value={form.msk_location} onChange={v => set('msk_location', v)} /></Sub>
+          <Sub label="E.2 Karakter Nyeri"><ChipSelect options={MSK_CHARACTER} value={form.msk_character} onChange={v => set('msk_character', v)} /></Sub>
+          <Sub label="E.3 Waktu Timbul"><ChipSelect options={MSK_TIMING} value={form.msk_timing} onChange={v => set('msk_timing', v)} /></Sub>
+          <Sub label="E.4 Intensitas Nyeri (0–10)">
             <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
               <input type="range" min={0} max={10} value={intensity ?? 0} onChange={e => set('msk_intensity', Number(e.target.value))}
                 style={{ flex: 1, accentColor: intensity != null ? intensityColor(intensity) : '#9CA3AF' }} />
@@ -717,43 +776,9 @@ function ScreeningTab({ visit, patient, onToast, onSaved, isLocked, recordId, lo
               </div>
             )}
           </Sub>
-          <Sub label="D.5 Fungsi & Mobilitas"><ChipSelect options={MSK_FUNCTION} value={form.msk_function} onChange={v => set('msk_function', v)} /></Sub>
-          <Sub label="D.6 Gejala Tambahan"><ChipSelect options={MSK_ADDITIONAL} value={form.msk_additional} onChange={v => set('msk_additional', v)} /></Sub>
-          <Sub label="D.7 Riwayat Treatment"><ChipSelect options={MSK_HISTORY} value={form.msk_history} onChange={v => set('msk_history', v)} /></Sub>
-        </Collapsible>
-      )}
-
-      {/* Section E — Riwayat Kesehatan */}
-      {showHealth && (
-        <Collapsible title="E. Riwayat Kesehatan">
-          <Sub label="E.1 Kardiovaskular"><ChipSelect options={HEALTH_CARDIOVASCULAR} value={form.health_cardiovascular} onChange={v => set('health_cardiovascular', v)} /></Sub>
-          <Sub label="E.2 Metabolik"><ChipSelect options={HEALTH_METABOLIC} value={form.health_metabolic} onChange={v => set('health_metabolic', v)} /></Sub>
-          <Sub label="E.3 Pernapasan & Neurologi"><ChipSelect options={HEALTH_RESPIRATORY} value={form.health_respiratory} onChange={v => set('health_respiratory', v)} /></Sub>
-          <Sub label="E.4 Muskuloskeletal"><ChipSelect options={HEALTH_MUSCULOSKELETAL} value={form.health_musculoskeletal} onChange={v => set('health_musculoskeletal', v)} /></Sub>
-          <Sub label="E.5 Kondisi Khusus"><ChipSelect options={HEALTH_SPECIAL} value={form.health_special} onChange={v => set('health_special', v)} /></Sub>
-          {patient?.gender === 'female' && (
-            <Sub label="E.6 Khusus Perempuan"><ChipSelect options={HEALTH_FEMALE} value={form.health_female} onChange={v => set('health_female', v)} /></Sub>
-          )}
-          <Sub label="E.7 Obat yang Dikonsumsi">
-            <textarea value={form.health_medications} onChange={e => set('health_medications', e.target.value)} rows={2} style={{ width: '100%' }} />
-          </Sub>
-          <Sub label="E.8 Alergi">
-            <ChipSelect options={HEALTH_ALLERGIES} value={form.health_allergies} onChange={v => set('health_allergies', v)} />
-          </Sub>
-          <Sub label="E.9 Riwayat Operasi">
-            <textarea value={form.health_surgeries} onChange={e => set('health_surgeries', e.target.value)} rows={2} style={{ width: '100%' }} />
-          </Sub>
-          <Sub label="E.10 Tingkat Aktivitas Fisik">
-            <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 10 }}>
-              {ACTIVITY_LEVELS.map(lvl => (
-                <label key={lvl} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}>
-                  <input type="radio" name="activity_level" checked={form.physical_activity_level === lvl} onChange={() => set('physical_activity_level', lvl)} style={{ width: 'auto', accentColor: 'var(--red)' }} />
-                  {lvl}
-                </label>
-              ))}
-            </div>
-            <textarea placeholder="Jenis olahraga / aktivitas" value={form.physical_activity_type} onChange={e => set('physical_activity_type', e.target.value)} rows={2} style={{ width: '100%' }} />
-          </Sub>
+          <Sub label="E.5 Fungsi & Mobilitas"><ChipSelect options={MSK_FUNCTION} value={form.msk_function} onChange={v => set('msk_function', v)} /></Sub>
+          <Sub label="E.6 Gejala Tambahan"><ChipSelect options={MSK_ADDITIONAL} value={form.msk_additional} onChange={v => set('msk_additional', v)} /></Sub>
+          <Sub label="E.7 Riwayat Treatment"><ChipSelect options={MSK_HISTORY} value={form.msk_history} onChange={v => set('msk_history', v)} /></Sub>
         </Collapsible>
       )}
 
