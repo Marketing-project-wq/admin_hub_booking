@@ -3,6 +3,7 @@ import { supabase } from '../../lib/supabase'
 import { fmtDate, fmtTime, fmtDateTime } from '../../lib/format'
 import { useAuth } from '../../context/AuthContext'
 import { lockRecord, orIlike } from '../../lib/clinic'
+import { normalizePhone } from '../../lib/phone'
 import LockBadge, { LockedBanner } from '../../components/clinic/LockBadge'
 import PostureScanPanel from './PostureScanPanel'
 import { useIsMobile } from '../../hooks/use-mobile'
@@ -693,10 +694,16 @@ async function updateVisitStatus(id: string, status: string): Promise<void> {
 
 // Search pasien
 async function searchPatients(query: string): Promise<PatientHistory[]> {
+  // Kalau input tampak nomor telepon, cari juga varian ternormalisasi ('+62…'
+  // menemukan pasien tersimpan '08…' dan sebaliknya). Lihat lib/phone.ts.
+  const phoneTerm = normalizePhone(query)
+  const orExpr = phoneTerm.length >= 6 && phoneTerm !== query.trim()
+    ? orIlike(['full_name', 'patient_code', 'phone'], query) + ',' + orIlike(['phone'], phoneTerm)
+    : orIlike(['full_name', 'patient_code', 'phone'], query)
   const { data, error } = await supabase
     .from('clinic_patients')
     .select('id, patient_code, full_name, phone, date_of_birth, gender')
-    .or(orIlike(['full_name', 'patient_code', 'phone'], query))
+    .or(orExpr)
     .eq('is_active', true)
     .order('full_name')
     .limit(20)

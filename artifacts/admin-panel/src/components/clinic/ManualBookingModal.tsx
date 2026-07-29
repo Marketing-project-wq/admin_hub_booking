@@ -3,7 +3,7 @@ import { fmtRp, fmtTime } from '../../lib/format'
 import ClinicPatientForm, { type PatientFormValues } from '../../pages/clinic/ClinicPatientForm'
 import {
   listServices, searchPatientByIdNumber, listPatients, createPatient,
-  getAvailableSlots, createManualBooking, todayISO,
+  getAvailableSlots, createManualBookingLegacy, todayISO,
   type ClinicService, type ClinicPatient, type ClinicSlot,
 } from '../../lib/clinic'
 
@@ -96,7 +96,7 @@ export default function ManualBookingModal({ onClose, onSuccess }: Props) {
     if (!patient) return
     setSubmitting(true); setError('')
     try {
-      const code = await createManualBooking({
+      const code = await createManualBookingLegacy({
         patient_id: patient.id,
         service_id: serviceId,
         full_name: patient.full_name,

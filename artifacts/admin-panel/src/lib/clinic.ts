@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { normalizePhone } from './phone'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Clinic data layer
@@ -25,6 +26,9 @@ export interface ClinicService {
   duration_minutes: number | null
   is_active: boolean
   requires_doctor: boolean
+  // true = layanan slot-based (Physiotherapy/Sport Massage): jadwal HARUS dari
+  // clinic_slots tersedia, bukan jam bebas.
+  is_online_bookable?: boolean
 }
 
 export interface ClinicSlot {
@@ -379,7 +383,7 @@ export async function cancelBooking(id: string): Promise<void> {
 export async function listServices(): Promise<ClinicService[]> {
   const { data, error } = await supabase
     .from('clinic_services')
-    .select('id, name, price, duration_minutes, is_active, requires_doctor, package_category')
+    .select('id, name, price, duration_minutes, is_active, requires_doctor, package_category, is_online_bookable')
     .order('name', { ascending: true })
   if (error) throw error
   return (data || []) as ClinicService[]
@@ -544,8 +548,11 @@ export interface ManualBookingInput {
   manual_time?: string
 }
 
-/** Create a confirmed manual booking. Returns the generated booking_code. */
-export async function createManualBooking(input: ManualBookingInput): Promise<string> {
+/** LEGACY — hanya dipakai components/clinic/ManualBookingModal.tsx yang sudah TIDAK
+ *  di-render halaman mana pun (dead code). Generator kode client-side + increment
+ *  booked_count langsung (pra-sistem claim). Alur aktif memakai createManualBooking
+ *  (baru) di bawah. Jangan dipakai untuk fitur baru. */
+export async function createManualBookingLegacy(input: ManualBookingInput): Promise<string> {
   let slotId = input.slot_id || null
 
   // No existing slot chosen → materialise one for the manual date/time so the
@@ -742,8 +749,25 @@ export class NeedsPatientInfoError extends Error {
  */
 async function resolvePatientFromBooking(b: BookingForVisit): Promise<string> {
   if (b.phone) {
-    const { data } = await supabase.from('clinic_patients').select('id').eq('phone', b.phone).limit(1)
-    if (data && data.length > 0) return (data[0] as { id: string }).id
+    // Pencocokan via normalizePhone (bukan exact string): '+62812…', '62812…',
+    // '0812-…' dianggap nomor yang sama. Kandidat diambil dgn variasi format umum,
+    // fallback substring ekor 8 digit (menangkap nomor tersimpan ber-spasi/strip),
+    // lalu diverifikasi normalizePhone(existing) === normalizePhone(booking).
+    const target = normalizePhone(b.phone)
+    if (target) {
+      const intl = target.startsWith('0') ? '62' + target.slice(1) : target
+      const variants = Array.from(new Set([b.phone, target, intl, '+' + intl]))
+      const { data } = await supabase.from('clinic_patients').select('id, phone').in('phone', variants).limit(5)
+      let rows = (data ?? []) as { id: string; phone: string | null }[]
+      if (rows.length === 0 && target.length >= 8) {
+        const { data: fuzzy } = await supabase
+          .from('clinic_patients').select('id, phone')
+          .ilike('phone', `%${target.slice(-8)}%`).limit(10)
+        rows = (fuzzy ?? []) as typeof rows
+      }
+      const hit = rows.find(r => normalizePhone(r.phone ?? '') === target)
+      if (hit) return hit.id
+    }
   }
   throw new NeedsPatientInfoError(b)
 }
@@ -1870,48 +1894,35 @@ export async function scheduleFollowUpVisit(input: {
   return { id: created.id, visit_code: created.visit_code }
 }
 
-export async function createManualVisit(payload: {
-  patient_id: string
+/**
+ * "Tambah Booking Manual" oleh staff (janji temu masa depan via CS) — membuat
+ * BOOKING (clinic_bookings, status 'confirmed'), BUKAN visit langsung. Visit +
+ * clinic_visit_services baru dibuat saat check-in hari-H via createVisitFromBooking
+ * (yang lolos NeedsPatientInfoError karena patient_id sudah terisi dari sini).
+ *
+ * Batasan model clinic_bookings (single service): service_id = layanan pertama;
+ * price = TOTAL semua layanan terpilih; daftar layanan lengkap + keluhan + paket
+ * disimpan di notes (layanan tambahan di-input ulang saat check-in).
+ */
+export async function createManualBooking(payload: {
+  patient: { id: string; full_name: string; phone: string }
   visit_date: string
   visit_time: string | null
   chief_complaint: string
   services: { service_id: string; service_name: string; price: number }[]
   patient_package_id?: string | null
   created_by: string
-}): Promise<{ visit_id: string; visit_code: string }> {
-  // 1. Insert clinic_visits
-  const { data: visit, error: visitErr } = await supabase
-    .from('clinic_visits')
-    .insert({
-      patient_id: payload.patient_id,
-      visit_date: payload.visit_date,
-      visit_time: payload.visit_time || null,
-      status: 'scheduled',
-      payment_status: payload.patient_package_id ? 'package' : 'unpaid',
-      chief_complaint: payload.chief_complaint,
-      patient_package_id: payload.patient_package_id ?? null,
-      created_by: payload.created_by,
-    })
-    .select('id, visit_code')
-    .single()
+}): Promise<{ booking_id: string; booking_code: string; slot_linked: boolean }> {
+  // Kode booking dari generator yang SAMA dengan booking online (CLC-YYYYMMDD-XXXXXX,
+  // unik by-loop di DB) — bukan generator baru.
+  const { data: codeData, error: codeErr } = await supabase.rpc('generate_clinic_booking_code')
+  if (codeErr) throw codeErr
+  const booking_code = codeData as string
 
-  if (visitErr) throw visitErr
-
-  // 2. Insert clinic_visit_services
-  if (payload.services.length > 0) {
-    const { error: svcErr } = await supabase
-      .from('clinic_visit_services')
-      .insert(payload.services.map((s, i) => ({
-        visit_id: visit.id,
-        service_id: s.service_id,
-        service_name: s.service_name,
-        price: s.price,
-        sort_order: i,
-      })))
-    if (svcErr) throw svcErr
-  }
-
-  // Cari slot berdasarkan tanggal + waktu dan increment
+  // Cari slot by tanggal+jam (pola lama). Tanpa slot yang cocok, booking tetap dibuat
+  // (bisa check-in via kode), tapi tidak mengunci kursi & tidak ikut daftar
+  // "Menunggu Check-in" (query daftar itu inner-join slot).
+  let slotId: string | null = null
   if (payload.visit_time) {
     const { data: matchSlot } = await supabase
       .from('clinic_slots')
@@ -1920,20 +1931,52 @@ export async function createManualVisit(payload: {
       .eq('start_time', payload.visit_time + ':00')
       .eq('is_active', true)
       .maybeSingle()
+    slotId = (matchSlot as { id: string } | null)?.id ?? null
+  }
 
-    if (matchSlot) {
-      try {
-        await supabase
-          .from('clinic_visits')
-          .update({ slot_id: matchSlot.id })
-          .eq('id', visit.id)
+  const totalPrice = payload.services.reduce((sum, s) => sum + (Number(s.price) || 0), 0)
+  const notes = [
+    `[Booking manual oleh ${payload.created_by}]`,
+    // clinic_bookings TIDAK punya kolom tanggal/jam sendiri (jadwal normalnya dari
+    // slot). Untuk booking non-slot, catat jadwal pilihan staff di sini agar tidak hilang.
+    `Jadwal: ${payload.visit_date}${payload.visit_time ? ` ${payload.visit_time}` : ''}`,
+    payload.chief_complaint ? `Keluhan: ${payload.chief_complaint}` : null,
+    payload.services.length > 0 ? `Layanan: ${payload.services.map(s => s.service_name).join(', ')}` : null,
+    payload.services.length > 1 ? '(layanan ke-2 dst ditambahkan saat check-in)' : null,
+    payload.patient_package_id ? `Pakai paket pasien: ${payload.patient_package_id}` : null,
+  ].filter(Boolean).join(' | ')
 
-        await claimSlot(matchSlot.id, 'visit', visit.id)
-      } catch (slotErr) {
-        console.error('Gagal link/claim slot:', slotErr)
-      }
+  const { data: bRow, error: bErr } = await supabase
+    .from('clinic_bookings')
+    .insert({
+      booking_code,
+      patient_id: payload.patient.id,          // staff sudah resolve pasien di step 1
+      service_id: payload.services[0]?.service_id ?? null,
+      slot_id: slotId,
+      full_name: payload.patient.full_name,
+      phone: payload.patient.phone,
+      email: null,
+      price: totalPrice,
+      status: 'confirmed',                     // tanpa langkah pembayaran online
+      payment_method: null,
+      notes,
+    })
+    .select('id, booking_code')
+    .single()
+  if (bErr) throw bErr
+  const booking = bRow as { id: string; booking_code: string }
+
+  // Kunci kursi SEKARANG (booking jauh hari tetap mencegah double-booking) — tipe
+  // claim 'booking'; saat check-in, createVisitFromBooking melepasnya lalu claim
+  // ulang sebagai 'visit' (handoff existing). Slot penuh → batalkan booking (bersih).
+  if (slotId) {
+    try {
+      await claimSlot(slotId, 'booking', booking.id)
+    } catch (claimErr) {
+      await supabase.from('clinic_bookings').delete().eq('id', booking.id)
+      throw claimErr
     }
   }
 
-  return { visit_id: visit.id, visit_code: visit.visit_code }
+  return { booking_id: booking.id, booking_code: booking.booking_code, slot_linked: slotId !== null }
 }

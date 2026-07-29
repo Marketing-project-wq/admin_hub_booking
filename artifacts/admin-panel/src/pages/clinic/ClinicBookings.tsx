@@ -5,10 +5,11 @@ import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../context/AuthContext'
 import {
   getBookings, getAllBookings, confirmBooking, cancelBooking, serviceName,
-  todayISO, daysAgoISO, listServices, createManualVisit, createVisitFromBooking, orIlike,
-  createPatientForBooking, NeedsPatientInfoError,
-  type ClinicBooking, type BookingFilters, type ClinicService,
+  todayISO, daysAgoISO, listServices, createManualBooking, createVisitFromBooking, orIlike,
+  createPatientForBooking, NeedsPatientInfoError, getAvailableSlots,
+  type ClinicBooking, type BookingFilters, type ClinicService, type ClinicSlot,
 } from '../../lib/clinic'
+import { normalizePhone } from '../../lib/phone'
 
 const PAGE_SIZE = 20
 const RED = 'var(--red)'
@@ -44,6 +45,11 @@ export default function ClinicBookings() {
   // Manual visit modal (3-step)
   const [showManualModal, setShowManualModal] = useState(false)
   const [manualStep, setManualStep] = useState<1 | 2 | 3>(1)
+  // Hasil pembuatan booking manual (ditampilkan di step 3).
+  const [manualBookingResult, setManualBookingResult] = useState<{ code: string; slotLinked: boolean; needsSlot: boolean } | null>(null)
+  // Slot tersedia utk layanan slot-based (Physiotherapy/Sport Massage) di tanggal terpilih.
+  const [manualSlots, setManualSlots] = useState<ClinicSlot[]>([])
+  const [manualSlotsLoading, setManualSlotsLoading] = useState(false)
   const [manualLoading, setManualLoading] = useState(false)
   const [manualError, setManualError] = useState<string | null>(null)
   const [patientSearch, setPatientSearch] = useState('')
@@ -103,17 +109,21 @@ export default function ClinicBookings() {
 
   const fetchArrivedBookings = useCallback(async () => {
     const today = new Date().toISOString().slice(0, 10)
+    // LEFT join slot (bukan !inner): booking non-slot (mis. Doctor Consultation via
+    // booking manual, slot_id null) juga harus tampil. Filter tanggal di klien:
+    // ber-slot -> hanya slot hari ini; non-slot -> tampil selama status 'arrived'
+    // (status itu di-set staff saat pasien benar-benar datang, jadi implisit hari ini).
     const { data } = await supabase
       .from('clinic_bookings')
       .select(`
         id, booking_code, full_name, phone, email, patient_id, status, visit_id,
         service:clinic_services(name),
-        slot:clinic_slots!inner(slot_date, start_time)
+        slot:clinic_slots(slot_date, start_time)
       `)
       .eq('status', 'arrived')
-      .eq('slot.slot_date', today)
       .order('updated_at', { ascending: true })
-    setArrivedBookings((data ?? []) as any)
+    const rows = ((data ?? []) as any[]).filter(b => !b.slot || b.slot.slot_date === today)
+    setArrivedBookings(rows as any)
   }, [])
 
   // Update status booking dari arrived ke checked_in + bereskan state modal
@@ -243,10 +253,16 @@ export default function ClinicBookings() {
     if (!patientSearch.trim()) return
     setSearchLoading(true)
     try {
+      // Kalau input tampak nomor telepon, cari juga varian ternormalisasi ('+62…'
+      // menemukan pasien tersimpan '08…' dan sebaliknya).
+      const phoneTerm = normalizePhone(patientSearch)
+      const orExpr = phoneTerm.length >= 6 && phoneTerm !== patientSearch.trim()
+        ? orIlike(['full_name', 'phone', 'patient_code'], patientSearch) + ',' + orIlike(['phone'], phoneTerm)
+        : orIlike(['full_name', 'phone', 'patient_code'], patientSearch)
       const { data } = await supabase
         .from('clinic_patients')
         .select('id, full_name, patient_code, phone')
-        .or(orIlike(['full_name', 'phone', 'patient_code'], patientSearch))
+        .or(orExpr)
         .eq('is_active', true)
         .limit(5)
       setPatientResults(data ?? [])
@@ -256,6 +272,7 @@ export default function ClinicBookings() {
 
   const handleManualSubmit = async () => {
     if (!selectedPatient || manualServices.length === 0 && !packageServiceId) return
+    if (manualNeedsSlot && !manualTime) { setManualError('Pilih jam dari slot yang tersedia.'); return }
     setManualLoading(true)
     setManualError(null)
     try {
@@ -272,8 +289,8 @@ export default function ClinicBookings() {
         ),
       ]
 
-      const { visit_code } = await createManualVisit({
-        patient_id: selectedPatient.id,
+      const { booking_code, slot_linked } = await createManualBooking({
+        patient: { id: selectedPatient.id, full_name: selectedPatient.full_name, phone: selectedPatient.phone },
         visit_date: manualDate,
         visit_time: manualTime || null,
         chief_complaint: manualComplaint,
@@ -281,10 +298,13 @@ export default function ClinicBookings() {
         patient_package_id: usePackageId ?? undefined,
         created_by: user?.full_name ?? 'Admin',
       })
+      setManualBookingResult({ code: booking_code, slotLinked: slot_linked, needsSlot: manualNeedsSlot })
       setManualStep(3)
-      setToast(`Visit ${visit_code} berhasil dibuat`)
-    } catch {
-      setManualError('Gagal membuat kunjungan. Coba lagi.')
+      setToast(`Booking ${booking_code} berhasil dibuat`)
+      fetchData()
+    } catch (e) {
+      // claimSlot melempar 'Slot penuh' — tampilkan apa adanya biar staff paham.
+      setManualError(e instanceof Error && e.message ? e.message : 'Gagal membuat booking. Coba lagi.')
     } finally {
       setManualLoading(false)
     }
@@ -336,8 +356,35 @@ export default function ClinicBookings() {
     : !!(newPatientForm.full_name.trim() && newPatientForm.phone.trim() &&
          newPatientForm.date_of_birth && newPatientForm.id_number.trim())
 
+  // Layanan slot-based (is_online_bookable: Physiotherapy/Sport Massage) wajib memilih
+  // jam dari clinic_slots yang TERSEDIA (quota belum penuh) — bukan jam bebas.
+  // Layanan non-slot (mis. Doctor Consultation) tetap tanggal+jam bebas.
+  const slotBookableIds = new Set(services.filter(s => s.is_online_bookable).map(s => s.id))
+  const manualNeedsSlot =
+    manualServices.some(s => slotBookableIds.has(s.service_id)) ||
+    (!!packageServiceId && slotBookableIds.has(packageServiceId))
+  const manualReady = (manualServices.length > 0 || !!packageServiceId) && !(manualNeedsSlot && !manualTime)
+
+  // Muat slot tersedia saat tanggal/komposisi layanan berubah; jam yang tidak lagi
+  // valid (ganti tanggal, slot penuh) dikosongkan supaya tak lolos submit.
+  useEffect(() => {
+    if (!showManualModal || !manualNeedsSlot || !manualDate) return
+    let cancelled = false
+    setManualSlotsLoading(true)
+    getAvailableSlots(manualDate)
+      .then(s => {
+        if (cancelled) return
+        setManualSlots(s)
+        setManualTime(t => (t && !s.some(sl => sl.start_time.slice(0, 5) === t) ? '' : t))
+      })
+      .catch(() => { if (!cancelled) setManualSlots([]) })
+      .finally(() => { if (!cancelled) setManualSlotsLoading(false) })
+    return () => { cancelled = true }
+  }, [showManualModal, manualNeedsSlot, manualDate])
+
   const resetManualModal = () => {
     setManualStep(1)
+    setManualBookingResult(null)
     setPatientSearch('')
     setPatientResults([])
     setSelectedPatient(null)
@@ -443,7 +490,9 @@ export default function ClinicBookings() {
                     {(b as any).full_name}
                   </div>
                   <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                    {(b as any).service?.name ?? '-'} · {(b as any).slot?.start_time?.slice(0, 5) ?? '-'} WIB
+                    {(b as any).service?.name ?? '-'} · {(b as any).slot?.start_time
+                      ? `${(b as any).slot.start_time.slice(0, 5)} WIB`
+                      : 'Non-slot'}
                   </div>
                 </div>
                 <button
@@ -843,13 +892,41 @@ export default function ClinicBookings() {
                         color: 'var(--text-primary)', fontSize: 13, boxSizing: 'border-box' }} />
                   </div>
                   <div>
-                    <label style={{ fontSize: 11, color: 'var(--text-secondary)', textTransform: 'uppercase',
-                      letterSpacing: 1, display: 'block', marginBottom: 6 }}>Jam</label>
-                    <input type="time" value={manualTime}
-                      onChange={e => setManualTime(e.target.value)}
-                      style={{ width: '100%', padding: '10px 12px', borderRadius: 8,
-                        background: 'var(--bg-input)', border: '1px solid var(--border-strong)',
-                        color: 'var(--text-primary)', fontSize: 13, boxSizing: 'border-box' }} />
+                    {manualNeedsSlot ? (
+                      <>
+                        <label style={{ fontSize: 11, color: 'var(--text-secondary)', textTransform: 'uppercase',
+                          letterSpacing: 1, display: 'block', marginBottom: 6 }}>Jam (slot tersedia) *</label>
+                        {manualSlotsLoading ? (
+                          <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '10px 0 0' }}>Memuat slot…</p>
+                        ) : manualSlots.length === 0 ? (
+                          <p style={{ fontSize: 12, color: 'var(--text-primary)', background: 'rgba(245,158,11,0.12)', borderLeft: '3px solid #f59e0b', borderRadius: 6, padding: '8px 10px', margin: 0, lineHeight: 1.4 }}>
+                            Tidak ada slot tersedia di tanggal ini — coba tanggal lain.
+                          </p>
+                        ) : (
+                          <select value={manualTime} onChange={e => setManualTime(e.target.value)}
+                            style={{ width: '100%', padding: '10px 12px', borderRadius: 8,
+                              background: 'var(--bg-input)', border: '1px solid var(--border-strong)',
+                              color: 'var(--text-primary)', fontSize: 13, boxSizing: 'border-box' }}>
+                            <option value="">— Pilih jam —</option>
+                            {manualSlots.map(sl => (
+                              <option key={sl.id} value={sl.start_time.slice(0, 5)}>
+                                {sl.start_time.slice(0, 5)}–{sl.end_time.slice(0, 5)} (sisa {sl.quota - sl.booked_count})
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        <label style={{ fontSize: 11, color: 'var(--text-secondary)', textTransform: 'uppercase',
+                          letterSpacing: 1, display: 'block', marginBottom: 6 }}>Jam</label>
+                        <input type="time" value={manualTime}
+                          onChange={e => setManualTime(e.target.value)}
+                          style={{ width: '100%', padding: '10px 12px', borderRadius: 8,
+                            background: 'var(--bg-input)', border: '1px solid var(--border-strong)',
+                            color: 'var(--text-primary)', fontSize: 13, boxSizing: 'border-box' }} />
+                      </>
+                    )}
                   </div>
                 </div>
 
@@ -879,13 +956,13 @@ export default function ClinicBookings() {
                   </button>
                   <button
                     onClick={handleManualSubmit}
-                    disabled={(manualServices.length === 0 && !packageServiceId) || manualLoading}
+                    disabled={!manualReady || manualLoading}
                     style={{ flex: 2, padding: 12, borderRadius: 8,
-                      background: (manualServices.length > 0 || packageServiceId) ? 'var(--red)' : 'var(--bg-elevated)',
-                      color: (manualServices.length > 0 || packageServiceId) ? '#fff' : 'var(--text-muted)',
-                      border: 'none', cursor: (manualServices.length > 0 || packageServiceId) ? 'pointer' : 'not-allowed',
+                      background: manualReady ? 'var(--red)' : 'var(--bg-elevated)',
+                      color: manualReady ? '#fff' : 'var(--text-muted)',
+                      border: 'none', cursor: manualReady ? 'pointer' : 'not-allowed',
                       fontWeight: 600, fontSize: 14 }}>
-                    {manualLoading ? 'Menyimpan...' : 'Buat Kunjungan →'}
+                    {manualLoading ? 'Menyimpan...' : 'Buat Booking →'}
                   </button>
                 </div>
               </div>
@@ -894,16 +971,27 @@ export default function ClinicBookings() {
             {manualStep === 3 && (
               <div style={{ textAlign: 'center', padding: '20px 0' }}>
                 <div style={{ fontSize: 48, marginBottom: 12 }}>✅</div>
-                <h3 style={{ color: 'var(--text-primary)', marginBottom: 8 }}>Kunjungan Berhasil Dibuat!</h3>
+                <h3 style={{ color: 'var(--text-primary)', marginBottom: 8 }}>Booking Berhasil Dibuat!</h3>
+                {manualBookingResult && (
+                  <p style={{ fontFamily: 'monospace', fontSize: 18, fontWeight: 700, color: 'var(--red)', marginBottom: 12 }}>
+                    {manualBookingResult.code}
+                  </p>
+                )}
                 <p style={{ color: 'var(--text-secondary)', fontSize: 13, marginBottom: 8 }}>
                   Pasien: <strong style={{ color: 'var(--text-primary)' }}>{selectedPatient?.full_name}</strong>
                 </p>
-                <p style={{ color: 'var(--text-secondary)', fontSize: 13, marginBottom: 24 }}>
+                <p style={{ color: 'var(--text-secondary)', fontSize: 13, marginBottom: 12 }}>
                   Layanan: {manualServices.map(s => s.service_name).join(', ')}
                 </p>
-                <p style={{ color: 'var(--text-muted)', fontSize: 12, marginBottom: 24 }}>
-                  Kunjungan sudah masuk ke menu Visits dan Triase.
+                <p style={{ color: 'var(--text-muted)', fontSize: 12, marginBottom: manualBookingResult?.needsSlot && !manualBookingResult.slotLinked ? 8 : 24 }}>
+                  Booking akan diproses check-in pada hari kunjungan (via daftar booking atau kode di atas).
                 </p>
+                {manualBookingResult?.needsSlot === true && manualBookingResult.slotLinked === false && (
+                  <p style={{ fontSize: 12, color: 'var(--text-primary)', background: 'rgba(245,158,11,0.12)', borderLeft: '3px solid #f59e0b', borderRadius: 6, padding: '8px 10px', margin: '0 0 24px', textAlign: 'left', lineHeight: 1.4 }}>
+                    ⚠ Tidak ada slot yang cocok dengan tanggal/jam ini — kursi TIDAK terkunci dan booking
+                    tidak muncul di daftar "Menunggu Check-in" (tetap bisa check-in via kode booking).
+                  </p>
+                )}
                 <button onClick={resetManualModal}
                   style={{ padding: '12px 32px', borderRadius: 8, background: 'var(--red)',
                     color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 14 }}>
