@@ -451,6 +451,8 @@ interface ClinicScreeningData {
   msk_function: string[]
   msk_additional: string[]
   msk_history: string[]
+  blood_type: string | null
+  is_smoker: boolean | null
   health_cardiovascular: string[]
   health_metabolic: string[]
   health_respiratory: string[]
@@ -459,6 +461,7 @@ interface ClinicScreeningData {
   health_female: string[]
   health_medications: string | null
   health_allergies: string[]
+  drug_allergy_detail: string | null
   health_surgeries: string | null
   physical_activity_level: string | null
   physical_activity_type: string | null
@@ -1298,9 +1301,22 @@ export default function ClinicDokter() {
                     {(screeningData.health_cardiovascular.length > 0 || screeningData.health_metabolic.length > 0 ||
                       screeningData.health_respiratory.length > 0 || screeningData.health_musculoskeletal.length > 0 ||
                       screeningData.health_special.length > 0 || !!screeningData.health_medications ||
-                      screeningData.health_allergies.length > 0) && (
+                      screeningData.health_allergies.length > 0 || !!screeningData.blood_type ||
+                      screeningData.is_smoker != null || !!screeningData.drug_allergy_detail) && (
                       <div style={{ marginBottom: 12 }}>
                         <div style={SCREENING_SECTION_TITLE}>Riwayat Kesehatan</div>
+                        {screeningData.blood_type && (
+                          <div style={{ fontSize: 12, marginBottom: 8 }}>
+                            <span style={{ color: '#6B7280' }}>Golongan Darah: </span>
+                            <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>{screeningData.blood_type}</span>
+                          </div>
+                        )}
+                        {screeningData.is_smoker != null && (
+                          <div style={{ fontSize: 12, marginBottom: 8 }}>
+                            <span style={{ color: '#6B7280' }}>Merokok: </span>
+                            <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>{screeningData.is_smoker ? 'Ya' : 'Tidak'}</span>
+                          </div>
+                        )}
                         <ChipRow label="Kardiovaskular" items={screeningData.health_cardiovascular} />
                         <ChipRow label="Metabolik" items={screeningData.health_metabolic} />
                         <ChipRow label="Respirasi" items={screeningData.health_respiratory} />
@@ -1308,6 +1324,12 @@ export default function ClinicDokter() {
                         <ChipRow label="Kondisi Khusus" items={screeningData.health_special} />
                         <ChipRow label="Obat-obatan" items={screeningData.health_medications ? [screeningData.health_medications] : []} />
                         <ChipRow label="Alergi" items={screeningData.health_allergies} />
+                        {screeningData.drug_allergy_detail && (
+                          <div style={{ fontSize: 12, marginBottom: 8 }}>
+                            <span style={{ color: '#6B7280' }}>Detail Alergi Obat: </span>
+                            <span style={{ color: 'var(--text-secondary)' }}>{screeningData.drug_allergy_detail}</span>
+                          </div>
+                        )}
                       </div>
                     )}
 
