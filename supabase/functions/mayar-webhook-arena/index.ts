@@ -190,6 +190,24 @@ Deno.serve(async (req: Request) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     )
 
+    // Guard defensif (insiden CLC-20260728-D9AD31): booking klinik yang dibayar
+    // VOUCHER (price 0) tidak boleh ditimpa jadi 'mayar' oleh event webhook apa pun —
+    // itu memalsukan status pembayaran & membuat Close Bill menagih/mencatat penuh.
+    if (tableName === "clinic_bookings" && newStatus === "confirmed") {
+      const { data: existing } = await supabase
+        .from("clinic_bookings")
+        .select("payment_method, price")
+        .eq(codeField, bookingCode)
+        .maybeSingle()
+      const ex = existing as { payment_method: string | null; price: number | null } | null
+      if (ex && (ex.payment_method === "voucher" || (ex.price ?? 0) === 0)) {
+        console.warn("⛔ Skip: booking voucher/price-0, tidak ditimpa mayar:", bookingCode, ex)
+        return new Response(JSON.stringify({ ok: true, skipped: "voucher_or_zero_price_booking", bookingCode }), {
+          status: 200, headers: { ...CORS, "Content-Type": "application/json" },
+        })
+      }
+    }
+
     // Update booking status
     const updatePayload: Record<string, unknown> = {
       status: newStatus,
