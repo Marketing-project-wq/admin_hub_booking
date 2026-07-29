@@ -11,12 +11,15 @@ import { normalizePhone } from './phone'
 //   clinic_services  ( id, name, price, duration_min, is_active )
 //   clinic_slots     ( id, slot_date date, start_time time, end_time time,
 //                      quota int, booked_count int, is_active bool, created_at )
-//   clinic_bookings  ( id, booking_code, service_id fk, slot_id fk,
-//                      slot_date date, slot_time time,           -- snapshot for filtering/sort
+//   clinic_bookings  ( id, booking_code, service_id fk, slot_id fk nullable,
+//                      manual_date date, manual_time time,       -- jadwal booking NON-slot (slot_id null)
 //                      full_name, email, phone,
 //                      status text ('confirmed'|'pending_payment'|'cancelled'),
 //                      price numeric, payment_method, payment_ref,
 //                      paid_at, created_at, updated_at )
+//   NB: slot_date/slot_time pada object ClinicBooking BUKAN kolom asli clinic_bookings —
+//   di-attach enrichBookings() dari clinic_slots (booking slot) dengan fallback
+//   manual_date/manual_time (booking non-slot).
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface ClinicService {
@@ -58,8 +61,11 @@ export interface ClinicBooking {
   paid_at: string | null
   created_at: string
   updated_at?: string | null
-  // Derived (attached by enrichBookings from clinic_slots / clinic_services) —
-  // not columns on clinic_bookings.
+  // Kolom asli: jadwal pilihan staff untuk booking non-slot (slot_id null).
+  manual_date?: string | null
+  manual_time?: string | null
+  // Derived (attached by enrichBookings from clinic_slots / clinic_services,
+  // fallback manual_date/manual_time) — not columns on clinic_bookings.
   slot_date: string | null
   slot_time: string | null
   service?: { name: string } | { name: string }[] | null
@@ -71,7 +77,7 @@ const SLOT_SELECT = 'id, slot_date, start_time, end_time, quota, booked_count, i
 // attached afterwards (enrichBookings) via separate queries, so a missing/undeclared
 // FK relationship can never fail the whole bookings query.
 const BOOKING_FIELDS =
-  'id, booking_code, service_id, slot_id, full_name, email, phone, notes, ' +
+  'id, booking_code, service_id, slot_id, manual_date, manual_time, full_name, email, phone, notes, ' +
   'price, status, payment_method, paid_at, created_at'
 
 /**
@@ -102,8 +108,9 @@ async function enrichBookings(rows: ClinicBooking[]): Promise<ClinicBooking[]> {
     return {
       ...r,
       service: r.service_id ? { name: svcMap.get(r.service_id) || '-' } : null,
-      slot_date: slot?.slot_date ?? null,
-      slot_time: slot?.start_time ?? null,
+      // Booking non-slot: jadwal dari manual_date/manual_time agar tampilan konsisten.
+      slot_date: slot?.slot_date ?? r.manual_date ?? null,
+      slot_time: slot?.start_time ?? r.manual_time ?? null,
     }
   })
 }
@@ -168,7 +175,8 @@ export async function getDashboardStats(): Promise<ClinicStats> {
   const head = { count: 'exact' as const, head: true }
 
   // Today/Week are by SLOT date, which lives on clinic_slots — resolve the slot IDs
-  // first, then count non-cancelled bookings against them.
+  // first, then count non-cancelled bookings against them. Booking NON-slot
+  // (slot_id null) dihitung terpisah lewat manual_date pada rentang yang sama.
   const [todaySlots, weekSlots] = await Promise.all([
     slotIdsInRange(today, today),
     slotIdsInRange(week.from, week.to),
@@ -180,17 +188,26 @@ export async function getDashboardStats(): Promise<ClinicStats> {
       .neq('status', 'cancelled').in('slot_id', ids)
     return count || 0
   }
+  // .is('slot_id', null) mencegah dobel hitung dengan jalur slot di atas.
+  const countByManualDate = async (from: string, to: string): Promise<number> => {
+    const { count } = await supabase.from('clinic_bookings').select('id', head)
+      .neq('status', 'cancelled').is('slot_id', null)
+      .gte('manual_date', from).lte('manual_date', to)
+    return count || 0
+  }
 
-  const [todayCount, weekCount, pendingRes, confirmedRes] = await Promise.all([
+  const [todayCount, weekCount, todayManual, weekManual, pendingRes, confirmedRes] = await Promise.all([
     countBySlots(todaySlots),
     countBySlots(weekSlots),
+    countByManualDate(today, today),
+    countByManualDate(week.from, week.to),
     supabase.from('clinic_bookings').select('id', head).eq('status', 'pending_payment'),
     supabase.from('clinic_bookings').select('id', head).eq('status', 'confirmed'),
   ])
 
   return {
-    today: todayCount,
-    week: weekCount,
+    today: todayCount + todayManual,
+    week: weekCount + weekManual,
     pending: pendingRes.count || 0,
     confirmed: confirmedRes.count || 0,
   }
@@ -1956,6 +1973,8 @@ export async function createManualBooking(payload: {
       patient_id: payload.patient.id,          // staff sudah resolve pasien di step 1
       service_id: payload.services[0]?.service_id ?? null,
       slot_id: slotId,
+      manual_date: payload.visit_date,
+      manual_time: payload.visit_time ? `${payload.visit_time}:00` : null,
       full_name: payload.patient.full_name,
       phone: payload.patient.phone,
       email: null,
