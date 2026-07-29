@@ -33,9 +33,12 @@ interface VisitRef {
 }
 
 // ─── Constants ──────────────────────────────────────────────────────────────────
+// Nama HARUS persis sama dgn clinic_services.name di database — dipakai untuk
+// mencocokkan selected_services (pre-fill dari clinic_visit_services.service_name),
+// gating showMSK/showHealth, dan pemetaan consent di consentTypesFor().
 const SERVICES = [
-  'Doctor Consultation', 'Corrective Therapy by Doctor', 'GEA Laser Therapy',
-  'Physiotherapy', 'Sport Massage', 'EMS', 'Personal Trainer Session',
+  'Doctor Consultation & Assessment', 'Corrective Therapy by Doctor', 'Laser Treatment',
+  'Physiotherapy', 'Sport Massage', 'Electro Muscle Stimulation', 'Personal Trainer',
 ]
 
 const PAR_Q = [
@@ -312,8 +315,8 @@ function ConsentContent({ type }: { type: string }) {
 
 function consentTypesFor(services: string[]): string[] {
   const set = new Set<string>()
-  if (services.includes('GEA Laser Therapy')) set.add('gea_laser')
-  if (services.includes('EMS')) set.add('ems')
+  if (services.includes('Laser Treatment')) set.add('gea_laser')
+  if (services.includes('Electro Muscle Stimulation')) set.add('ems')
   if (services.includes('Physiotherapy')) set.add('physiotherapy')
   if (services.includes('Sport Massage')) set.add('sport_massage')
   if (services.length) { set.add('general'); set.add('data_privacy') }
@@ -584,8 +587,8 @@ function ScreeningTab({ visit, patient, onToast, onSaved, isLocked, recordId, lo
     return <NoAccess>Anda tidak memiliki akses untuk mengisi screening.</NoAccess>
 
   const services = form.selected_services
-  const showMSK = !(services.length > 0 && services.every(s => s === 'Personal Trainer Session'))
-  const showHealth = !(services.length > 0 && services.every(s => s === 'Personal Trainer Session' || s === 'Sport Massage'))
+  const showMSK = !(services.length > 0 && services.every(s => s === 'Personal Trainer'))
+  const showHealth = !(services.length > 0 && services.every(s => s === 'Personal Trainer' || s === 'Sport Massage'))
   const parQFlags = PAR_Q.map((_, i) => form.par_q[`q${i + 1}`] === true)
   const anyParQYes = parQFlags.some(Boolean)
   const intensity = form.msk_intensity
