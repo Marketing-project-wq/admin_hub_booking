@@ -1223,13 +1223,28 @@ export default function ClinicTriase() {
       console.error(e)
     }
     await fetchVisits(false)
-    // Pindah ke tab assessment, jangan tutup modal
-    setModalTab('assessment')
-    showToastMsg('Consent tersimpan — lanjut ke assessment')
+    if (requiresDoctor(selectedVisit)) {
+      // Visit dokter: tidak ada assessment terapis — tutup modal, pasien lanjut ke Dokter.
+      setShowModal(false)
+      showToastMsg('Consent tersimpan — pasien siap ke Dokter')
+    } else {
+      // Pindah ke tab assessment, jangan tutup modal
+      setModalTab('assessment')
+      showToastMsg('Consent tersimpan — lanjut ke assessment')
+    }
   }
 
   const requiresDoctor = (visit: TriaseVisit): boolean => {
     return visit.services?.some(s => s.service?.requires_doctor === true) ?? false
+  }
+
+  // Label tab assessment terapis mengikuti layanan visit (nama persis clinic_services.name).
+  const assessmentTabLabel = (visit: TriaseVisit): string => {
+    const names = visit.services?.map(s => s.service_name) ?? []
+    if (names.includes('Physiotherapy') || names.includes('Sport Massage')) return 'Assessment Fisioterapi'
+    if (names.includes('Personal Trainer')) return 'Assessment Personal Trainer'
+    if (names.includes('Electro Muscle Stimulation')) return 'Assessment EMS'
+    return 'Assessment'
   }
 
   const handleSelesaiTreatment = async (visitId: string) => {
@@ -1414,7 +1429,7 @@ export default function ClinicTriase() {
                     marginBottom: -2, textTransform: 'capitalize',
                   }}>{t === 'screening' ? 'Screening' : 'Consent'}</button>
               ))}
-              {screeningStatus[selectedVisit.id] && consentStatus[selectedVisit.id] && (
+              {screeningStatus[selectedVisit.id] && consentStatus[selectedVisit.id] && !requiresDoctor(selectedVisit) && (
                 <button onClick={() => setModalTab('assessment')}
                   style={{
                     flexShrink: 0,
@@ -1423,7 +1438,7 @@ export default function ClinicTriase() {
                     color: modalTab === 'assessment' ? 'var(--red)' : 'var(--text-muted)',
                     borderBottom: modalTab === 'assessment' ? '2px solid var(--red)' : '2px solid transparent',
                     marginBottom: -2, textTransform: 'capitalize',
-                  }}>Assessment</button>
+                  }}>{assessmentTabLabel(selectedVisit)}</button>
               )}
             </div>
 
@@ -1459,7 +1474,7 @@ export default function ClinicTriase() {
                   onRelocked={() => fetchVisits(false)}
                 />
               )}
-              {modalTab === 'assessment' && (
+              {modalTab === 'assessment' && !requiresDoctor(selectedVisit) && (
                 <div style={{ padding: '16px 0', display: 'flex', flexDirection: 'column', gap: 14 }}>
 
                   {/* Kondisi pasien */}
