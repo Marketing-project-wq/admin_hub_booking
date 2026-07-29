@@ -296,7 +296,12 @@ export default function ClinicKasir() {
           patientCode={closeBillVisit.patient.patient_code}
           patientPhone={closeBillVisit.patient.phone}
           services={closeBillVisit.services.map(s => ({ service_id: s.service_id, service_name: s.service_name, price: s.price }))}
-          paidOnline={closeBillVisit.booking_payment_method === 'mayar'}
+          paidOnline={
+            // Guard: 'mayar' hanya dianggap paid-online kalau price > 0. Booking voucher
+            // (price 0) yang payment_method-nya tertimpa 'mayar' oleh proses eksternal
+            // TIDAK boleh mencatat total penuh sebagai revenue Mayar fiktif.
+            closeBillVisit.booking_payment_method === 'mayar' && (closeBillVisit.booking_price ?? 0) > 0
+          }
           paidWithVoucher={closeBillVisit.booking_payment_method === 'voucher' && closeBillVisit.booking_price === 0}
           bookingServiceId={closeBillVisit.booking_service_id ?? null}
           onClose={() => setCloseBillVisit(null)}
