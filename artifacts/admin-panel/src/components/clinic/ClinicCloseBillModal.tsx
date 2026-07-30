@@ -612,27 +612,25 @@ export default function ClinicCloseBillModal({
           </div>
         )}
 
-        <div className="form-row">
-          <div className="form-group">
-            <label>Dokter Penanggung Jawab</label>
-            <select value={doctorId} onChange={e => setDoctorId(e.target.value)} disabled={!canEditAssignment}>
-              <option value="">— Belum di-assign —</option>
-              {doctorOptions.map(o => <option key={o.id} value={o.id}>{o.full_name}</option>)}
-              {doctorId && !doctorOptions.some(o => o.id === doctorId) && (
-                <option value={doctorId}>(staf nonaktif)</option>
-              )}
-            </select>
-          </div>
-          <div className="form-group">
-            <label>Terapis Penanggung Jawab</label>
-            <select value={therapistId} onChange={e => setTherapistId(e.target.value)} disabled={!canEditAssignment}>
-              <option value="">— Belum di-assign —</option>
-              {therapistOptions.map(o => <option key={o.id} value={o.id}>{o.full_name}</option>)}
-              {therapistId && !therapistOptions.some(o => o.id === therapistId) && (
-                <option value={therapistId}>(staf nonaktif)</option>
-              )}
-            </select>
-          </div>
+        <div className="form-group">
+          <label>Dokter Penanggung Jawab</label>
+          <select value={doctorId} onChange={e => setDoctorId(e.target.value)} disabled={!canEditAssignment} style={{ width: '100%' }}>
+            <option value="">— Belum di-assign —</option>
+            {doctorOptions.map(o => <option key={o.id} value={o.id}>{o.full_name}</option>)}
+            {doctorId && !doctorOptions.some(o => o.id === doctorId) && (
+              <option value={doctorId}>(staf nonaktif)</option>
+            )}
+          </select>
+        </div>
+        <div className="form-group">
+          <label>Terapis Penanggung Jawab</label>
+          <select value={therapistId} onChange={e => setTherapistId(e.target.value)} disabled={!canEditAssignment} style={{ width: '100%' }}>
+            <option value="">— Belum di-assign —</option>
+            {therapistOptions.map(o => <option key={o.id} value={o.id}>{o.full_name}</option>)}
+            {therapistId && !therapistOptions.some(o => o.id === therapistId) && (
+              <option value={therapistId}>(staf nonaktif)</option>
+            )}
+          </select>
         </div>
         <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '0 0 12px' }}>
           {canEditAssignment
