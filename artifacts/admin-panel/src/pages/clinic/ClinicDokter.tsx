@@ -508,10 +508,14 @@ const VISIT_SELECT = `
 // Fetch visits hari ini
 async function fetchTodayVisits(): Promise<DokterVisit[]> {
   const today = new Date().toISOString().slice(0, 10)
+  // Hari ini PLUS tunggakan: visit lama yang masih scheduled/in_progress tetap
+  // tampil (tanpa batas mundur) sampai diselesaikan/dibatalkan — assessment yang
+  // belum diisi tidak boleh "hilang" dari pandangan dokter saat tanggal berganti.
   const { data, error } = await supabase
     .from('clinic_visits')
     .select(VISIT_SELECT)
-    .eq('visit_date', today)
+    .or(`visit_date.eq.${today},and(visit_date.lt.${today},status.in.(scheduled,in_progress))`)
+    .order('visit_date', { ascending: true })
     .order('visit_time', { ascending: true, nullsFirst: false })
   if (error) throw error
   const rows = (data ?? []) as unknown as DokterVisit[]
@@ -649,6 +653,8 @@ function VisitCard({ visit, queue = false, onStatusChange, onOpen, busy, doctorO
     color: s === 'in_progress' ? 'var(--red)' : 'var(--text-secondary)',
   }
 
+  const isStale = visit.visit_date < new Date().toISOString().slice(0, 10)
+
   return (
     <div style={cardStyle}>
       {/* Top block: time + patient info (stays a row even on mobile) */}
@@ -657,6 +663,11 @@ function VisitCard({ visit, queue = false, onStatusChange, onOpen, busy, doctorO
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{visit.patient?.full_name || '-'}</div>
           <div style={{ fontSize: 11, color: 'var(--text-secondary)', fontFamily: 'monospace' }}>{visit.patient?.patient_code || '-'}</div>
+          {isStale && (
+            <span style={{ display: 'inline-block', marginTop: 2, fontSize: 11, fontWeight: 700, padding: '1px 8px', borderRadius: 999, background: '#FEF3C7', color: '#92400E' }}>
+              ⚠ Tertinggal · {fmtDate(visit.visit_date)}
+            </span>
+          )}
           <div style={{ fontSize: 13, marginTop: 2, color: 'var(--text-secondary)' }}>{visit.services.map(s => s.service_name).join(', ') || '-'}</div>
           <select
             value={visit.assigned_doctor_id ?? ''}
@@ -1019,11 +1030,15 @@ export default function ClinicDokter() {
     }
   }
 
+  // Statistik ringkas dihitung dari HARI INI saja — tunggakan hari sebelumnya
+  // ikut daftar & antrian (di bawah) tapi tidak membiaskan angka harian.
+  const todayStr = new Date().toISOString().slice(0, 10)
+  const todaysOnly = todayVisits.filter(v => v.visit_date === todayStr)
   const counts = {
-    total: todayVisits.length,
-    waiting: todayVisits.filter(v => v.status === 'scheduled').length,
-    progress: todayVisits.filter(v => v.status === 'in_progress').length,
-    done: todayVisits.filter(v => v.status === 'completed').length,
+    total: todaysOnly.length,
+    waiting: todaysOnly.filter(v => v.status === 'scheduled').length,
+    progress: todaysOnly.filter(v => v.status === 'in_progress').length,
+    done: todaysOnly.filter(v => v.status === 'completed').length,
   }
   const queue = todayVisits.filter(v => v.status === 'in_progress' || v.status === 'scheduled')
 

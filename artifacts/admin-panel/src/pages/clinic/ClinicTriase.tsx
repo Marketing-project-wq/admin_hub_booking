@@ -1137,11 +1137,14 @@ export default function ClinicTriase() {
     if (showSpinner) setLoading(true)
     try {
       const today = new Date().toISOString().slice(0, 10)
+      // Hari ini PLUS tunggakan: visit lama yang masih scheduled/in_progress
+      // tetap tampil (tanpa batas mundur) sampai selesai/dibatalkan — screening/
+      // consent yang belum diisi tidak boleh "hilang" saat tanggal berganti.
       const { data, error } = await supabase
         .from('clinic_visits')
         .select(TRIASE_SELECT)
-        .eq('visit_date', today)
-        .in('status', ['scheduled', 'in_progress', 'completed'])
+        .or(`and(visit_date.eq.${today},status.in.(scheduled,in_progress,completed)),and(visit_date.lt.${today},status.in.(scheduled,in_progress))`)
+        .order('visit_date', { ascending: true })
         .order('visit_time', { ascending: true, nullsFirst: false })
       if (error) throw error
       const rows = (data ?? []) as unknown as TriaseVisit[]
@@ -1391,6 +1394,11 @@ export default function ClinicTriase() {
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
                     <span style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 15 }}>{v.patient?.full_name || '-'}</span>
+                    {v.visit_date < today && (
+                      <span style={{ fontSize: 11, fontWeight: 700, padding: '1px 8px', borderRadius: 999, background: '#FEF3C7', color: '#92400E' }}>
+                        ⚠ Tertinggal · {fmtDate(v.visit_date)}
+                      </span>
+                    )}
                     <span style={{ fontSize: 12, color: 'var(--text-secondary)', fontFamily: 'monospace' }}>{v.patient?.patient_code || '-'}</span>
                     {v.services.length > 0 && (
                       <span style={{ fontSize: 11, padding: '1px 8px', borderRadius: 999, background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}>{v.services.map(s => s.service_name).join(', ')}</span>
