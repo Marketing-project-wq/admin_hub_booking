@@ -10,6 +10,7 @@ export interface ClinicTransaction {
   service_name: string
   service_price: number
   discount: number
+  admin_fee: number
   total_amount: number
   payment_method: string // cash | transfer | qris | debit | kredit
   payment_detail: {

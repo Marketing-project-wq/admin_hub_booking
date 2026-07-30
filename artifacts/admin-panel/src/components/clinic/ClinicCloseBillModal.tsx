@@ -25,6 +25,7 @@ interface Props {
   onSuccess: (transaction: ClinicTransaction) => void
 }
 
+const ADMIN_FEE = 50000
 const METHODS = ['cash', 'transfer', 'qris', 'debit', 'kredit'] as const
 const METHOD_LABEL: Record<string, string> = { cash: 'Cash', transfer: 'Transfer', qris: 'QRIS', debit: 'Debit', kredit: 'Kredit' }
 
@@ -33,6 +34,7 @@ export default function ClinicCloseBillModal({
 }: Props) {
   const { user } = useAuth()
   const [discount, setDiscount] = useState(0)
+  const [addAdminFee, setAddAdminFee] = useState(false)
   const [method, setMethod] = useState('')
   const [cashReceived, setCashReceived] = useState(0)
   const [transferRef, setTransferRef] = useState('')
@@ -146,8 +148,12 @@ export default function ClinicCloseBillModal({
     ? packages.find(p => p.id === selectedNewPackageId) ?? null
     : null
   const packageSubtotal = selectedNewPkg ? selectedNewPkg.package_price : 0
-  const grandTotal = Math.max(0, visitSubtotal + packageSubtotal - (Number(discount) || 0))
-  // Batas atas diskon = harga layanan + paket (sama dengan p_service_price di RPC, yang menolak discount > service_price).
+  // Biaya admin opsional — tidak berlaku untuk pembayaran online (sudah settle di Mayar).
+  // Ditambahkan SETELAH max(0, ...) supaya tidak bisa dimakan diskon.
+  const adminFee = !paidOnline && addAdminFee ? ADMIN_FEE : 0
+  const grandTotal = Math.max(0, visitSubtotal + packageSubtotal - (Number(discount) || 0)) + adminFee
+  // Batas atas diskon = harga layanan + paket (sama dengan p_service_price di RPC, yang
+  // menolak discount > service_price) — biaya admin TIDAK ikut (tidak boleh didiskon).
   const maxDiscount = visitSubtotal + packageSubtotal
   const change = method === 'cash' && cashReceived > grandTotal ? cashReceived - grandTotal : 0
   const isCard = method === 'debit' || method === 'kredit'
@@ -212,6 +218,7 @@ export default function ClinicCloseBillModal({
         // guard RPC (discount <= service_price) tetap terpenuhi.
         p_service_price: visitSubtotal + voucherAmount + packageSubtotal,
         p_discount: finalDiscount,
+        p_admin_fee: adminFee,
         p_total_amount: finalTotal,
         p_payment_method: finalPaymentMethod,
         p_payment_detail: payment_detail,
@@ -425,6 +432,17 @@ export default function ClinicCloseBillModal({
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: 'var(--amber)', marginBottom: 4 }}>
               <span>🎟️ Voucher ({voucherService!.service_name})</span>
               <span>-{fmtRp(voucherAmount)}</span>
+            </div>
+          )}
+
+          {/* Biaya admin opsional — disembunyikan untuk pembayaran online (sudah settle). */}
+          {!paidOnline && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, marginBottom: 4 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', color: 'var(--text-primary)' }}>
+                <input type="checkbox" checked={addAdminFee} onChange={e => setAddAdminFee(e.target.checked)} style={{ width: 'auto' }} />
+                Tambahkan Biaya Admin (Rp 50.000)
+              </label>
+              {addAdminFee && <span>{fmtRp(ADMIN_FEE)}</span>}
             </div>
           )}
 

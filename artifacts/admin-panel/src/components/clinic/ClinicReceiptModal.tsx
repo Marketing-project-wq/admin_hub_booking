@@ -73,6 +73,7 @@ export default function ClinicReceiptModal({ transaction: t, onClose }: Props) {
         </div>
         <Row label={t.service_name} value={fmtRp(t.service_price)} />
         {t.discount > 0 && <Row label="Diskon" value={`-${fmtRp(t.discount)}`} />}
+        {(t.admin_fee ?? 0) > 0 && <Row label="Biaya Admin" value={fmtRp(t.admin_fee)} />}
         <div style={{ borderTop: '1px solid #374151', margin: '8px 0' }} />
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, fontWeight: 800 }}>
           <span>TOTAL</span><span>{fmtRp(t.total_amount)}</span>
