@@ -1083,7 +1083,7 @@ export default function ClinicTriase() {
   const isMobile = useIsMobile()
   const { user } = useAuth()
   const [visits, setVisits] = useState<TriaseVisit[]>([])
-  const [staffMap, setStaffMap] = useState<Record<string, string>>({})
+  const [therapistOptions, setTherapistOptions] = useState<ClinicStaffOption[]>([])
   const [loading, setLoading] = useState(true)
   const [screeningStatus, setScreeningStatus] = useState<Record<string, boolean>>({})
   const [consentStatus, setConsentStatus] = useState<Record<string, boolean>>({})
@@ -1107,12 +1107,22 @@ export default function ClinicTriase() {
     window.setTimeout(() => setToast(''), 3000)
   }
 
-  // Peta id staf → nama untuk menampilkan terapis yang di-assign pada kartu triase.
+  // Daftar terapis untuk assign inline pada kartu triase (bisa di-assign / self-assign).
   useEffect(() => {
     listClinicStaffOptions()
-      .then((opts: ClinicStaffOption[]) => setStaffMap(Object.fromEntries(opts.map(o => [o.id, o.full_name]))))
+      .then((opts: ClinicStaffOption[]) => setTherapistOptions(opts.filter(o => o.role === 'therapist')))
       .catch(() => {})
   }, [])
+
+  // Assign / ubah terapis untuk sebuah kunjungan langsung dari triase.
+  const assignTherapist = async (visitId: string, therapistId: string) => {
+    setVisits(prev => prev.map(v => v.id === visitId ? { ...v, assigned_therapist_id: therapistId || null } : v))
+    const { error } = await supabase.from('clinic_visits')
+      .update({ assigned_therapist_id: therapistId || null, updated_at: new Date().toISOString() })
+      .eq('id', visitId)
+    if (error) showToastMsg('Gagal menyimpan terapis')
+    else showToastMsg('Terapis diperbarui')
+  }
 
   const fetchVisits = useCallback(async (showSpinner = true) => {
     if (showSpinner) setLoading(true)
@@ -1370,11 +1380,23 @@ export default function ClinicTriase() {
                     {v.services.length > 0 && (
                       <span style={{ fontSize: 11, padding: '1px 8px', borderRadius: 999, background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}>{v.services.map(s => s.service_name).join(', ')}</span>
                     )}
-                    {v.assigned_therapist_id && staffMap[v.assigned_therapist_id] && (
-                      <span style={{ fontSize: 11, padding: '1px 8px', borderRadius: 999, background: 'rgba(52,211,153,0.12)', color: 'var(--green)', fontWeight: 600 }}>
-                        🧑‍⚕️ Terapis: {staffMap[v.assigned_therapist_id]}
-                      </span>
-                    )}
+                    <select
+                      value={v.assigned_therapist_id ?? ''}
+                      onChange={e => assignTherapist(v.id, e.target.value)}
+                      title="Assign / ubah terapis"
+                      style={{
+                        fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 999, cursor: 'pointer',
+                        border: '1px solid rgba(52,211,153,0.35)', maxWidth: 200,
+                        background: v.assigned_therapist_id ? 'rgba(52,211,153,0.12)' : 'var(--bg-elevated)',
+                        color: v.assigned_therapist_id ? 'var(--green)' : 'var(--text-secondary)',
+                      }}
+                    >
+                      <option value="">🧑‍⚕️ Assign terapis…</option>
+                      {therapistOptions.map(o => <option key={o.id} value={o.id}>{o.full_name}</option>)}
+                      {v.assigned_therapist_id && !therapistOptions.some(o => o.id === v.assigned_therapist_id) && (
+                        <option value={v.assigned_therapist_id}>(staf nonaktif)</option>
+                      )}
+                    </select>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
                     <StepChip label="✓ Terdaftar" state="done" />
