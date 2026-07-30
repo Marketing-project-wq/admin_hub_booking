@@ -1521,11 +1521,12 @@ export interface ClinicUser {
 }
 
 export async function listClinicUsers(): Promise<ClinicUser[]> {
-  const { data, error } = await supabase
-    .from('admin_users')
-    .select('id, email, full_name, role, unit, permissions, is_active, last_login_at, created_at')
-    .eq('unit', 'clinic')
-    .order('full_name')
+  // admin_users has an RLS SELECT policy hardcoded to `false`, so a direct
+  // .from('admin_users') read from the anon client always returns zero rows —
+  // clinic users created straight in the backend never showed on the page. Read
+  // them via the SECURITY DEFINER list_clinic_users() RPC instead (returns the
+  // safe columns only; never password_hash), same pattern as create_admin_user.
+  const { data, error } = await supabase.rpc('list_clinic_users')
   if (error) throw error
   return (data ?? []) as ClinicUser[]
 }

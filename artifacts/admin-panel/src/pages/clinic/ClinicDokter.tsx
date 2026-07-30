@@ -494,6 +494,8 @@ interface MedicalHistory {
     objective: ObjectiveData | string | null
     assessment: string | null
     handled_by: string | null
+    updated_at: string | null   // waktu assessment disimpan (upsert set updated_at)
+    locked_by: string | null    // siapa yang menyimpan/mengunci (fallback "oleh siapa")
   } | null
 }
 
@@ -866,20 +868,25 @@ export default function ClinicDokter() {
       try {
         const patientId = selectedVisit.patient?.id
 
-        // Fetch past visits (excluding current visit)
+        // Fetch riwayat kunjungan pasien untuk Riwayat Rekam Medis. Kunjungan
+        // saat ini SENGAJA disertakan (tidak di-neq lagi) supaya assessment yang
+        // baru disimpan langsung muncul di sini — sesuai permintaan. Selain
+        // kunjungan yang sudah paid, kunjungan saat ini selalu ikut (via .or)
+        // walau pembayarannya belum diproses di Kasir.
         const { data: visits } = await supabase
           .from('clinic_visits')
           .select(`
             id, visit_date, visit_time, chief_complaint,
             services:clinic_visit_services(service_name, price),
             assessment:clinic_assessments(
-              diagnosis, plan, subjective, objective, assessment, handled_by, assessment_type
+              diagnosis, plan, subjective, objective, assessment, handled_by,
+              updated_at, locked_by, assessment_type
             )
           `)
           .eq('patient_id', patientId)
-          .neq('id', selectedVisit.id)
-          .eq('payment_status', 'paid')
+          .or(`payment_status.eq.paid,id.eq.${selectedVisit.id}`)
           .order('visit_date', { ascending: false })
+          .order('visit_time', { ascending: false, nullsFirst: false })
           .limit(10)
 
         const history: MedicalHistory[] = (visits ?? []).map((v: any) => ({
@@ -1028,6 +1035,17 @@ export default function ClinicDokter() {
     })
   const setPrimaryIcd = (code: string) =>
     setAssessment(p => ({ ...p, diagnosis: { ...p.diagnosis, icd10_codes: p.diagnosis.icd10_codes.map(c => ({ ...c, is_primary: c.code === code })) } }))
+
+  // Pilih kode dari dropdown: tambahkan lalu langsung TUTUP dropdown dan kosongkan
+  // input pencarian, supaya field siap diketik ulang untuk kode berikutnya tanpa
+  // harus menghapus teks lama dulu.
+  const selectIcd = (code: string, display: string) => {
+    toggleIcd(code, display)
+    if (icdTimer.current) clearTimeout(icdTimer.current)
+    setIcdQuery('')
+    setIcdResults([])
+    setIcdSearching(false)
+  }
 
   const handleIcdSearch = (q: string) => {
     setIcdQuery(q)
@@ -1690,7 +1708,7 @@ export default function ClinicDokter() {
                         <input type="text" value={icdQuery} onChange={e => handleIcdSearch(e.target.value)}
                           placeholder="Ketik kode / nama diagnosis (min. 2 huruf)..." style={emrField} />
                         {icdQuery.trim().length >= 2 && (
-                          <div style={{ position: 'absolute', zIndex: 20, top: '100%', left: 0, right: 0, marginTop: 4, maxHeight: 260, overflowY: 'auto', background: 'var(--bg-card)', border: '1px solid var(--border-strong)', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,.25)' }}>
+                          <div style={{ position: 'absolute', zIndex: 20, top: '100%', left: 0, right: 0, marginTop: 4, maxHeight: 260, overflowY: 'auto', background: 'var(--bg-modal)', border: '1px solid var(--border-strong)', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,.25)' }}>
                             {icdSearching ? (
                               <div style={{ padding: '10px 12px', fontSize: 12, color: 'var(--text-muted)' }}>Mencari…</div>
                             ) : icdResults.length === 0 ? (
@@ -1698,7 +1716,7 @@ export default function ClinicDokter() {
                             ) : icdResults.map(r => {
                               const selected = diag.icd10_codes.some(c => c.code === r.code)
                               return (
-                                <div key={r.code} onClick={() => toggleIcd(r.code, r.display)}
+                                <div key={r.code} onClick={() => selectIcd(r.code, r.display)}
                                   style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid var(--border)', display: 'flex', gap: 8, alignItems: 'baseline', background: selected ? 'rgba(192,57,43,0.18)' : 'transparent' }}>
                                   <span style={{ fontWeight: 700, fontFamily: 'monospace', fontSize: 12, color: 'var(--text-primary)' }}>{r.code}</span>
                                   <span style={{ fontSize: 12, color: 'var(--text-secondary)', flex: 1, minWidth: 0 }}>{r.display}</span>
@@ -1906,6 +1924,12 @@ export default function ClinicDokter() {
                                     </div>
                                   ) : null
                                 })()}
+                                {h.assessment.updated_at && (
+                                  <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--border)', fontSize: 11, color: 'var(--text-muted)' }}>
+                                    Disimpan {fmtDateTime(h.assessment.updated_at)}
+                                    {(h.assessment.handled_by || h.assessment.locked_by) && ` · oleh ${h.assessment.handled_by || h.assessment.locked_by}`}
+                                  </div>
+                                )}
                               </div>
                             )}
                           </div>
