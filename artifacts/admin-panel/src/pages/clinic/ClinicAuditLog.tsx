@@ -5,19 +5,21 @@ import { listAuditLogs, type AuditLog } from '../../lib/clinic'
 
 const PAGE_SIZE = 20
 
-const RECORD_TYPES = ['all', 'clinic_screenings', 'clinic_consents', 'clinic_assessments', 'clinic_transactions']
+const RECORD_TYPES = ['all', 'clinic_screenings', 'clinic_consents', 'clinic_assessments', 'clinic_transactions', 'clinic_visits']
 const RECORD_LABEL: Record<string, string> = {
   all: 'Semua',
   clinic_screenings: 'Screening',
   clinic_consents: 'Consent',
   clinic_assessments: 'Assessment',
   clinic_transactions: 'Transaksi',
+  clinic_visits: 'Assignment',
 }
 
 function ActionBadge({ action }: { action: string }) {
   const map: Record<string, { label: string; style: React.CSSProperties }> = {
     unlock: { label: '🔓 Dibuka', style: { background: '#FEF3C7', color: '#92400E' } },
     relock: { label: '🔒 Dikunci', style: { background: '#D1FAE5', color: '#065F46' } },
+    reassign: { label: '🔄 Reassign', style: { background: '#DBEAFE', color: '#1D4ED8' } },
   }
   const m = map[action] ?? { label: action, style: { background: '#F3F4F6', color: '#374151' } }
   return <span className="badge" style={m.style}>{m.label}</span>

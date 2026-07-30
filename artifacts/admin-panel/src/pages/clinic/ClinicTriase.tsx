@@ -7,7 +7,7 @@ import { useIsMobile } from '../../hooks/use-mobile'
 import {
   getScreeningByVisit, upsertScreening,
   getConsentsByVisit, upsertConsent,
-  lockRecord, listClinicStaffOptions,
+  lockRecord, listClinicStaffOptions, logAssignmentChange,
   type ClinicConsent, type ClinicVitalSigns, type ClinicStaffOption,
 } from '../../lib/clinic'
 import LockBadge, { LockedBanner } from '../../components/clinic/LockBadge'
@@ -1114,14 +1114,22 @@ export default function ClinicTriase() {
       .catch(() => {})
   }, [])
 
-  // Assign / ubah terapis untuk sebuah kunjungan langsung dari triase.
+  // Assign / ubah terapis untuk sebuah kunjungan langsung dari triase. Setiap
+  // perubahan dicatat ke audit log.
   const assignTherapist = async (visitId: string, therapistId: string) => {
+    const prevId = visits.find(v => v.id === visitId)?.assigned_therapist_id ?? ''
+    if (prevId === therapistId) return
     setVisits(prev => prev.map(v => v.id === visitId ? { ...v, assigned_therapist_id: therapistId || null } : v))
     const { error } = await supabase.from('clinic_visits')
       .update({ assigned_therapist_id: therapistId || null, updated_at: new Date().toISOString() })
       .eq('id', visitId)
-    if (error) showToastMsg('Gagal menyimpan terapis')
-    else showToastMsg('Terapis diperbarui')
+    if (error) { showToastMsg('Gagal menyimpan terapis'); return }
+    showToastMsg('Terapis diperbarui')
+    const nm = (id: string) => therapistOptions.find(o => o.id === id)?.full_name ?? null
+    try {
+      await logAssignmentChange(visitId, user?.full_name ?? '-', user?.role ?? null,
+        [{ field: 'therapist', from: nm(prevId), to: nm(therapistId) }])
+    } catch { /* log best-effort */ }
   }
 
   const fetchVisits = useCallback(async (showSpinner = true) => {

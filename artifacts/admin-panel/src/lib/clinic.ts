@@ -1728,6 +1728,36 @@ export async function listAuditLogs(params: {
   return { rows: (data ?? []) as unknown as AuditLog[], count: count ?? 0 }
 }
 
+// ─── Assignment change log ───────────────────────────────────────────────────
+// Catat perubahan assignment dokter/terapis pada sebuah kunjungan ke audit log,
+// supaya ada jejak siapa mengubah apa & kapan (record_type = 'clinic_visits').
+export interface AssignmentChange {
+  field: 'doctor' | 'therapist'
+  from: string | null   // nama staf sebelum (null = belum di-assign)
+  to: string | null     // nama staf sesudah (null = di-kosongkan)
+}
+
+export async function logAssignmentChange(
+  visitId: string,
+  performedBy: string,
+  performedByRole: string | null,
+  changes: AssignmentChange[],
+): Promise<void> {
+  if (!changes.length) return
+  const label = (f: AssignmentChange['field']) => (f === 'doctor' ? 'Dokter' : 'Terapis')
+  const none = '— belum di-assign —'
+  const { error } = await supabase.from('clinic_audit_logs').insert({
+    action: 'reassign',
+    record_type: 'clinic_visits',
+    record_id: visitId,
+    performed_by: performedBy,
+    performed_by_role: performedByRole,
+    reason: changes.map(c => `${label(c.field)}: ${c.from ?? none} → ${c.to ?? none}`).join('; '),
+    metadata: { changes },
+  })
+  if (error) throw error
+}
+
 // ─── Paket (clinic_packages / clinic_patient_packages) ───────────────────────────
 export interface ClinicPackage {
   id: string

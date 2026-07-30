@@ -5,8 +5,8 @@ import { useAuth } from '../../context/AuthContext'
 import { type ClinicTransaction } from '../../lib/clinicBilling'
 import {
   listPackages, listPatientActivePackages,
-  listServices, listClinicStaffOptions,
-  type ClinicPackage, type ClinicPatientPackage, type ClinicStaffOption,
+  listServices, listClinicStaffOptions, logAssignmentChange,
+  type ClinicPackage, type ClinicPatientPackage, type ClinicStaffOption, type AssignmentChange,
 } from '../../lib/clinic'
 
 interface Props {
@@ -43,10 +43,20 @@ export default function ClinicCloseBillModal({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
-  // Terapis penanggung jawab — Close Bill adalah penentu final siapa terapis yang
-  // di-assign untuk kunjungan ini (menimpa assigned_therapist_id dari alur Kunjungan).
-  const [therapistOptions, setTherapistOptions] = useState<ClinicStaffOption[]>([])
+  // Terapis & dokter penanggung jawab — Close Bill adalah penentu final assignment
+  // kunjungan ini. Otomatis terisi dari assigned_*_id yang sudah ada. Yang boleh
+  // mengubah: super_admin, admin, dan dokter (yang punya akses). Setiap perubahan
+  // dicatat ke clinic_audit_logs.
+  const [staffOptions, setStaffOptions] = useState<ClinicStaffOption[]>([])
   const [therapistId, setTherapistId] = useState('')
+  const [doctorId, setDoctorId] = useState('')
+  // Nilai awal (dari kunjungan) untuk mendeteksi perubahan + isi log "dari".
+  const [origTherapistId, setOrigTherapistId] = useState('')
+  const [origDoctorId, setOrigDoctorId] = useState('')
+  const therapistOptions = staffOptions.filter(o => o.role === 'therapist')
+  const doctorOptions = staffOptions.filter(o => o.role === 'dokter')
+  const canEditAssignment = ['super_admin', 'admin', 'dokter'].includes(user?.role ?? '')
+  const staffName = (id: string) => staffOptions.find(o => o.id === id)?.full_name ?? null
 
   // Paket
   const [packages, setPackages] = useState<ClinicPackage[]>([])
@@ -84,13 +94,17 @@ export default function ClinicCloseBillModal({
     listServices().then(setAllServices).catch(() => {})
   }, [])
 
-  // Muat daftar terapis + terapis yang sudah di-assign untuk kunjungan ini (pre-fill).
+  // Muat daftar staf + assignment (dokter & terapis) yang sudah ada untuk pre-fill.
   useEffect(() => {
-    listClinicStaffOptions()
-      .then(opts => setTherapistOptions(opts.filter(o => o.role === 'therapist')))
-      .catch(() => {})
-    supabase.from('clinic_visits').select('assigned_therapist_id').eq('id', visitId).maybeSingle()
-      .then(({ data }) => { const t = (data as { assigned_therapist_id: string | null } | null)?.assigned_therapist_id; if (t) setTherapistId(t) })
+    listClinicStaffOptions().then(setStaffOptions).catch(() => {})
+    supabase.from('clinic_visits').select('assigned_therapist_id, assigned_doctor_id').eq('id', visitId).maybeSingle()
+      .then(({ data }) => {
+        const row = data as { assigned_therapist_id: string | null; assigned_doctor_id: string | null } | null
+        const t = row?.assigned_therapist_id ?? ''
+        const d = row?.assigned_doctor_id ?? ''
+        setTherapistId(t); setOrigTherapistId(t)
+        setDoctorId(d); setOrigDoctorId(d)
+      })
   }, [visitId])
 
   // Kategorisasi layanan berdasarkan package_category dari database.
@@ -213,13 +227,25 @@ export default function ClinicCloseBillModal({
       if (rpcErr) throw rpcErr
       const trx = trxData as unknown as ClinicTransaction
 
-      // Close Bill = penentu final terapis untuk kunjungan ini. Best-effort: pembayaran
+      // Close Bill = penentu final assignment kunjungan ini. Best-effort: pembayaran
       // di atas sudah committed, jadi kegagalan update assignment tidak membatalkan bill.
-      try {
-        await supabase.from('clinic_visits')
-          .update({ assigned_therapist_id: therapistId || null, updated_at: new Date().toISOString() })
-          .eq('id', visitId)
-      } catch (assignErr) { console.error('Gagal simpan terapis penanggung jawab:', assignErr) }
+      // Hanya role berwenang yang boleh mengubah; setiap perubahan dicatat ke audit log.
+      if (canEditAssignment && (therapistId !== origTherapistId || doctorId !== origDoctorId)) {
+        try {
+          await supabase.from('clinic_visits')
+            .update({
+              assigned_therapist_id: therapistId || null,
+              assigned_doctor_id: doctorId || null,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', visitId)
+
+          const changes: AssignmentChange[] = []
+          if (doctorId !== origDoctorId) changes.push({ field: 'doctor', from: staffName(origDoctorId), to: staffName(doctorId) })
+          if (therapistId !== origTherapistId) changes.push({ field: 'therapist', from: staffName(origTherapistId), to: staffName(therapistId) })
+          await logAssignmentChange(visitId, user?.full_name ?? '-', user?.role ?? null, changes)
+        } catch (assignErr) { console.error('Gagal simpan/log assignment penanggung jawab:', assignErr) }
+      }
 
       // Jadwalkan kunjungan berikutnya (best-effort — pembayaran di atas sudah committed).
       if (scheduleFollowUp && followUpDate && followUpServices.length > 0) {
@@ -586,19 +612,33 @@ export default function ClinicCloseBillModal({
           </div>
         )}
 
-        <div className="form-group">
-          <label>Terapis Penanggung Jawab</label>
-          <select value={therapistId} onChange={e => setTherapistId(e.target.value)}>
-            <option value="">— Belum di-assign —</option>
-            {therapistOptions.map(o => <option key={o.id} value={o.id}>{o.full_name}</option>)}
-            {therapistId && !therapistOptions.some(o => o.id === therapistId) && (
-              <option value={therapistId}>(staf nonaktif)</option>
-            )}
-          </select>
-          <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '4px 0 0' }}>
-            Pilihan di sini menjadi penentu final terapis untuk kunjungan ini.
-          </p>
+        <div className="form-row">
+          <div className="form-group">
+            <label>Dokter Penanggung Jawab</label>
+            <select value={doctorId} onChange={e => setDoctorId(e.target.value)} disabled={!canEditAssignment}>
+              <option value="">— Belum di-assign —</option>
+              {doctorOptions.map(o => <option key={o.id} value={o.id}>{o.full_name}</option>)}
+              {doctorId && !doctorOptions.some(o => o.id === doctorId) && (
+                <option value={doctorId}>(staf nonaktif)</option>
+              )}
+            </select>
+          </div>
+          <div className="form-group">
+            <label>Terapis Penanggung Jawab</label>
+            <select value={therapistId} onChange={e => setTherapistId(e.target.value)} disabled={!canEditAssignment}>
+              <option value="">— Belum di-assign —</option>
+              {therapistOptions.map(o => <option key={o.id} value={o.id}>{o.full_name}</option>)}
+              {therapistId && !therapistOptions.some(o => o.id === therapistId) && (
+                <option value={therapistId}>(staf nonaktif)</option>
+              )}
+            </select>
+          </div>
         </div>
+        <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '0 0 12px' }}>
+          {canEditAssignment
+            ? 'Terisi otomatis dari assignment yang ada — pilihan di sini menjadi penentu final. Setiap perubahan dicatat di log.'
+            : 'Hanya admin, super admin, dan dokter berwenang yang dapat mengubah assignment ini.'}
+        </p>
 
         <div className="form-group">
           <label>Nama Kasir</label>
