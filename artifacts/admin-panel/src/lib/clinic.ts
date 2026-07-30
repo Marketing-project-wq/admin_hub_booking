@@ -1547,12 +1547,15 @@ export async function createClinicUser(u: {
 }
 
 export async function updateClinicUserPermissions(id: string, permissions: Record<string, boolean>): Promise<void> {
-  const { error } = await supabase.from('admin_users').update({ permissions }).eq('id', id)
+  // admin_users punya RLS aktif tanpa policy UPDATE → update langsung dari client
+  // anon mengenai 0 baris (tidak error, tapi tidak tersimpan). Lewat RPC SECURITY
+  // DEFINER supaya benar-benar tersimpan.
+  const { error } = await supabase.rpc('update_admin_user_permissions', { p_id: id, p_permissions: permissions })
   if (error) throw error
 }
 
 export async function toggleClinicUserActive(id: string, active: boolean): Promise<void> {
-  const { error } = await supabase.from('admin_users').update({ is_active: active }).eq('id', id)
+  const { error } = await supabase.rpc('set_admin_user_active', { p_id: id, p_active: active })
   if (error) throw error
 }
 
