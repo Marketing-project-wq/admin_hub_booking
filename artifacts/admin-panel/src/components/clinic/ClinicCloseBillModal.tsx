@@ -5,8 +5,8 @@ import { useAuth } from '../../context/AuthContext'
 import { type ClinicTransaction } from '../../lib/clinicBilling'
 import {
   listPackages, listPatientActivePackages,
-  listServices,
-  type ClinicPackage, type ClinicPatientPackage,
+  listServices, listClinicStaffOptions,
+  type ClinicPackage, type ClinicPatientPackage, type ClinicStaffOption,
 } from '../../lib/clinic'
 
 interface Props {
@@ -43,6 +43,11 @@ export default function ClinicCloseBillModal({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
+  // Terapis penanggung jawab — Close Bill adalah penentu final siapa terapis yang
+  // di-assign untuk kunjungan ini (menimpa assigned_therapist_id dari alur Kunjungan).
+  const [therapistOptions, setTherapistOptions] = useState<ClinicStaffOption[]>([])
+  const [therapistId, setTherapistId] = useState('')
+
   // Paket
   const [packages, setPackages] = useState<ClinicPackage[]>([])
   const [patientPackages, setPatientPackages] = useState<ClinicPatientPackage[]>([])
@@ -78,6 +83,15 @@ export default function ClinicCloseBillModal({
   useEffect(() => {
     listServices().then(setAllServices).catch(() => {})
   }, [])
+
+  // Muat daftar terapis + terapis yang sudah di-assign untuk kunjungan ini (pre-fill).
+  useEffect(() => {
+    listClinicStaffOptions()
+      .then(opts => setTherapistOptions(opts.filter(o => o.role === 'therapist')))
+      .catch(() => {})
+    supabase.from('clinic_visits').select('assigned_therapist_id').eq('id', visitId).maybeSingle()
+      .then(({ data }) => { const t = (data as { assigned_therapist_id: string | null } | null)?.assigned_therapist_id; if (t) setTherapistId(t) })
+  }, [visitId])
 
   // Kategorisasi layanan berdasarkan package_category dari database.
   const isPerformanceService = (name: string) => serviceCategoryMap[name] === 'performance'
@@ -198,6 +212,14 @@ export default function ClinicCloseBillModal({
       })
       if (rpcErr) throw rpcErr
       const trx = trxData as unknown as ClinicTransaction
+
+      // Close Bill = penentu final terapis untuk kunjungan ini. Best-effort: pembayaran
+      // di atas sudah committed, jadi kegagalan update assignment tidak membatalkan bill.
+      try {
+        await supabase.from('clinic_visits')
+          .update({ assigned_therapist_id: therapistId || null, updated_at: new Date().toISOString() })
+          .eq('id', visitId)
+      } catch (assignErr) { console.error('Gagal simpan terapis penanggung jawab:', assignErr) }
 
       // Jadwalkan kunjungan berikutnya (best-effort — pembayaran di atas sudah committed).
       if (scheduleFollowUp && followUpDate && followUpServices.length > 0) {
@@ -563,6 +585,20 @@ export default function ClinicCloseBillModal({
             </div>
           </div>
         )}
+
+        <div className="form-group">
+          <label>Terapis Penanggung Jawab</label>
+          <select value={therapistId} onChange={e => setTherapistId(e.target.value)}>
+            <option value="">— Belum di-assign —</option>
+            {therapistOptions.map(o => <option key={o.id} value={o.id}>{o.full_name}</option>)}
+            {therapistId && !therapistOptions.some(o => o.id === therapistId) && (
+              <option value={therapistId}>(staf nonaktif)</option>
+            )}
+          </select>
+          <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '4px 0 0' }}>
+            Pilihan di sini menjadi penentu final terapis untuk kunjungan ini.
+          </p>
+        </div>
 
         <div className="form-group">
           <label>Nama Kasir</label>

@@ -638,13 +638,14 @@ type Tab = typeof TABS[number]
 const TAB_LABEL: Record<Tab, string> = { jadwal: 'Jadwal Hari Ini', antrian: 'Antrian Aktif', riwayat: 'Riwayat Pasien' }
 
 // ─── Visit card ─────────────────────────────────────────────────────────────────
-function VisitCard({ visit, queue = false, onStatusChange, onOpen, busy, doctorName }: {
+function VisitCard({ visit, queue = false, onStatusChange, onOpen, busy, doctorOptions, onAssignDoctor }: {
   visit: DokterVisit
   queue?: boolean
   onStatusChange: (id: string, status: string) => void
   onOpen: (visit: DokterVisit) => void
   busy: boolean
-  doctorName?: string
+  doctorOptions: ClinicStaffOption[]
+  onAssignDoctor: (visitId: string, doctorId: string) => void
 }) {
   const isMobile = useIsMobile()
   const s = visit.status
@@ -675,9 +676,23 @@ function VisitCard({ visit, queue = false, onStatusChange, onOpen, busy, doctorN
           <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{visit.patient?.full_name || '-'}</div>
           <div style={{ fontSize: 11, color: 'var(--text-secondary)', fontFamily: 'monospace' }}>{visit.patient?.patient_code || '-'}</div>
           <div style={{ fontSize: 13, marginTop: 2, color: 'var(--text-secondary)' }}>{visit.services.map(s => s.service_name).join(', ') || '-'}</div>
-          {doctorName && (
-            <span style={{ display: 'inline-block', marginTop: 4, marginRight: 6, fontSize: 11, fontWeight: 600, padding: '1px 8px', borderRadius: 999, background: 'rgba(59,130,246,0.15)', color: 'var(--blue)' }}>🩺 Dokter: {doctorName}</span>
-          )}
+          <select
+            value={visit.assigned_doctor_id ?? ''}
+            onChange={e => onAssignDoctor(visit.id, e.target.value)}
+            title="Assign / ubah dokter"
+            style={{
+              marginTop: 4, fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 999, cursor: 'pointer',
+              border: '1px solid rgba(59,130,246,0.35)', maxWidth: 220,
+              background: visit.assigned_doctor_id ? 'rgba(59,130,246,0.15)' : 'var(--bg-elevated)',
+              color: visit.assigned_doctor_id ? 'var(--blue)' : 'var(--text-secondary)',
+            }}
+          >
+            <option value="">🩺 Assign dokter…</option>
+            {doctorOptions.map(o => <option key={o.id} value={o.id}>{o.full_name}</option>)}
+            {visit.assigned_doctor_id && !doctorOptions.some(o => o.id === visit.assigned_doctor_id) && (
+              <option value={visit.assigned_doctor_id}>(staf nonaktif)</option>
+            )}
+          </select>
           {visit.patient_package_id && (
             <span style={{ display: 'inline-block', marginTop: 4, fontSize: 11, fontWeight: 600, padding: '1px 8px', borderRadius: 999, background: '#DBEAFE', color: '#1D4ED8' }}>📦 Paket</span>
           )}
@@ -745,16 +760,25 @@ export default function ClinicDokter() {
   const [tab, setTab] = useState<Tab>('jadwal')
 
   const [todayVisits, setTodayVisits] = useState<DokterVisit[]>([])
-  const [staffMap, setStaffMap] = useState<Record<string, string>>({})
+  const [doctorOptions, setDoctorOptions] = useState<ClinicStaffOption[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
-  // Peta id staf → nama untuk menampilkan dokter yang di-assign pada kartu EMR.
+  // Daftar dokter untuk assign inline pada kartu EMR (bisa di-assign / self-assign).
   useEffect(() => {
     listClinicStaffOptions()
-      .then((opts: ClinicStaffOption[]) => setStaffMap(Object.fromEntries(opts.map(o => [o.id, o.full_name]))))
+      .then((opts: ClinicStaffOption[]) => setDoctorOptions(opts.filter(o => o.role === 'dokter')))
       .catch(() => {})
   }, [])
+
+  // Assign / ubah dokter untuk sebuah kunjungan langsung dari EMR.
+  const assignDoctor = async (visitId: string, doctorId: string) => {
+    setTodayVisits(prev => prev.map(v => v.id === visitId ? { ...v, assigned_doctor_id: doctorId || null } : v))
+    const { error: assignErr } = await supabase.from('clinic_visits')
+      .update({ assigned_doctor_id: doctorId || null, updated_at: new Date().toISOString() })
+      .eq('id', visitId)
+    if (assignErr) setError('Gagal menyimpan dokter yang di-assign')
+  }
   const [busy, setBusy] = useState(false)
 
   // Visit detail modal
@@ -1111,7 +1135,7 @@ export default function ClinicDokter() {
           ) : todayVisits.length === 0 ? (
             <EmptyState>Tidak ada jadwal hari ini</EmptyState>
           ) : todayVisits.map(v => (
-            <VisitCard key={v.id} visit={v} onStatusChange={handleStatusChange} onOpen={openVisitModal} busy={busy} doctorName={v.assigned_doctor_id ? staffMap[v.assigned_doctor_id] : undefined} />
+            <VisitCard key={v.id} visit={v} onStatusChange={handleStatusChange} onOpen={openVisitModal} busy={busy} doctorOptions={doctorOptions} onAssignDoctor={assignDoctor} />
           ))}
         </div>
       )}
@@ -1127,7 +1151,7 @@ export default function ClinicDokter() {
           ) : queue.length === 0 ? (
             <EmptyState>Antrian kosong</EmptyState>
           ) : queue.map(v => (
-            <VisitCard key={v.id} visit={v} queue onStatusChange={handleStatusChange} onOpen={openVisitModal} busy={busy} doctorName={v.assigned_doctor_id ? staffMap[v.assigned_doctor_id] : undefined} />
+            <VisitCard key={v.id} visit={v} queue onStatusChange={handleStatusChange} onOpen={openVisitModal} busy={busy} doctorOptions={doctorOptions} onAssignDoctor={assignDoctor} />
           ))}
         </div>
       )}
