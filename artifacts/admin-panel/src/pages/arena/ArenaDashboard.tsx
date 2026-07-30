@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
+import { ChevronDown } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { fmtRp, fmtDate } from '../../lib/format'
 
@@ -352,7 +353,7 @@ export default function ArenaDashboard() {
             fontSize: 13,
           }}
         >
-          Custom ▾
+          Custom <ChevronDown size={13} style={{ verticalAlign: -2 }} />
         </button>
         {showCustom && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

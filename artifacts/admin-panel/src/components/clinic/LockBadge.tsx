@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import { Lock, LockOpen } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { unlockRecord, relockRecord, type LockableTable } from '../../lib/clinic'
 import { fmtDateTime } from '../../lib/format'
@@ -65,7 +66,7 @@ export default function LockBadge({
             background: '#F3F4F6', color: '#374151', fontSize: 12,
             padding: '3px 10px', borderRadius: 999, fontWeight: 600,
           }} title={lockedBy ? `oleh ${lockedBy}` : undefined}>
-            🔒 Terkunci
+            <Lock size={12} /> Terkunci
             {lockedAt && <span style={{ fontWeight: 400, color: 'var(--text-muted)', marginLeft: 4 }}>{fmtDateTime(lockedAt)}</span>}
           </span>
           {(canUnlock ?? isSuperAdmin) && (
@@ -128,7 +129,7 @@ export default function LockBadge({
           background: '#FEF3C7', color: '#92400E', fontSize: 12,
           padding: '3px 10px', borderRadius: 999, fontWeight: 600,
         }}>
-          🔓 Kunci Dibuka
+          <LockOpen size={12} /> Kunci Dibuka
         </span>
         {isSuperAdmin && (
           <button
@@ -177,7 +178,7 @@ export function LockedBanner({ canUnlock }: { canUnlock?: boolean }) {
   const hasUnlockButton = canUnlock ?? user?.role === 'super_admin'
   return (
     <p style={{ fontSize: 12, color: 'var(--text-primary)', background: 'rgba(245,158,11,0.12)', borderLeft: '3px solid #f59e0b', borderRadius: 6, padding: '8px 10px', margin: '0 0 12px', lineHeight: 1.4 }}>
-      🔒 Form ini terkunci dan tidak bisa diedit.{' '}
+      <Lock size={12} style={{ verticalAlign: -2, marginRight: 4 }} /> Form ini terkunci dan tidak bisa diedit.{' '}
       {hasUnlockButton
         ? "Klik 'Buka Kunci' di atas untuk mengubah."
         : 'Hubungi super admin atau dokter penanggung jawab untuk membuka kunci.'}

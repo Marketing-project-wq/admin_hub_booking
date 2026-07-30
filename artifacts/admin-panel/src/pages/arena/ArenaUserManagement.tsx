@@ -178,7 +178,7 @@ export default function ArenaUserManagement() {
 
       {success && (
         <div style={{ background: '#D1FAE5', border: '1px solid #6EE7B7', borderRadius: 6, padding: '10px 16px', marginBottom: 16, color: '#065F46', fontSize: 13 }}>
-          ✓ {success}
+          {success}
         </div>
       )}
       {error && (

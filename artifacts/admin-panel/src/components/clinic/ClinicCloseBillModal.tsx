@@ -372,7 +372,7 @@ export default function ClinicCloseBillModal({
         {/* Info paket aktif (jika ada) */}
         {patientPackages.length > 0 && (
           <div style={{ marginBottom: 16, padding: 12, background: 'rgba(5,150,105,0.1)', borderRadius: 10, border: '1px solid rgba(5,150,105,0.2)' }}>
-            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--green)', marginBottom: 6 }}>✓ Paket Aktif Pasien</div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--green)', marginBottom: 6 }}>Paket Aktif Pasien</div>
             {patientPackages.map(pp => (
               <div key={pp.id} style={{ fontSize: 12, color: 'var(--text-primary)', marginBottom: 2 }}>
                 {pp.package?.name} — Sisa {pp.remaining_sessions} sesi
@@ -397,7 +397,7 @@ export default function ClinicCloseBillModal({
 
           {coveredServices.length > 0 && (
             <div style={{ marginBottom: 8 }}>
-              <div style={{ fontSize: 11, color: 'var(--green)', fontWeight: 600, marginBottom: 4 }}>✓ Ter-cover Paket</div>
+              <div style={{ fontSize: 11, color: 'var(--green)', fontWeight: 600, marginBottom: 4 }}>Ter-cover Paket</div>
               {coveredServices.map(s => (
                 <div key={s.service_name} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: 'var(--text-secondary)', textDecoration: 'line-through' }}>
                   <span>{s.service_name}</span>

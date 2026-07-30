@@ -17,8 +17,8 @@ const RECORD_LABEL: Record<string, string> = {
 
 function ActionBadge({ action }: { action: string }) {
   const map: Record<string, { label: string; style: React.CSSProperties }> = {
-    unlock: { label: '🔓 Dibuka', style: { background: '#FEF3C7', color: '#92400E' } },
-    relock: { label: '🔒 Dikunci', style: { background: '#D1FAE5', color: '#065F46' } },
+    unlock: { label: 'Dibuka', style: { background: '#FEF3C7', color: '#92400E' } },
+    relock: { label: 'Dikunci', style: { background: '#D1FAE5', color: '#065F46' } },
     reassign: { label: 'Reassign', style: { background: '#DBEAFE', color: '#1D4ED8' } },
   }
   const m = map[action] ?? { label: action, style: { background: '#F3F4F6', color: '#374151' } }
@@ -72,7 +72,7 @@ export default function ClinicAuditLog() {
   if (!isSuperAdmin) {
     return (
       <div className="card" style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>
-        🔒 Akses ditolak. Halaman ini hanya untuk super admin.
+        Akses ditolak. Halaman ini hanya untuk super admin.
       </div>
     )
   }

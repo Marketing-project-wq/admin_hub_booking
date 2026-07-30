@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
+import { ChevronUp, ChevronDown } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { fmtDate, fmtTime, fmtDateTime } from '../../lib/format'
 import { useAuth } from '../../context/AuthContext'
@@ -222,7 +223,7 @@ function Collapsible({ title, defaultOpen = false, children }: { title: string; 
       <div onClick={() => setOpen(o => !o)}
         style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}>
         <span style={{ color: 'var(--red)', fontSize: 12, fontWeight: 700, letterSpacing: 0.4, textTransform: 'uppercase' }}>{title}</span>
-        <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>{open ? '▲' : '▼'}</span>
+        <span style={{ color: 'var(--text-muted)', display: 'inline-flex' }}>{open ? <ChevronUp size={14} /> : <ChevronDown size={14} />}</span>
       </div>
       {open && <div style={{ marginTop: 14 }}>{children}</div>}
     </div>
@@ -1279,7 +1280,7 @@ export default function ClinicDokter() {
                             {c.consent_type.replace(/_/g, ' ')}
                           </div>
                           <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 999, background: c.is_agreed ? '#D1FAE5' : '#FEF3C7', color: c.is_agreed ? '#065F46' : '#92400E' }}>
-                            {c.is_agreed ? '✓ Disetujui' : 'Belum'}
+                            {c.is_agreed ? 'Disetujui' : 'Belum'}
                           </span>
                         </div>
                         {c.signed_by_name && <div style={{ fontSize: 12, color: '#6B7280', marginTop: 4 }}>Ditandatangani: {c.signed_by_name} · {c.signed_at ? fmtDateTime(c.signed_at) : '-'}</div>}
@@ -1448,9 +1449,10 @@ export default function ClinicDokter() {
                         <span role="button" tabIndex={0} className="btn-secondary"
                           onClick={() => setShowPosturePanel(s => !s)}
                           onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setShowPosturePanel(s => !s) } }}
-                          style={{ width: 'auto', padding: '8px 16px', display: 'inline-block', cursor: 'pointer', userSelect: 'none' }}>
-                          {showPosturePanel ? 'Sembunyikan Scan Postur ▴'
-                            : postureViewsScanned ? 'Tampilkan Scan Postur ▾' : 'Mulai Scan Postur ▾'}
+                          style={{ width: 'auto', padding: '8px 16px', display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer', userSelect: 'none' }}>
+                          {showPosturePanel ? 'Sembunyikan Scan Postur'
+                            : postureViewsScanned ? 'Tampilkan Scan Postur' : 'Mulai Scan Postur'}
+                          {showPosturePanel ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                         </span>
                         {showPosturePanel && selectedVisit && (
                           <div style={{ marginTop: 14 }}>
@@ -1533,7 +1535,7 @@ export default function ClinicDokter() {
                                   style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid var(--border)', display: 'flex', gap: 8, alignItems: 'baseline', background: selected ? 'rgba(192,57,43,0.18)' : 'transparent' }}>
                                   <span style={{ fontWeight: 700, fontFamily: 'monospace', fontSize: 12, color: 'var(--text-primary)' }}>{r.code}</span>
                                   <span style={{ fontSize: 12, color: 'var(--text-secondary)', flex: 1, minWidth: 0 }}>{r.display}</span>
-                                  {selected && <span style={{ fontSize: 11, color: 'var(--red)', fontWeight: 700, flexShrink: 0 }}>✓ dipilih</span>}
+                                  {selected && <span style={{ fontSize: 11, color: 'var(--red)', fontWeight: 700, flexShrink: 0 }}>dipilih</span>}
                                 </div>
                               )
                             })}

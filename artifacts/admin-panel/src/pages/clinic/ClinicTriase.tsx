@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useImperativeHandle, forwardRef } from 'react'
+import { Check, Circle, ChevronUp, ChevronDown } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { fmtDate, fmtTime, fmtDateTime } from '../../lib/format'
@@ -107,7 +108,7 @@ function CList({ items, ordered = false }: { items: string[]; ordered?: boolean 
     <ul style={{ listStyle: 'none', margin: '4px 0 0', padding: 0, fontSize: 13, lineHeight: 1.6, color: 'var(--text-secondary)' }}>
       {items.map((it, i) => (
         <li key={i} style={{ display: 'flex', gap: 8, marginBottom: 3 }}>
-          <span style={{ color: 'var(--red)', flexShrink: 0, marginTop: 1, fontSize: 9 }}>●</span>
+          <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: 999, background: 'var(--red)', flexShrink: 0, marginTop: 5 }} />
           <span>{it}</span>
         </li>
       ))}
@@ -351,7 +352,7 @@ const ageFromDob = (dob: string | null): string => {
 function NoAccess({ children }: { children: React.ReactNode }) {
   return (
     <div className="card" style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>
-      🔒 {children}
+      {children}
     </div>
   )
 }
@@ -363,7 +364,7 @@ function Collapsible({ title, defaultOpen = false, children }: { title: string; 
       <div onClick={() => setOpen(o => !o)}
         style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}>
         <span style={{ color: 'var(--red)', fontSize: 12, fontWeight: 700, letterSpacing: 0.4, textTransform: 'uppercase' }}>{title}</span>
-        <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>{open ? '▲' : '▼'}</span>
+        <span style={{ color: 'var(--text-muted)', display: 'inline-flex' }}>{open ? <ChevronUp size={14} /> : <ChevronDown size={14} />}</span>
       </div>
       {open && <div style={{ marginTop: 14 }}>{children}</div>}
     </div>
@@ -417,7 +418,7 @@ function Sub({ label, children }: { label: string; children: React.ReactNode }) 
     <div style={{ marginBottom: 12, border: '1px solid var(--border, #E5E7EB)', borderRadius: 8, padding: 12 }}>
       <div onClick={() => setOpen(o => !o)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}>
         <span style={{ fontWeight: 600, fontSize: 13 }}>{label}</span>
-        <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>{open ? '▲' : '▼'}</span>
+        <span style={{ color: 'var(--text-muted)', display: 'inline-flex' }}>{open ? <ChevronUp size={13} /> : <ChevronDown size={13} />}</span>
       </div>
       {open && <div style={{ marginTop: 10 }}>{children}</div>}
     </div>
@@ -904,7 +905,7 @@ function ConsentTab({ visit, onToast, onSaved, isLocked, recordId, lockedAt, loc
             {existingSigned && !reSigning ? (
               <div>
                 <div style={{ fontSize: 13, color: 'var(--green)', fontWeight: 600, marginBottom: 8 }}>
-                  ✓ Ditandatangani oleh {existingSigned.signed_by_name} pada {fmtDateTime(existingSigned.signed_at)}
+                  Ditandatangani oleh {existingSigned.signed_by_name} pada {fmtDateTime(existingSigned.signed_at)}
                 </div>
                 {existingSigned.signature_data && (
                   <img src={existingSigned.signature_data} alt="signature" style={{ display: 'block', marginBottom: 12, border: '2px solid var(--green)', borderRadius: 8, background: '#fff', maxWidth: 300 }} />
@@ -1077,7 +1078,12 @@ function StepChip({ label, state }: { label: string; state: StepState }) {
     active: { background: 'rgba(59,130,246,0.12)', color: 'var(--blue)', border: '1px solid rgba(59,130,246,0.25)' },
     todo: { background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border)' },
   }
-  return <span style={{ ...palette[state], fontSize: 11, padding: '3px 10px', borderRadius: 999, fontWeight: 600, whiteSpace: 'nowrap' }}>{label}</span>
+  return (
+    <span style={{ ...palette[state], fontSize: 11, padding: '3px 10px', borderRadius: 999, fontWeight: 600, whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+      {state === 'done' ? <Check size={11} /> : <Circle size={8} />}
+      {label}
+    </span>
+  )
 }
 
 export default function ClinicTriase() {
@@ -1421,13 +1427,13 @@ export default function ClinicTriase() {
                     </select>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
-                    <StepChip label="✓ Terdaftar" state="done" />
+                    <StepChip label="Terdaftar" state="done" />
                     <span style={{ color: 'var(--text-muted)' }}>→</span>
-                    <StepChip label={scr ? '✓ Screening' : '○ Screening'} state={scr ? 'done' : 'active'} />
+                    <StepChip label="Screening" state={scr ? 'done' : 'active'} />
                     <span style={{ color: 'var(--text-muted)' }}>→</span>
-                    <StepChip label={con ? '✓ Consent' : '○ Consent'} state={con ? 'done' : (scr ? 'active' : 'todo')} />
+                    <StepChip label="Consent" state={con ? 'done' : (scr ? 'active' : 'todo')} />
                     <span style={{ color: 'var(--text-muted)' }}>→</span>
-                    <StepChip label={`${scr && con ? '✓' : '○'} ${requiresDoctor(v) ? 'Siap Dokter' : 'Siap Kasir'}`} state={scr && con ? 'done' : 'todo'} />
+                    <StepChip label={requiresDoctor(v) ? 'Siap Dokter' : 'Siap Kasir'} state={scr && con ? 'done' : 'todo'} />
                   </div>
                 </div>
 
@@ -1438,14 +1444,14 @@ export default function ClinicTriase() {
                   ) : !con ? (
                     <button className="btn-primary" style={{ width: 'auto', padding: '8px 16px', background: '#1D4ED8' }} onClick={() => openModal(v, 'consent')}>Isi Consent</button>
                   ) : requiresDoctor(v) ? (
-                    <span className="badge" style={{ background: '#EAF3DE', color: '#3B6D11' }}>✓ Siap Dokter</span>
+                    <span className="badge" style={{ background: '#EAF3DE', color: '#3B6D11' }}>Siap Dokter</span>
                   ) : (
                     <button
                       className="btn-primary"
                       style={{ width: 'auto', padding: '8px 16px', background: '#059669' }}
                       onClick={() => openModal(v, 'assessment')}
                     >
-                      ✓ Selesai Treatment
+                      Selesai Treatment
                     </button>
                   )}
                 </div>
@@ -1629,13 +1635,13 @@ export default function ClinicTriase() {
                         cursor: assessmentLoading ? 'not-allowed' : 'pointer',
                       }}
                     >
-                      {assessmentLoading ? 'Menyimpan...' : '✓ Simpan & Selesai Treatment'}
+                      {assessmentLoading ? 'Menyimpan...' : 'Simpan & Selesai Treatment'}
                     </button>
                   </div>
 
                   {assessmentSaved && (
                     <div style={{ textAlign: 'center', fontSize: 12, color: '#059669' }}>
-                      ✓ Assessment sudah tersimpan
+                      Assessment sudah tersimpan
                     </div>
                   )}
                 </div>

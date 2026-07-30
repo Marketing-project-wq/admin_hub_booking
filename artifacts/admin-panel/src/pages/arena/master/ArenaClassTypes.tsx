@@ -88,7 +88,7 @@ export default function ArenaClassTypes() {
               : data.map(ct => (
                 <tr key={ct.id}>
                   <td style={{ fontWeight: 600 }}>
-                    <span style={{ color: ct.color, marginRight: 6 }}>●</span>
+                    <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 999, background: ct.color, marginRight: 6 }} />
                     {ct.name}
                   </td>
                   <td>{ct.duration_min} mnt</td>

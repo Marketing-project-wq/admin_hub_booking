@@ -207,7 +207,7 @@ function InfoTab({ visit, patient, transaction, onCloseBill, onViewReceipt }: {
       {visit.payment_status === 'paid' ? (
         <div style={{ background: 'rgba(5,150,105,0.1)', border: '1px solid rgba(5,150,105,0.2)', borderRadius: 10, padding: 16, marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
           <div>
-            <div style={{ fontWeight: 700, color: 'var(--green)', fontSize: 15 }}>✓ Lunas</div>
+            <div style={{ fontWeight: 700, color: 'var(--green)', fontSize: 15 }}>Lunas</div>
             <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>
               {fmtRp(transaction?.total_amount ?? visit.payment_amount ?? 0)} · {(transaction?.payment_method || visit.payment_method || '-').toUpperCase()}
             </div>

@@ -366,7 +366,7 @@ export default function ArenaSchedules() {
                     <td>{fmtDate(s.schedule_date)}</td>
                     <td>
                       {s.class_type?.color && (
-                        <span style={{ color: s.class_type.color, marginRight: 6 }}>●</span>
+                        <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 999, background: s.class_type.color, marginRight: 6 }} />
                       )}
                       {s.class_type?.name || '-'}
                     </td>

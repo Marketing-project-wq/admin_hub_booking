@@ -97,7 +97,7 @@ export default function RescheduleModal({ booking, onClose, onRefresh }: Props) 
           <div style={{ color: 'var(--text-muted)', fontSize: 12, fontFamily: 'monospace' }}>{booking.booking_code as string}</div>
           <div style={{ marginTop: 8, fontSize: 13 }}>
             <span style={{ color: 'var(--text-muted)' }}>Jadwal sekarang: </span>
-            {!!currentCt?.color && <span style={{ color: currentCt.color as string, marginRight: 4 }}>●</span>}
+            {!!currentCt?.color && <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 999, background: currentCt.color as string, marginRight: 4 }} />}
             {currentCt?.name as string} — {fmtDate(currentSchedule?.schedule_date as string)}{' '}
             {fmtTime(currentSchedule?.start_time as string)}–{fmtTime(currentSchedule?.end_time as string)}{' '}
             ({currentSchedule?.instructor as string})
@@ -146,7 +146,7 @@ export default function RescheduleModal({ booking, onClose, onRefresh }: Props) 
                       </td>
                       <td style={{ fontSize: 13 }}>{fmtDate(s.schedule_date)}</td>
                       <td style={{ fontSize: 13 }}>
-                        {s.class_type?.color && <span style={{ color: s.class_type.color, marginRight: 4 }}>●</span>}
+                        {s.class_type?.color && <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 999, background: s.class_type.color, marginRight: 4 }} />}
                         {s.class_type?.name}
                       </td>
                       <td style={{ fontSize: 13 }}>{s.instructor}</td>

@@ -1,4 +1,5 @@
 import React from 'react'
+import { Sun, Moon } from 'lucide-react'
 import { NavLink, Link, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
@@ -181,8 +182,8 @@ export default function Sidebar({ currentUnit, open, onClose }: SidebarProps) {
           title={theme === 'dark' ? 'Mode Terang' : 'Mode Gelap'}
         >
           <span className={`theme-toggle-track${theme === 'dark' ? ' on' : ''}`}>
-            <span className="theme-toggle-icon sun" aria-hidden="true">☀</span>
-            <span className="theme-toggle-icon moon" aria-hidden="true">☾</span>
+            <span className="theme-toggle-icon sun" aria-hidden="true"><Sun size={12} /></span>
+            <span className="theme-toggle-icon moon" aria-hidden="true"><Moon size={12} /></span>
             <span className="theme-toggle-thumb" />
           </span>
           <span className="theme-toggle-label">{theme === 'dark' ? 'Mode Gelap' : 'Mode Terang'}</span>

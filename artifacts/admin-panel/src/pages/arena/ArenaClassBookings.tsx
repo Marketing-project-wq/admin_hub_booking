@@ -281,7 +281,7 @@ export default function ArenaClassBookings() {
                     ) : null}
                   </td>
                   <td>
-                    {!!ct?.color && <span style={{ color: ct.color as string, marginRight: 4 }}>●</span>}
+                    {!!ct?.color && <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 999, background: ct.color as string, marginRight: 4 }} />}
                     {ct?.name as string || '-'}
                   </td>
                   <td style={{ fontSize: 12, whiteSpace: 'nowrap', color: 'var(--text-muted)' }}>

@@ -187,7 +187,7 @@ export default function ArenaAnalytics() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
         <div style={{ fontSize: 11, color: 'var(--text-faint)' }}>{lastUpdatedText(groupRows)}</div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          {isSaved && <span style={{ fontSize: 12, color: '#16a34a', fontWeight: 600 }}>✓ Tersimpan</span>}
+          {isSaved && <span style={{ fontSize: 12, color: '#16a34a', fontWeight: 600 }}>Tersimpan</span>}
           <button className="btn-primary" onClick={() => saveRows(groupKey, groupRows)} disabled={isSaving}>
             {isSaving ? 'Menyimpan…' : 'Simpan'}
           </button>

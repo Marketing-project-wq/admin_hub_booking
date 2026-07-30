@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react'
+import { ChevronDown } from 'lucide-react'
 import { fmtTime } from '../../lib/format'
 import ConfirmModal from '../../components/arena/ConfirmModal'
 import {
@@ -221,7 +222,7 @@ export default function ClinicSlots() {
           }}
         >
           <span>Buat Slot Massal (Opsional)</span>
-          <span style={{ transition: 'transform 0.15s', transform: bulkOpen ? 'rotate(180deg)' : 'none' }}>▾</span>
+          <span style={{ display: 'inline-flex', transition: 'transform 0.15s', transform: bulkOpen ? 'rotate(180deg)' : 'none' }}><ChevronDown size={16} /></span>
         </button>
 
         {bulkOpen && (

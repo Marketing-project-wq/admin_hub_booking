@@ -229,7 +229,7 @@ export default function ArenaApiKeys() {
                     style={{ flex: 1, fontFamily: 'monospace', fontSize: 12 }}
                   />
                   <button className="btn-secondary" onClick={handleCopy} style={{ whiteSpace: 'nowrap' }}>
-                    {copied ? '✓ Tersalin' : 'Copy'}
+                    {copied ? 'Tersalin' : 'Copy'}
                   </button>
                 </div>
                 <div className="modal-footer">

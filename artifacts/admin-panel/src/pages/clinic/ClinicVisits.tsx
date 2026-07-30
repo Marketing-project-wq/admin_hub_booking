@@ -454,7 +454,7 @@ export default function ClinicVisits() {
                   cursor: selectedSlotId ? 'pointer' : 'not-allowed',
                   fontWeight: 700, fontSize: 14,
                 }}>
-                {assignSlotLoading ? 'Menyimpan...' : '✓ Simpan Jam'}
+                {assignSlotLoading ? 'Menyimpan...' : 'Simpan Jam'}
               </button>
             </div>
           </div>

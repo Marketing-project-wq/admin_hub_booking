@@ -784,7 +784,7 @@ export default function ClinicBookings() {
                   <div style={{ padding: '12px 14px', borderRadius: 10,
                     background: 'rgba(192,57,43,0.1)', border: '1px solid rgba(192,57,43,0.3)',
                     marginBottom: 16 }}>
-                    <div style={{ color: 'var(--text-primary)', fontWeight: 600 }}>✓ {selectedPatient.full_name}</div>
+                    <div style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{selectedPatient.full_name}</div>
                     <div style={{ color: 'var(--text-secondary)', fontSize: 12 }}>{selectedPatient.patient_code} · {selectedPatient.phone}</div>
                   </div>
                 )}
@@ -1255,7 +1255,7 @@ export default function ClinicBookings() {
                   style={{ flex: 2, padding: 12, borderRadius: 8, background: RED,
                     border: 'none', color: '#fff', cursor: checkinLoading ? 'not-allowed' : 'pointer',
                     fontWeight: 700, fontSize: 14 }}>
-                  {checkinLoading ? 'Memproses...' : '✓ Konfirmasi Check-in'}
+                  {checkinLoading ? 'Memproses...' : 'Konfirmasi Check-in'}
                 </button>
               ) : (
                 <button
@@ -1266,7 +1266,7 @@ export default function ClinicBookings() {
                     border: 'none', color: checkinFormValid ? '#fff' : 'var(--text-muted)',
                     cursor: checkinLoading || !checkinFormValid ? 'not-allowed' : 'pointer',
                     fontWeight: 700, fontSize: 14 }}>
-                  {checkinLoading ? 'Memproses...' : '✓ Simpan Pasien & Check-in'}
+                  {checkinLoading ? 'Memproses...' : 'Simpan Pasien & Check-in'}
                 </button>
               )}
             </div>

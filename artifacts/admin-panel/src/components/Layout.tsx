@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import { Menu } from 'lucide-react'
 import { Outlet } from 'react-router-dom'
 import Sidebar from './Sidebar'
 
@@ -18,7 +19,7 @@ export default function Layout({ currentUnit }: LayoutProps) {
           onClick={() => setSidebarOpen(!sidebarOpen)}
           aria-label="Toggle sidebar"
         >
-          ☰
+          <Menu size={20} />
         </button>
         <Outlet />
       </main>

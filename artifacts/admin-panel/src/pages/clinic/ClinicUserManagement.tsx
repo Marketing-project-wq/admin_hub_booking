@@ -71,7 +71,7 @@ export default function ClinicUserManagement() {
   if (!allowed) {
     return (
       <div className="card" style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>
-        🔒 Anda tidak memiliki akses untuk mengelola users.
+        Anda tidak memiliki akses untuk mengelola users.
       </div>
     )
   }
@@ -271,7 +271,7 @@ function ResetPasswordModal({ user, onClose, onSaved }: { user: ClinicUser; onCl
     <ModalShell title={`Reset Password — ${user.full_name}`} onClose={onClose} maxWidth={420}>
       {error && <p style={{ color: 'var(--red)', fontSize: 13, marginBottom: 12 }}>{error}</p>}
       {done ? (
-        <p style={{ color: '#065F46', fontWeight: 600 }}>✓ Password berhasil direset.</p>
+        <p style={{ color: '#065F46', fontWeight: 600 }}>Password berhasil direset.</p>
       ) : (
         <>
           <div className="form-group">

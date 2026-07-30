@@ -253,7 +253,7 @@ interface TrendRow {
 function fmtDelta(cur: number, prev: number): string {
   const d = Math.round((cur - prev) * 10) / 10
   if (d === 0) return '='
-  return `${d > 0 ? '▲' : '▼'}${Math.abs(d).toFixed(1)}`
+  return `${d > 0 ? '+' : '-'}${Math.abs(d).toFixed(1)}`
 }
 
 const trendTh: React.CSSProperties = {
@@ -717,7 +717,7 @@ export default function PostureScanPanel({ visitId, patientId }: { visitId: stri
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
                 <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{v.label}</span>
                 {scan && (scan.saved
-                  ? <span className="badge" style={{ background: 'rgba(16,185,129,0.15)', color: 'var(--green)' }}>✓ Tersimpan</span>
+                  ? <span className="badge" style={{ background: 'rgba(16,185,129,0.15)', color: 'var(--green)' }}>Tersimpan</span>
                   : <span className="badge" style={{ background: 'rgba(245,158,11,0.15)', color: 'var(--amber)' }}>Preview — belum disimpan</span>)}
               </div>
               <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '0 0 10px', lineHeight: 1.4 }}>{v.instruksi}</p>
