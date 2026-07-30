@@ -665,7 +665,7 @@ function VisitCard({ visit, queue = false, onStatusChange, onOpen, busy, doctorO
           <div style={{ fontSize: 11, color: 'var(--text-secondary)', fontFamily: 'monospace' }}>{visit.patient?.patient_code || '-'}</div>
           {isStale && (
             <span style={{ display: 'inline-block', marginTop: 2, fontSize: 11, fontWeight: 700, padding: '1px 8px', borderRadius: 999, background: '#FEF3C7', color: '#92400E' }}>
-              ⚠ Tertinggal · {fmtDate(visit.visit_date)}
+              Tertinggal · {fmtDate(visit.visit_date)}
             </span>
           )}
           <div style={{ fontSize: 13, marginTop: 2, color: 'var(--text-secondary)' }}>{visit.services.map(s => s.service_name).join(', ') || '-'}</div>
@@ -680,14 +680,14 @@ function VisitCard({ visit, queue = false, onStatusChange, onOpen, busy, doctorO
               color: visit.assigned_doctor_id ? 'var(--blue)' : 'var(--text-secondary)',
             }}
           >
-            <option value="">🩺 Assign dokter…</option>
+            <option value="">Assign dokter…</option>
             {doctorOptions.map(o => <option key={o.id} value={o.id}>{o.full_name}</option>)}
             {visit.assigned_doctor_id && !doctorOptions.some(o => o.id === visit.assigned_doctor_id) && (
               <option value={visit.assigned_doctor_id}>(staf nonaktif)</option>
             )}
           </select>
           {visit.patient_package_id && (
-            <span style={{ display: 'inline-block', marginTop: 4, fontSize: 11, fontWeight: 600, padding: '1px 8px', borderRadius: 999, background: '#DBEAFE', color: '#1D4ED8' }}>📦 Paket</span>
+            <span style={{ display: 'inline-block', marginTop: 4, fontSize: 11, fontWeight: 600, padding: '1px 8px', borderRadius: 999, background: '#DBEAFE', color: '#1D4ED8' }}>Paket</span>
           )}
           {visit.chief_complaint && (
             <div style={{ fontSize: 12, fontStyle: 'italic', color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -1157,7 +1157,6 @@ export default function ClinicDokter() {
                 loadingScreening ? <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: 40 }}>Memuat data screening...</p>
                 : !screeningData ? (
                   <div style={{ textAlign: 'center', padding: 40 }}>
-                    <div style={{ fontSize: 40, marginBottom: 12 }}>📋</div>
                     <p style={{ color: 'var(--text-muted)' }}>Screening belum diisi</p>
                     <p style={{ color: 'var(--text-muted)', fontSize: 12 }}>Admin/registrasi perlu mengisi screening terlebih dahulu</p>
                   </div>
@@ -1269,7 +1268,6 @@ export default function ClinicDokter() {
                 loadingConsent ? <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: 40 }}>Memuat data consent...</p>
                 : consentData.length === 0 ? (
                   <div style={{ textAlign: 'center', padding: 40 }}>
-                    <div style={{ fontSize: 40, marginBottom: 12 }}>📝</div>
                     <p style={{ color: 'var(--text-muted)' }}>Consent belum diisi</p>
                   </div>
                 ) : (
@@ -1281,7 +1279,7 @@ export default function ClinicDokter() {
                             {c.consent_type.replace(/_/g, ' ')}
                           </div>
                           <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 999, background: c.is_agreed ? '#D1FAE5' : '#FEF3C7', color: c.is_agreed ? '#065F46' : '#92400E' }}>
-                            {c.is_agreed ? '✓ Disetujui' : '⏳ Belum'}
+                            {c.is_agreed ? '✓ Disetujui' : 'Belum'}
                           </span>
                         </div>
                         {c.signed_by_name && <div style={{ fontSize: 12, color: '#6B7280', marginTop: 4 }}>Ditandatangani: {c.signed_by_name} · {c.signed_at ? fmtDateTime(c.signed_at) : '-'}</div>}
@@ -1397,7 +1395,7 @@ export default function ClinicDokter() {
                         <div style={{ height: 6, borderRadius: 4, marginTop: 6, background: 'linear-gradient(to right, #16A34A, #CA8A04, #EA580C, #DC2626)' }} />
                         {pain.nrs_score != null && pain.nrs_score >= 8 && (
                           <div style={{ marginTop: 8, padding: 10, background: '#FEE2E2', border: '1px solid #DC2626', borderRadius: 8, color: '#991B1B', fontSize: 13 }}>
-                            ⚠ Intensitas nyeri sangat berat — wajib konsultasi dokter.
+                            Intensitas nyeri sangat berat — wajib konsultasi dokter.
                           </div>
                         )}
 

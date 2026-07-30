@@ -891,7 +891,7 @@ export default function ClinicBookings() {
                             style={{ accentColor: 'var(--red)' }}
                           />
                           <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>
-                            📦 {pp.package.name}
+                            {pp.package.name}
                           </span>
                           <span style={{ color: 'var(--text-secondary)', fontSize: 11 }}>
                             · Sisa {pp.remaining_sessions} sesi
@@ -1053,7 +1053,6 @@ export default function ClinicBookings() {
 
             {manualStep === 3 && (
               <div style={{ textAlign: 'center', padding: '20px 0' }}>
-                <div style={{ fontSize: 48, marginBottom: 12 }}>✅</div>
                 <h3 style={{ color: 'var(--text-primary)', marginBottom: 8 }}>Booking Berhasil Dibuat!</h3>
                 {manualBookingResult && (
                   <p style={{ fontFamily: 'monospace', fontSize: 18, fontWeight: 700, color: 'var(--red)', marginBottom: 12 }}>
@@ -1071,7 +1070,7 @@ export default function ClinicBookings() {
                 </p>
                 {manualBookingResult?.needsSlot === true && manualBookingResult.slotLinked === false && (
                   <p style={{ fontSize: 12, color: 'var(--text-primary)', background: 'rgba(245,158,11,0.12)', borderLeft: '3px solid #f59e0b', borderRadius: 6, padding: '8px 10px', margin: '0 0 24px', textAlign: 'left', lineHeight: 1.4 }}>
-                    ⚠ Tidak ada slot yang cocok dengan tanggal/jam ini — kursi TIDAK terkunci dan booking
+                    Tidak ada slot yang cocok dengan tanggal/jam ini — kursi TIDAK terkunci dan booking
                     tidak muncul di daftar "Menunggu Check-in" (tetap bisa check-in via kode booking).
                   </p>
                 )}

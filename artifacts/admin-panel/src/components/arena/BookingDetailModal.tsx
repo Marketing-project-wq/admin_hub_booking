@@ -371,7 +371,6 @@ export default function BookingDetailModal({ type, booking, onClose, onRefresh }
                     style={{ color: 'var(--red)', textDecoration: 'none' }}
                   >
                     {String(booking.payment_ref)}
-                    <span style={{ fontSize: 10, marginLeft: 4 }}>↗</span>
                   </a>
                 </span>
               </div>
@@ -398,7 +397,7 @@ export default function BookingDetailModal({ type, booking, onClose, onRefresh }
             <button className="btn-secondary" onClick={onClose}>Tutup</button>
             {type === 'slot' && status !== 'cancelled' && !isEditing && (
               <button className="btn-secondary" onClick={() => setIsEditing(true)}>
-                ✏️ Edit
+                Edit
               </button>
             )}
             {!isEditing && status === 'pending_payment' && (

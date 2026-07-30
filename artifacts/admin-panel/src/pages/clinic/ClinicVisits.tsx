@@ -293,7 +293,7 @@ export default function ClinicVisits() {
                 </td>
                 <td>
                   {v.patient_package_id
-                    ? <span className="badge" style={{ background: '#DBEAFE', color: '#1D4ED8' }}>📦 Paket</span>
+                    ? <span className="badge" style={{ background: '#DBEAFE', color: '#1D4ED8' }}>Paket</span>
                     : '-'}
                 </td>
                 <td style={{ whiteSpace: 'nowrap', fontSize: 12 }}>

@@ -89,10 +89,10 @@ export default function ClinicVisitDetail() {
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           {visit.payment_status !== 'paid' && (
-            <button className="btn-secondary" style={{ width: 'auto', padding: '8px 16px' }} onClick={() => navigate(`/clinic/visits?edit=${visit.id}`)}>✏️ Edit Kunjungan</button>
+            <button className="btn-secondary" style={{ width: 'auto', padding: '8px 16px' }} onClick={() => navigate(`/clinic/visits?edit=${visit.id}`)}>Edit Kunjungan</button>
           )}
           {visit.payment_status !== 'paid' && (
-            <button className="btn-primary" style={{ width: 'auto', padding: '8px 16px', background: '#065F46' }} onClick={() => setShowCloseBill(true)}>💳 Close Bill</button>
+            <button className="btn-primary" style={{ width: 'auto', padding: '8px 16px', background: '#065F46' }} onClick={() => setShowCloseBill(true)}>Close Bill</button>
           )}
         </div>
       </div>
@@ -219,7 +219,7 @@ function InfoTab({ visit, patient, transaction, onCloseBill, onViewReceipt }: {
       ) : (
         <div style={{ background: 'rgba(192,57,43,0.1)', border: '1px solid rgba(192,57,43,0.2)', borderRadius: 10, padding: 16, marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
           <div style={{ fontSize: 13, color: 'var(--red)' }}>Pembayaran belum diselesaikan.</div>
-          <button className="btn-primary" style={{ width: 'auto', padding: '8px 16px' }} onClick={onCloseBill}>💳 Close Bill</button>
+          <button className="btn-primary" style={{ width: 'auto', padding: '8px 16px' }} onClick={onCloseBill}>Close Bill</button>
         </div>
       )}
 

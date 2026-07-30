@@ -375,7 +375,6 @@ export default function ArenaDashboard() {
       {/* ── SALES — light glass card ──────────────────────────────────────── */}
       <div className="card" style={{ padding: 0, overflow: 'hidden', marginBottom: 24 }}>
         <div style={{ padding: '18px 22px', display: 'flex', alignItems: 'center', gap: 12, borderBottom: '1px solid var(--border)' }}>
-          <span style={{ width: 44, height: 44, flex: '0 0 auto', display: 'grid', placeItems: 'center', borderRadius: 14, fontSize: 20, background: 'rgba(28,138,75,0.14)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.5)' }}>💰</span>
           <div>
             <div style={{ fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: 17, textTransform: 'uppercase', letterSpacing: '0.03em', color: 'var(--text-primary)' }}>Sales</div>
             <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Uang masuk berdasarkan tanggal transaksi</div>
@@ -412,7 +411,6 @@ export default function ArenaDashboard() {
       {/* ── REVENUE — light glass card ────────────────────────────────────── */}
       <div className="card" style={{ padding: 0, overflow: 'hidden', marginBottom: 24 }}>
         <div style={{ padding: '18px 22px', display: 'flex', alignItems: 'center', gap: 12, borderBottom: '1px solid var(--border)' }}>
-          <span style={{ width: 44, height: 44, flex: '0 0 auto', display: 'grid', placeItems: 'center', borderRadius: 14, fontSize: 20, background: 'var(--red-soft)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.5)' }}>📈</span>
           <div>
             <div style={{ fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: 17, textTransform: 'uppercase', letterSpacing: '0.03em', color: 'var(--text-primary)' }}>Revenue</div>
             <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Layanan terdelivered berdasarkan tanggal kelas/booking</div>

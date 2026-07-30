@@ -223,7 +223,6 @@ export default function WalkInVisitModal({ onClose, onSuccess }: Props) {
         {/* Step 3 — success */}
         {step === 3 && (
           <div style={{ textAlign: 'center', padding: '12px 0' }}>
-            <div style={{ fontSize: 40 }}>✅</div>
             <h3 style={{ margin: '8px 0' }}>Kunjungan dibuat</h3>
             <p style={{ color: 'var(--text-muted)', fontSize: 14 }}>Kode kunjungan:</p>
             <p style={{ fontFamily: 'monospace', fontSize: 18, fontWeight: 700 }}>{visitCode}</p>

@@ -7,10 +7,10 @@ import {
 } from '../../lib/clinic'
 
 const KPI = [
-  { key: 'today',     label: 'Booking Hari Ini', icon: '📅', color: '#2563EB' },
-  { key: 'week',      label: 'Minggu Ini',       icon: '🗓️', color: '#7C3AED' },
-  { key: 'pending',   label: 'Pending Payment',  icon: '⏳', color: '#D97706' },
-  { key: 'confirmed', label: 'Confirmed',        icon: '✅', color: '#059669' },
+  { key: 'today',     label: 'Booking Hari Ini', color: '#2563EB' },
+  { key: 'week',      label: 'Minggu Ini',       color: '#7C3AED' },
+  { key: 'pending',   label: 'Pending Payment',  color: '#D97706' },
+  { key: 'confirmed', label: 'Confirmed',        color: '#059669' },
 ] as const
 
 export default function ClinicDashboard() {
@@ -59,15 +59,6 @@ export default function ClinicDashboard() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12, marginBottom: 24 }}>
         {KPI.map(k => (
           <div key={k.key} className="card" style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-            {/* Apple-style glass chip: soft colour-tinted rounded square, no harsh top line */}
-            <span style={{
-              fontSize: 22,
-              width: 48, height: 48, flex: '0 0 auto',
-              display: 'grid', placeItems: 'center',
-              borderRadius: 16,
-              background: `${k.color}1A`,
-              boxShadow: `inset 0 1px 0 rgba(255,255,255,0.55), 0 4px 12px ${k.color}22`,
-            }}>{k.icon}</span>
             <div>
               <div style={{ fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: 30, color: k.color, lineHeight: 1, letterSpacing: '0.01em' }}>
                 {loading ? '...' : stats[k.key]}

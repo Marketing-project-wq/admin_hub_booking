@@ -706,7 +706,7 @@ function ScreeningTab({ visit, patient, onToast, onSaved, isLocked, recordId, lo
         })}
         {anyParQYes && (
           <div style={{ marginTop: 12, padding: 12, background: '#FEE2E2', border: '1px solid #DC2626', borderRadius: 8, color: '#991B1B', fontSize: 13 }}>
-            ⚠ Terdapat jawaban "Ya" pada PAR-Q. Pasien disarankan berkonsultasi dengan dokter sebelum melakukan aktivitas fisik.
+            Terdapat jawaban "Ya" pada PAR-Q. Pasien disarankan berkonsultasi dengan dokter sebelum melakukan aktivitas fisik.
           </div>
         )}
       </Collapsible>
@@ -776,7 +776,7 @@ function ScreeningTab({ visit, patient, onToast, onSaved, isLocked, recordId, lo
             <div style={{ height: 6, borderRadius: 4, marginTop: 6, background: 'linear-gradient(to right, #16A34A, #CA8A04, #EA580C, #DC2626)' }} />
             {intensity != null && intensity >= 8 && (
               <div style={{ marginTop: 8, padding: 10, background: '#FEE2E2', border: '1px solid #DC2626', borderRadius: 8, color: '#991B1B', fontSize: 13 }}>
-                ⚠ Intensitas nyeri sangat berat — wajib konsultasi dokter.
+                Intensitas nyeri sangat berat — wajib konsultasi dokter.
               </div>
             )}
           </Sub>
@@ -889,7 +889,7 @@ function ConsentTab({ visit, onToast, onSaved, isLocked, recordId, lockedAt, loc
           {types.map(type => <ConsentCard key={type} type={type} />)}
 
           <div style={{ background: 'var(--bg-input)', border: '1px solid var(--border-strong)', borderRadius: 10, padding: 20, marginBottom: 16 }}>
-            <h3 style={{ margin: '0 0 8px', fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>✍ Tanda Tangan Persetujuan</h3>
+            <h3 style={{ margin: '0 0 8px', fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>Tanda Tangan Persetujuan</h3>
             <p style={{ fontSize: 13, lineHeight: 1.6, marginTop: 0, color: 'var(--text-secondary)' }}>
               Dengan menandatangani di bawah ini, saya menyatakan telah membaca dan menyetujui seluruh persetujuan di atas.
             </p>
@@ -1367,7 +1367,6 @@ export default function ClinicTriase() {
         <p style={{ color: 'var(--text-muted)' }}>Memuat data...</p>
       ) : visits.length === 0 ? (
         <div style={{ textAlign: 'center', padding: 60, color: 'var(--text-muted)' }}>
-          <div style={{ fontSize: 40, marginBottom: 12 }}>📋</div>
           <p>Tidak ada pasien hari ini</p>
         </div>
       ) : (
@@ -1396,7 +1395,7 @@ export default function ClinicTriase() {
                     <span style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 15 }}>{v.patient?.full_name || '-'}</span>
                     {v.visit_date < today && (
                       <span style={{ fontSize: 11, fontWeight: 700, padding: '1px 8px', borderRadius: 999, background: '#FEF3C7', color: '#92400E' }}>
-                        ⚠ Tertinggal · {fmtDate(v.visit_date)}
+                        Tertinggal · {fmtDate(v.visit_date)}
                       </span>
                     )}
                     <span style={{ fontSize: 12, color: 'var(--text-secondary)', fontFamily: 'monospace' }}>{v.patient?.patient_code || '-'}</span>
@@ -1414,7 +1413,7 @@ export default function ClinicTriase() {
                         color: v.assigned_therapist_id ? 'var(--green)' : 'var(--text-secondary)',
                       }}
                     >
-                      <option value="">🧑‍⚕️ Assign terapis…</option>
+                      <option value="">Assign terapis…</option>
                       {therapistOptions.map(o => <option key={o.id} value={o.id}>{o.full_name}</option>)}
                       {v.assigned_therapist_id && !therapistOptions.some(o => o.id === v.assigned_therapist_id) && (
                         <option value={v.assigned_therapist_id}>(staf nonaktif)</option>

@@ -17,7 +17,7 @@ interface TrackingRow {
 const BRAND: Record<string, { name: string; color: string; glyph: string }> = {
   meta_pixel_id: { name: 'Meta Pixel', color: '#1877F2', glyph: 'f' },
   gtm_id: { name: 'Google Tag Manager', color: '#5F6368', glyph: 'G' },
-  tiktok_pixel_id: { name: 'TikTok Pixel', color: '#010101', glyph: '♪' },
+  tiktok_pixel_id: { name: 'TikTok Pixel', color: '#010101', glyph: 'T' },
 }
 
 // Field-level presentation keyed by arena_tracking_config.key

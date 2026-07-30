@@ -6,21 +6,18 @@ const units = [
   {
     key: 'arena' as const,
     title: 'Arena',
-    icon: '🏟',
     desc: 'Slot booking, kelas, voucher, add-ons',
     disabled: false,
   },
   {
     key: 'gym' as const,
     title: 'Gym',
-    icon: '🏋️',
     desc: 'Kelas yoga, HYROX, EMS, dan lainnya',
     disabled: false,
   },
   {
     key: 'clinic' as const,
     title: 'Clinic',
-    icon: '🏥',
     desc: 'Physiotherapy & sports medicine',
     disabled: false,
   },
@@ -51,7 +48,6 @@ export default function LandingPage() {
               disabled={u.disabled}
               onClick={() => !u.disabled && navigate(`/login/${u.key}`)}
             >
-              <div className="unit-card-icon">{u.icon}</div>
               <h3>{u.title}</h3>
               <p>{u.desc}</p>
               {u.disabled && <span className="coming-soon">Coming Soon</span>}

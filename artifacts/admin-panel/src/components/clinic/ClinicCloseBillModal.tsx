@@ -416,7 +416,7 @@ export default function ClinicCloseBillModal({
 
           {selectedNewPkg && (
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 4, color: 'var(--blue)' }}>
-              <span>📦 {selectedNewPkg.name}</span>
+              <span>{selectedNewPkg.name}</span>
               <span>{fmtRp(selectedNewPkg.package_price)}</span>
             </div>
           )}
@@ -430,7 +430,7 @@ export default function ClinicCloseBillModal({
 
           {voucherAmount > 0 && (
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: 'var(--amber)', marginBottom: 4 }}>
-              <span>🎟️ Voucher ({voucherService!.service_name})</span>
+              <span>Voucher ({voucherService!.service_name})</span>
               <span>-{fmtRp(voucherAmount)}</span>
             </div>
           )}
@@ -458,7 +458,7 @@ export default function ClinicCloseBillModal({
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
             <input type="checkbox" id="buyPkg" checked={buyingPackage} onChange={e => setBuyingPackage(e.target.checked)} />
             <label htmlFor="buyPkg" style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', cursor: 'pointer' }}>
-              📦 Tambah pembelian paket
+              Tambah pembelian paket
             </label>
           </div>
 
@@ -505,7 +505,6 @@ export default function ClinicCloseBillModal({
           <div style={{ padding: '12px 14px', borderRadius: 10,
             background: 'rgba(5,150,105,0.1)', border: '1px solid rgba(5,150,105,0.2)',
             marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontSize: 18 }}>✅</span>
             <div>
               <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--green)' }}>
                 Sudah Dibayar Online
@@ -522,7 +521,6 @@ export default function ClinicCloseBillModal({
           <div style={{ padding: '12px 14px', borderRadius: 10,
             background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.4)',
             marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontSize: 18 }}>⚠️</span>
             <div>
               <div style={{ fontSize: 13, fontWeight: 600, color: '#FC8181' }}>
                 Servis booking asli tidak ditemukan di visit ini
@@ -538,7 +536,6 @@ export default function ClinicCloseBillModal({
           <div style={{ padding: '12px 14px', borderRadius: 10,
             background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)',
             marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontSize: 18 }}>🎟️</span>
             <div>
               <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--amber)' }}>
                 {voucherFullyCovers ? 'Sudah Dibayar dengan Voucher' : 'Voucher Menutup Sebagian'}
@@ -675,7 +672,7 @@ export default function ClinicCloseBillModal({
               style={{ accentColor: 'var(--red)', width: 16, height: 16 }}
             />
             <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
-              📅 Jadwalkan Kunjungan Berikutnya
+              Jadwalkan Kunjungan Berikutnya
             </span>
           </label>
 

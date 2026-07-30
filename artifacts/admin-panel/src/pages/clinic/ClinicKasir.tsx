@@ -252,7 +252,7 @@ export default function ClinicKasir() {
                 <td>
                   {t.service_name}
                   {t.visit?.patient_package_id && (
-                    <span className="badge" style={{ background: '#DBEAFE', color: '#1D4ED8', marginLeft: 6 }}>📦 Paket</span>
+                    <span className="badge" style={{ background: '#DBEAFE', color: '#1D4ED8', marginLeft: 6 }}>Paket</span>
                   )}
                 </td>
                 <td style={{ whiteSpace: 'nowrap', fontWeight: 600 }}>{fmtRp(t.total_amount)}</td>

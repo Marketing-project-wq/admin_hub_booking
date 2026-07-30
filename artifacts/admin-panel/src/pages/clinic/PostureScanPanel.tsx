@@ -718,7 +718,7 @@ export default function PostureScanPanel({ visitId, patientId }: { visitId: stri
                 <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{v.label}</span>
                 {scan && (scan.saved
                   ? <span className="badge" style={{ background: 'rgba(16,185,129,0.15)', color: 'var(--green)' }}>✓ Tersimpan</span>
-                  : <span className="badge" style={{ background: 'rgba(245,158,11,0.15)', color: 'var(--amber)' }}>⚠ Preview — belum disimpan</span>)}
+                  : <span className="badge" style={{ background: 'rgba(245,158,11,0.15)', color: 'var(--amber)' }}>Preview — belum disimpan</span>)}
               </div>
               <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '0 0 10px', lineHeight: 1.4 }}>{v.instruksi}</p>
 
@@ -752,7 +752,7 @@ export default function PostureScanPanel({ visitId, patientId }: { visitId: stri
 
                   {low && (
                     <p style={{ fontSize: 12, color: 'var(--text-primary)', background: 'rgba(245,158,11,0.12)', borderLeft: '3px solid #f59e0b', borderRadius: 6, padding: '8px 10px', margin: '8px 0 0', lineHeight: 1.4 }}>
-                      ⚠ Deteksi kurang jelas — pastikan pencahayaan cukup dan seluruh tubuh (bahu sampai kaki) terlihat di foto. Disarankan foto ulang.
+                      Deteksi kurang jelas — pastikan pencahayaan cukup dan seluruh tubuh (bahu sampai kaki) terlihat di foto. Disarankan foto ulang.
                     </p>
                   )}
 
@@ -780,7 +780,7 @@ export default function PostureScanPanel({ visitId, patientId }: { visitId: stri
                         if (!next) { setLinkMode(m => ({ ...m, [v.key]: false })); setLinkFrom(f => (f?.view === v.key ? null : f)) }
                       }}
                       style={{ width: 'auto', padding: '8px 14px', ...(annoMode[v.key] ? { background: 'rgba(232,121,249,0.15)', color: '#e879f9' } : {}) }}>
-                      {annoMode[v.key] ? '✏ Anotasi: ON' : '✏ Anotasi'}
+                      {annoMode[v.key] ? 'Anotasi: ON' : 'Anotasi'}
                     </button>
                     {annoMode[v.key] && (
                       <button type="button" className="btn-secondary"
@@ -790,7 +790,7 @@ export default function PostureScanPanel({ visitId, patientId }: { visitId: stri
                           setLinkFrom(f => (f?.view === v.key ? null : f))
                         }}
                         style={{ width: 'auto', padding: '8px 14px', ...(linkMode[v.key] ? { background: 'rgba(249,115,22,0.15)', color: '#f97316' } : {}) }}>
-                        {linkMode[v.key] ? '🔗 Garis: ON' : '🔗 Hubungkan Garis'}
+                        {linkMode[v.key] ? 'Garis: ON' : 'Hubungkan Garis'}
                       </button>
                     )}
                     {scan.saved && (
@@ -833,7 +833,7 @@ export default function PostureScanPanel({ visitId, patientId }: { visitId: stri
                           <span style={{ fontFamily: 'monospace' }}>{fmtDeg(deg)}</span>
                           <button type="button" onClick={() => toggleAutoLine(v.key, al.key)}
                             style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, fontWeight: 600, color: lineHidden ? '#22c55e' : 'var(--red)', flexShrink: 0, padding: 0 }}>
-                            {lineHidden ? '↩ Tampilkan' : '✕ Sembunyikan'}
+                            {lineHidden ? 'Tampilkan' : 'Sembunyikan'}
                           </button>
                         </div>
                       )
@@ -848,12 +848,12 @@ export default function PostureScanPanel({ visitId, patientId }: { visitId: stri
                         </button>
                         <span style={{ fontFamily: 'monospace' }}>{fmtDeg(l.angle_deg)}</span>
                         <button type="button" onClick={() => deleteManualLine(v.key, l.id)}
-                          style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, fontWeight: 600, color: 'var(--red)', flexShrink: 0, padding: 0 }}>✕ Hapus</button>
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, fontWeight: 600, color: 'var(--red)', flexShrink: 0, padding: 0 }}>Hapus</button>
                       </div>
                     ))}
                     {scan.annotations.lines.length === 0 && (
                       <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '4px 0 0' }}>
-                        Garis manual: belum ada — aktifkan ✏ Anotasi lalu 🔗 Hubungkan Garis untuk menambah.
+                        Garis manual: belum ada — aktifkan Anotasi lalu Hubungkan Garis untuk menambah.
                       </p>
                     )}
                   </div>
@@ -898,7 +898,7 @@ export default function PostureScanPanel({ visitId, patientId }: { visitId: stri
                 border: '1px solid var(--border-strong)', background: 'var(--bg-input)', color: 'var(--text-primary)', boxSizing: 'border-box', resize: 'vertical' }} />
             {annoDeleteConfirm && (
               <p style={{ fontSize: 12, color: 'var(--text-primary)', background: 'rgba(245,158,11,0.12)', borderLeft: '3px solid #f59e0b', borderRadius: 6, padding: '8px 10px', margin: '10px 0 0', lineHeight: 1.4 }}>
-                ⚠ Titik ini dipakai di {scans[annoDraft.view]?.annotations.lines.filter(l => l.point_a_id === annoDraft.point.id || l.point_b_id === annoDraft.point.id).length ?? 0} garis — garis tersebut akan ikut terhapus.
+                Titik ini dipakai di {scans[annoDraft.view]?.annotations.lines.filter(l => l.point_a_id === annoDraft.point.id || l.point_b_id === annoDraft.point.id).length ?? 0} garis — garis tersebut akan ikut terhapus.
               </p>
             )}
             <div className="modal-footer" style={{ marginTop: 14, display: 'flex', justifyContent: 'space-between', gap: 8 }}>

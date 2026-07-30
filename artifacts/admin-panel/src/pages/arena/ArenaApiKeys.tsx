@@ -214,7 +214,7 @@ export default function ArenaApiKeys() {
                   marginBottom: 16,
                   color: 'var(--warning-text, #7A5C00)',
                 }}>
-                  ⚠️ Simpan key ini sekarang. Key <strong>tidak akan bisa dilihat lagi</strong> setelah
+                  Simpan key ini sekarang. Key <strong>tidak akan bisa dilihat lagi</strong> setelah
                   jendela ini ditutup — yang tersimpan di database hanya hash-nya.
                 </div>
                 <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 6 }}>
