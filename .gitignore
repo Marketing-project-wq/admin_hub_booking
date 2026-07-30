@@ -63,3 +63,6 @@ artifacts/admin-panel/scripts/*.csv
 # WASM MediaPipe (~32MB) — di-copy dari node_modules saat build (vite plugin copyMediapipeWasm).
 # JANGAN di-commit. Model .task (public/models/) TETAP di-commit.
 artifacts/admin-panel/public/mediapipe-wasm/
+
+# Metadata lokal supabase CLI (dibuat saat functions deploy) — jangan di-commit.
+supabase/.temp/
