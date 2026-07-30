@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { X } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { fmtRp, fmtDate, fmtDateTime, fmtTime, STATUS_LABEL } from '../../lib/format'
 import ConfirmModal from './ConfirmModal'
@@ -177,7 +178,7 @@ export default function BookingDetailModal({ type, booking, onClose, onRefresh }
             <h3 className="modal-title" style={{ margin: 0 }}>
               {type === 'slot' ? 'Detail Slot Booking' : 'Detail Class Booking'}
             </h3>
-            <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--text-muted)' }}>×</button>
+            <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--text-muted)' }}><X size={18} /></button>
           </div>
 
           {error && <p style={{ color: 'var(--red)', fontSize: 13, marginBottom: 12 }}>{error}</p>}

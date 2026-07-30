@@ -1,4 +1,5 @@
 import React from 'react'
+import { X } from 'lucide-react'
 import { fmtRp, fmtDateTime } from '../../lib/format'
 import type { ClinicTransaction } from '../../lib/clinicBilling'
 
@@ -43,7 +44,7 @@ export default function ClinicReceiptModal({ transaction: t, onClose }: Props) {
         {/* Controls — hidden on print */}
         <div className="receipt-no-print" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
           <button className="btn-primary" style={{ width: 'auto', padding: '8px 16px' }} onClick={() => window.print()}>Print Kwitansi</button>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: 'var(--text-muted)', lineHeight: 1 }}>×</button>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: 'var(--text-muted)', lineHeight: 1 }}><X size={18} /></button>
         </div>
 
         {/* ── Receipt content ── */}

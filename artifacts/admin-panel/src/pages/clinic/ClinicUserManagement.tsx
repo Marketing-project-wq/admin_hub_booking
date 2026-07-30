@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react'
+import { X } from 'lucide-react'
 import { fmtDateTime } from '../../lib/format'
 import { useAuth } from '../../context/AuthContext'
 import {
@@ -153,7 +154,7 @@ function ModalShell({ title, onClose, children, maxWidth = 560 }: { title: strin
       <div className="modal-box" style={{ maxWidth }} onClick={e => e.stopPropagation()}>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 20 }}>
           <h3 className="modal-title" style={{ margin: 0 }}>{title}</h3>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--text-muted)' }}>×</button>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--text-muted)' }}><X size={18} /></button>
         </div>
         {children}
       </div>

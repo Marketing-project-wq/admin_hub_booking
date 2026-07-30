@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
+import { X } from 'lucide-react'
 import { fmtDate, fmtTime } from '../../lib/format'
 import { getClinicCalendarData, type CalendarItem } from '../../lib/clinic'
 
@@ -159,7 +160,7 @@ export default function ClinicCalendar() {
           <div className="modal-box" style={{ maxWidth: 560 }} onClick={e => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
               <h3 className="modal-title" style={{ margin: 0, textTransform: 'capitalize' }}>{fmtDate(selectedDate)}</h3>
-              <button onClick={() => setSelectedDate(null)} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--text-muted)' }}>×</button>
+              <button onClick={() => setSelectedDate(null)} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--text-muted)' }}><X size={18} /></button>
             </div>
 
             <div style={{ marginBottom: 12, fontSize: 12, color: 'var(--text-muted)' }}>{selectedItems.length} item</div>

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
+import { ArrowLeft, ArrowRight } from 'lucide-react'
 import { fmtRp, fmtDate, fmtTime, fmtDateTime, exportToCSV } from '../../lib/format'
 import { supabase } from '../../lib/supabase'
 import { todayISO } from '../../lib/clinic'
@@ -280,8 +281,8 @@ export default function ClinicKasir() {
         <div className="pagination">
           <span>{total > 0 ? `${from}–${to} dari ${total} hasil` : '0 hasil'}</span>
           <div className="pagination-btns">
-            <button disabled={page === 0} onClick={() => setPage(p => p - 1)}>← Prev</button>
-            <button disabled={to >= total} onClick={() => setPage(p => p + 1)}>Next →</button>
+            <button disabled={page === 0} onClick={() => setPage(p => p - 1)}><ArrowLeft size={13} style={{ verticalAlign: -2 }} /> Prev</button>
+            <button disabled={to >= total} onClick={() => setPage(p => p + 1)}>Next <ArrowRight size={13} style={{ verticalAlign: -2 }} /></button>
           </div>
         </div>
       </div>

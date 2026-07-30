@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
+import { X } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { fmtRp, fmtDate, fmtTime } from '../../lib/format'
 
@@ -284,7 +285,7 @@ export default function ArenaCalendar() {
                     </div>
                   </div>
                 </div>
-                <button onClick={() => setSelectedClass(null)} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--text-muted)' }}>×</button>
+                <button onClick={() => setSelectedClass(null)} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--text-muted)' }}><X size={18} /></button>
               </div>
 
               <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
@@ -332,7 +333,7 @@ export default function ArenaCalendar() {
                 <div style={{ fontFamily: 'monospace', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>{selectedVenue.booking_code}</div>
                 <span className={`badge ${STATUS_BADGE[selectedVenue.status] || ''}`}>{STATUS_LABEL[selectedVenue.status] || selectedVenue.status}</span>
               </div>
-              <button onClick={() => setSelectedVenue(null)} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--text-muted)' }}>×</button>
+              <button onClick={() => setSelectedVenue(null)} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--text-muted)' }}><X size={18} /></button>
             </div>
 
             <div style={sectionTitle}>Pemesan</div>

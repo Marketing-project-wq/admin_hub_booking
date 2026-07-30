@@ -1,4 +1,5 @@
 import React, { useState, FormEvent } from 'react'
+import { ArrowLeft } from 'lucide-react'
 import { useNavigate, useParams, Link, Navigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import ThemeToggle from '../components/ThemeToggle'
@@ -41,7 +42,7 @@ export default function LoginPage() {
     <div className="login-page">
       <ThemeToggle />
       <div className="login-card">
-        <Link to="/" className="back-link">← Kembali</Link>
+        <Link to="/" className="back-link"><ArrowLeft size={13} style={{ verticalAlign: -2 }} /> Kembali</Link>
         <h1 className="brand">20FIT</h1>
         <p className="subtitle">{UNIT_LABELS[unit]} Admin</p>
 

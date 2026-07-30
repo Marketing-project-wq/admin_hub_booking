@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
+import { ArrowLeft, ArrowRight, X } from 'lucide-react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { fmtRp, fmtDate, fmtTime, fmtDateTime } from '../../lib/format'
 import { useAuth } from '../../context/AuthContext'
@@ -338,8 +339,8 @@ export default function ClinicVisits() {
         <div className="pagination">
           <span>{total > 0 ? `${from}–${to} dari ${total} hasil` : '0 hasil'}</span>
           <div className="pagination-btns">
-            <button disabled={page === 0} onClick={() => setPage(p => p - 1)}>← Prev</button>
-            <button disabled={to >= total} onClick={() => setPage(p => p + 1)}>Next →</button>
+            <button disabled={page === 0} onClick={() => setPage(p => p - 1)}><ArrowLeft size={13} style={{ verticalAlign: -2 }} /> Prev</button>
+            <button disabled={to >= total} onClick={() => setPage(p => p + 1)}>Next <ArrowRight size={13} style={{ verticalAlign: -2 }} /></button>
           </div>
         </div>
       </div>
@@ -391,7 +392,7 @@ export default function ClinicVisits() {
               <button
                 onClick={() => { setShowAssignSlotModal(false); setAssignSlotVisit(null) }}
                 style={{ background: 'none', border: 'none', color: 'var(--text-muted)',
-                  cursor: 'pointer', fontSize: 20 }}>×</button>
+                  cursor: 'pointer', fontSize: 20 }}><X size={18} /></button>
             </div>
 
             {/* Slot list */}
@@ -493,7 +494,7 @@ function VisitDetailModal({ visit, onClose, onSaved }: {
       <div className="modal-box" style={{ maxWidth: 560 }} onClick={e => e.stopPropagation()}>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 20 }}>
           <h3 className="modal-title" style={{ margin: 0 }}>Detail Kunjungan</h3>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--text-muted)' }}>×</button>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--text-muted)' }}><X size={18} /></button>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '140px 1fr', rowGap: 9, columnGap: 12, fontSize: 14 }}>
           <Label>Kode</Label><Val><span style={{ fontFamily: 'monospace' }}>{visit.visit_code}</span></Val>
@@ -688,7 +689,7 @@ function VisitFormModal({ mode, visit, defaultPatientId, onClose, onSaved }: {
       <div className="modal-box" style={{ maxWidth: 600 }} onClick={e => e.stopPropagation()}>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 20 }}>
           <h3 className="modal-title" style={{ margin: 0 }}>{mode === 'edit' ? 'Edit Kunjungan' : 'Tambah Kunjungan'}</h3>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--text-muted)' }}>×</button>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--text-muted)' }}><X size={18} /></button>
         </div>
 
         {error && <p style={{ color: 'var(--red)', fontSize: 13, marginBottom: 12 }}>{error}</p>}
@@ -742,7 +743,7 @@ function VisitFormModal({ mode, visit, defaultPatientId, onClose, onSaved }: {
                   <div key={s.service_id} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 8, padding: '6px 10px' }}>
                     <span style={{ flex: 1, fontSize: 13 }}>{s.service_name}</span>
                     <span style={{ fontSize: 13, fontWeight: 600 }}>{fmtRp(s.price)}</span>
-                    <button type="button" className="action-btn cancel" style={{ color: 'var(--red)', background: 'transparent' }} onClick={() => removeService(s.service_id)}>×</button>
+                    <button type="button" className="action-btn cancel" style={{ color: 'var(--red)', background: 'transparent' }} onClick={() => removeService(s.service_id)}><X size={14} /></button>
                   </div>
                 ))}
                 <div style={{ display: 'flex', justifyContent: 'flex-end', fontSize: 13, fontWeight: 600 }}>

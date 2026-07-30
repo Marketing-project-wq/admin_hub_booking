@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
+import { ArrowLeft, ArrowRight, X } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { fmtRp, fmtDate, fmtTime, STATUS_LABEL, exportToCSV } from '../../lib/format'
 import BookingDetailModal from '../../components/arena/BookingDetailModal'
@@ -249,8 +250,8 @@ export default function ArenaBookings() {
         <div className="pagination">
           <span>{total > 0 ? `${from}–${to} dari ${total} hasil` : '0 hasil'}</span>
           <div className="pagination-btns">
-            <button disabled={page === 0} onClick={() => setPage(p => p - 1)}>← Prev</button>
-            <button disabled={to >= total} onClick={() => setPage(p => p + 1)}>Next →</button>
+            <button disabled={page === 0} onClick={() => setPage(p => p - 1)}><ArrowLeft size={13} style={{ verticalAlign: -2 }} /> Prev</button>
+            <button disabled={to >= total} onClick={() => setPage(p => p + 1)}>Next <ArrowRight size={13} style={{ verticalAlign: -2 }} /></button>
           </div>
         </div>
       </div>
@@ -273,7 +274,7 @@ export default function ArenaBookings() {
           <div className="modal-box" style={{ maxWidth: 620 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
               <h3 className="modal-title" style={{ margin: 0 }}>Buat Booking</h3>
-              <button onClick={() => setShowVenueCreate(false)} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--text-muted)' }}>×</button>
+              <button onClick={() => setShowVenueCreate(false)} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--text-muted)' }}><X size={18} /></button>
             </div>
             {venueError && <p style={{ color: 'var(--red)', fontSize: 13, marginBottom: 12 }}>{venueError}</p>}
             <form onSubmit={handleVenueCreate}>

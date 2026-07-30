@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { ArrowRight, X } from 'lucide-react'
 import { fmtRp } from '../../lib/format'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../context/AuthContext'
@@ -358,7 +359,7 @@ export default function ClinicCloseBillModal({
       <div className="modal-box" style={{ maxWidth: 480, width: '100%', maxHeight: '90vh', overflowY: 'auto', background: 'var(--bg-card)', color: 'var(--text-primary)' }} onClick={e => e.stopPropagation()}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
           <h3 className="modal-title" style={{ margin: 0 }}>Close Bill</h3>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: 'var(--text-muted)', lineHeight: 1 }}>×</button>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: 'var(--text-muted)', lineHeight: 1 }}><X size={18} /></button>
         </div>
 
         {error && <p style={{ color: 'var(--red)', fontSize: 13, marginBottom: 12 }}>{error}</p>}
@@ -747,7 +748,7 @@ export default function ClinicCloseBillModal({
                             prev.filter(fs => fs.service_id !== s.service_id))}
                           style={{ background: 'none', border: 'none', color: 'var(--red)',
                             cursor: 'pointer', padding: 0, fontSize: 14, lineHeight: 1 }}
-                        >×</button>
+                        ><X size={18} /></button>
                       </span>
                     ))}
                   </div>
@@ -760,7 +761,7 @@ export default function ClinicCloseBillModal({
         <div className="modal-footer">
           <button className="btn-secondary" onClick={onClose}>Batal</button>
           <button className="btn-primary" onClick={handleConfirm} disabled={saving || (needsMethod && !method)}>
-            {saving ? 'Memproses...' : (paidOnline ? 'Konfirmasi & Selesai →' : voucherFullyCovers ? 'Konfirmasi Voucher & Selesai →' : 'Konfirmasi Pembayaran →')}
+            {saving ? 'Memproses...' : <>{paidOnline ? 'Konfirmasi & Selesai' : voucherFullyCovers ? 'Konfirmasi Voucher & Selesai' : 'Konfirmasi Pembayaran'} <ArrowRight size={14} style={{ verticalAlign: -2 }} /></>}
           </button>
         </div>
       </div>

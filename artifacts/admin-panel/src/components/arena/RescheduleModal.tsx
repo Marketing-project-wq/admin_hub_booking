@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { X } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { fmtDate, fmtTime } from '../../lib/format'
 
@@ -85,7 +86,7 @@ export default function RescheduleModal({ booking, onClose, onRefresh }: Props) 
       <div className="modal-box" style={{ maxWidth: 640 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
           <h3 className="modal-title" style={{ margin: 0 }}>Pindah Jadwal</h3>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--text-muted)' }}>×</button>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--text-muted)' }}><X size={18} /></button>
         </div>
 
         {/* Info booking saat ini */}

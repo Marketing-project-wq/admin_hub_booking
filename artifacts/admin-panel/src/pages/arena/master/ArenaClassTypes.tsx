@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react'
+import { X } from 'lucide-react'
 import { supabase } from '../../../lib/supabase'
 import { fmtRp } from '../../../lib/format'
 
@@ -114,7 +115,7 @@ export default function ArenaClassTypes() {
           <div className="modal-box">
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 20 }}>
               <h3 className="modal-title" style={{ margin: 0 }}>{editId ? 'Edit Class Type' : 'Tambah Class Type'}</h3>
-              <button onClick={() => setShowModal(false)} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--text-muted)' }}>×</button>
+              <button onClick={() => setShowModal(false)} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--text-muted)' }}><X size={18} /></button>
             </div>
             {formError && <p style={{ color: 'var(--red)', fontSize: 13, marginBottom: 12 }}>{formError}</p>}
             <form onSubmit={handleSave}>

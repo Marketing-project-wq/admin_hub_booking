@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react'
-import { ChevronDown } from 'lucide-react'
+import { ArrowLeft, ArrowRight, ChevronDown } from 'lucide-react'
 import { fmtTime } from '../../lib/format'
 import ConfirmModal from '../../components/arena/ConfirmModal'
 import {
@@ -129,7 +129,7 @@ export default function ClinicSlots() {
 
       {/* ── Date navigation ──────────────────────────────────────────────────── */}
       <div className="card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-        <button className="btn-secondary" onClick={() => setDate(d => shiftDay(d, -1))} aria-label="Hari sebelumnya">← Sebelumnya</button>
+        <button className="btn-secondary" onClick={() => setDate(d => shiftDay(d, -1))} aria-label="Hari sebelumnya"><ArrowLeft size={14} style={{ verticalAlign: -2 }} /> Sebelumnya</button>
         <div style={{ textAlign: 'center' }}>
           <div style={{ fontSize: 18, fontWeight: 700 }}>{fmtLongID(date)}</div>
           {date !== todayISO() && (
@@ -141,7 +141,7 @@ export default function ClinicSlots() {
             </button>
           )}
         </div>
-        <button className="btn-secondary" onClick={() => setDate(d => shiftDay(d, 1))} aria-label="Hari berikutnya">Berikutnya →</button>
+        <button className="btn-secondary" onClick={() => setDate(d => shiftDay(d, 1))} aria-label="Hari berikutnya">Berikutnya <ArrowRight size={14} style={{ verticalAlign: -2 }} /></button>
       </div>
 
       {/* ── Slot list ────────────────────────────────────────────────────────── */}

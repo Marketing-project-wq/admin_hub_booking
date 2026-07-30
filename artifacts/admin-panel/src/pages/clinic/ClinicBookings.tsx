@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
+import { ArrowLeft, ArrowRight, X } from 'lucide-react'
 import { fmtRp, fmtDate, fmtTime, fmtDateTime, STATUS_LABEL, exportToCSV } from '../../lib/format'
 import ConfirmModal from '../../components/arena/ConfirmModal'
 import { supabase } from '../../lib/supabase'
@@ -531,7 +532,7 @@ export default function ClinicBookings() {
                     opacity: checkinLoading && checkinBooking?.id === b.id ? 0.6 : 1,
                     fontWeight: 600, fontSize: 13, whiteSpace: 'nowrap' }}
                 >
-                  Check-in →
+                  Check-in <ArrowRight size={13} style={{ verticalAlign: -2 }} />
                 </button>
               </div>
             ))}
@@ -597,8 +598,8 @@ export default function ClinicBookings() {
         <div className="pagination">
           <span>{total > 0 ? `${from}–${to} dari ${total} hasil` : '0 hasil'}</span>
           <div className="pagination-btns">
-            <button disabled={page === 0} onClick={() => setPage(p => p - 1)}>← Prev</button>
-            <button disabled={to >= total} onClick={() => setPage(p => p + 1)}>Next →</button>
+            <button disabled={page === 0} onClick={() => setPage(p => p - 1)}><ArrowLeft size={13} style={{ verticalAlign: -2 }} /> Prev</button>
+            <button disabled={to >= total} onClick={() => setPage(p => p + 1)}>Next <ArrowRight size={13} style={{ verticalAlign: -2 }} /></button>
           </div>
         </div>
       </div>
@@ -609,7 +610,7 @@ export default function ClinicBookings() {
           <div className="modal-box" style={{ maxWidth: 480 }} onClick={e => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 20 }}>
               <h3 className="modal-title" style={{ margin: 0 }}>Detail Booking</h3>
-              <button onClick={() => setSelected(null)} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--text-muted)' }}>×</button>
+              <button onClick={() => setSelected(null)} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--text-muted)' }}><X size={18} /></button>
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', rowGap: 10, columnGap: 12, fontSize: 14 }}>
@@ -802,7 +803,7 @@ export default function ClinicBookings() {
                     border: 'none', cursor: step1Ready ? 'pointer' : 'not-allowed',
                     fontWeight: 600, fontSize: 14 }}
                 >
-                  {manualLoading ? 'Menyimpan...' : 'Lanjut →'}
+                  {manualLoading ? 'Menyimpan...' : <>Lanjut <ArrowRight size={14} style={{ verticalAlign: -2 }} /></>}
                 </button>
               </div>
             )}
@@ -854,7 +855,7 @@ export default function ClinicBookings() {
                           {s.service_name}
                           <button onClick={() => setManualServices(prev => prev.filter(ms => ms.service_id !== s.service_id))}
                             style={{ background: 'none', border: 'none', color: 'var(--red)', cursor: 'pointer',
-                              padding: 0, fontSize: 14, lineHeight: 1 }}>×</button>
+                              padding: 0, fontSize: 14, lineHeight: 1 }}><X size={18} /></button>
                         </span>
                       ))}
                     </div>
@@ -1035,7 +1036,7 @@ export default function ClinicBookings() {
                     style={{ flex: 1, padding: 12, borderRadius: 8,
                       background: 'var(--bg-elevated)', border: '1px solid var(--border)',
                       color: 'var(--text-secondary)', cursor: 'pointer', fontWeight: 600 }}>
-                    ← Kembali
+                    <ArrowLeft size={14} style={{ verticalAlign: -2 }} /> Kembali
                   </button>
                   <button
                     onClick={handleManualSubmit}
@@ -1045,7 +1046,7 @@ export default function ClinicBookings() {
                       color: manualReady ? '#fff' : 'var(--text-muted)',
                       border: 'none', cursor: manualReady ? 'pointer' : 'not-allowed',
                       fontWeight: 600, fontSize: 14 }}>
-                    {manualLoading ? 'Menyimpan...' : 'Buat Booking →'}
+                    {manualLoading ? 'Menyimpan...' : <>Buat Booking <ArrowRight size={14} style={{ verticalAlign: -2 }} /></>}
                   </button>
                 </div>
               </div>
@@ -1126,7 +1127,7 @@ export default function ClinicBookings() {
               </div>
               <button onClick={() => { setShowCheckinModal(false); setCheckinKtp(''); setCheckinPatientForm(null); setCheckinError(null) }}
                 style={{ background: 'none', border: 'none', color: 'var(--text-muted)',
-                  cursor: 'pointer', fontSize: 20 }}>×</button>
+                  cursor: 'pointer', fontSize: 20 }}><X size={18} /></button>
             </div>
 
             {/* Info pasien */}

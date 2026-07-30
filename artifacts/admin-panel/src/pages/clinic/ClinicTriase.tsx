@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useImperativeHandle, forwardRef } from 'react'
-import { Check, Circle, ChevronUp, ChevronDown } from 'lucide-react'
+import { ArrowRight, Check, ChevronDown, ChevronUp, Circle, X } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { fmtDate, fmtTime, fmtDateTime } from '../../lib/format'
@@ -1428,11 +1428,11 @@ export default function ClinicTriase() {
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
                     <StepChip label="Terdaftar" state="done" />
-                    <span style={{ color: 'var(--text-muted)' }}>→</span>
+                    <span style={{ color: 'var(--text-muted)', display: 'inline-flex' }}><ArrowRight size={12} /></span>
                     <StepChip label="Screening" state={scr ? 'done' : 'active'} />
-                    <span style={{ color: 'var(--text-muted)' }}>→</span>
+                    <span style={{ color: 'var(--text-muted)', display: 'inline-flex' }}><ArrowRight size={12} /></span>
                     <StepChip label="Consent" state={con ? 'done' : (scr ? 'active' : 'todo')} />
-                    <span style={{ color: 'var(--text-muted)' }}>→</span>
+                    <span style={{ color: 'var(--text-muted)', display: 'inline-flex' }}><ArrowRight size={12} /></span>
                     <StepChip label={requiresDoctor(v) ? 'Siap Dokter' : 'Siap Kasir'} state={scr && con ? 'done' : 'todo'} />
                   </div>
                 </div>
@@ -1477,7 +1477,7 @@ export default function ClinicTriase() {
                   {selectedVisit.services.map(s => s.service_name).join(' · ') || '-'} · {selectedVisit.visit_time ? fmtTime(selectedVisit.visit_time) : '—'}
                 </div>
               </div>
-              <button onClick={() => setShowModal(false)} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', fontSize: 22, cursor: 'pointer', lineHeight: 1 }}>×</button>
+              <button onClick={() => setShowModal(false)} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', fontSize: 22, cursor: 'pointer', lineHeight: 1 }}><X size={18} /></button>
             </div>
 
             {/* Tab bar */}

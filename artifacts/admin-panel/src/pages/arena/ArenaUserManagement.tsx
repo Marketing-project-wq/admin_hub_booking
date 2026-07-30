@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react'
+import { X } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { fmtDateTime } from '../../lib/format'
 
@@ -267,7 +268,7 @@ export default function ArenaUserManagement() {
           <div className="modal-box" style={{ maxWidth: 480 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
               <h3 className="modal-title" style={{ margin: 0 }}>Tambah User</h3>
-              <button onClick={() => setShowAddModal(false)} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--text-muted)' }}>×</button>
+              <button onClick={() => setShowAddModal(false)} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--text-muted)' }}><X size={18} /></button>
             </div>
             {formError && <p style={{ color: 'var(--red)', fontSize: 13, marginBottom: 12 }}>{formError}</p>}
             <form onSubmit={handleAddUser}>
@@ -315,7 +316,7 @@ export default function ArenaUserManagement() {
           <div className="modal-box" style={{ maxWidth: 440 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
               <h3 className="modal-title" style={{ margin: 0 }}>Edit User</h3>
-              <button onClick={() => setEditUser(null)} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--text-muted)' }}>×</button>
+              <button onClick={() => setEditUser(null)} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--text-muted)' }}><X size={18} /></button>
             </div>
             <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: -12, marginBottom: 16 }}>{editUser.email}</p>
             {formError && <p style={{ color: 'var(--red)', fontSize: 13, marginBottom: 12 }}>{formError}</p>}
@@ -354,7 +355,7 @@ export default function ArenaUserManagement() {
           <div className="modal-box" style={{ maxWidth: 420 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
               <h3 className="modal-title" style={{ margin: 0 }}>Reset Password</h3>
-              <button onClick={() => setResetUser(null)} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--text-muted)' }}>×</button>
+              <button onClick={() => setResetUser(null)} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--text-muted)' }}><X size={18} /></button>
             </div>
             <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: -12, marginBottom: 16 }}>
               Reset password untuk <strong>{resetUser.full_name}</strong>
@@ -384,7 +385,7 @@ export default function ArenaUserManagement() {
           <div className="modal-box" style={{ maxWidth: 520 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
               <h3 className="modal-title" style={{ margin: 0 }}>Set Permissions</h3>
-              <button onClick={() => setPermUser(null)} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--text-muted)' }}>×</button>
+              <button onClick={() => setPermUser(null)} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--text-muted)' }}><X size={18} /></button>
             </div>
             <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16 }}>
               {permUser.full_name} — <span style={{ fontFamily: 'monospace', fontSize: 12 }}>{permUser.email}</span>

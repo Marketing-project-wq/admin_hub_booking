@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react'
+import { ArrowLeft } from 'lucide-react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { fmtDate, fmtTime, fmtRp } from '../../lib/format'
 import { useIsMobile } from '../../hooks/use-mobile'
@@ -80,7 +81,7 @@ export default function ClinicVisitDetail() {
         padding: '2px 0 14px', marginBottom: 18, borderBottom: '1px solid var(--border, #E5E7EB)',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <button className="btn-secondary" style={{ width: 'auto', padding: '6px 12px' }} onClick={() => navigate('/clinic/visits')}>← Kembali</button>
+          <button className="btn-secondary" style={{ width: 'auto', padding: '6px 12px' }} onClick={() => navigate('/clinic/visits')}><ArrowLeft size={14} style={{ verticalAlign: -2 }} /> Kembali</button>
           <span style={{ fontFamily: 'monospace', fontSize: 12, color: 'var(--text-muted)' }}>{visit.visit_code}</span>
           <span style={{ color: 'var(--border, #D1D5DB)' }}>|</span>
           <span style={{ fontWeight: 700, fontSize: 15 }}>{visit.patient?.full_name || patient?.full_name || '-'}</span>

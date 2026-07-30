@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react'
+import { X } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { fmtDateTime } from '../../lib/format'
 import { useAuth } from '../../context/AuthContext'
@@ -174,7 +175,7 @@ export default function ArenaApiKeys() {
           <div className="modal-box" style={{ maxWidth: 520 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 20 }}>
               <h3 className="modal-title" style={{ margin: 0 }}>Generate API Key</h3>
-              <button onClick={closeCreate} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--text-muted)' }}>×</button>
+              <button onClick={closeCreate} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--text-muted)' }}><X size={18} /></button>
             </div>
 
             {!generatedKey ? (

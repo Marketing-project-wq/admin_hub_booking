@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
-import { ChevronUp, ChevronDown } from 'lucide-react'
+import { ChevronDown, ChevronUp, X } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { fmtDate, fmtTime, fmtDateTime } from '../../lib/format'
 import { useAuth } from '../../context/AuthContext'
@@ -1127,7 +1127,7 @@ export default function ClinicDokter() {
                   {selectedVisit.services.map(s => s.service_name).join(' · ') || '-'} · {fmtTime(selectedVisit.visit_time ?? '')}
                 </div>
               </div>
-              <button onClick={() => setShowVisitModal(false)} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', fontSize: 20, cursor: 'pointer' }}>×</button>
+              <button onClick={() => setShowVisitModal(false)} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', fontSize: 20, cursor: 'pointer' }}><X size={18} /></button>
             </div>
 
             {/* Tab Bar */}

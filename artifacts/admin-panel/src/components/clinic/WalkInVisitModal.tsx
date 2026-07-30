@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { ArrowLeft, ArrowRight, X } from 'lucide-react'
 import { fmtRp } from '../../lib/format'
 import ClinicPatientForm, { type PatientFormValues } from '../../pages/clinic/ClinicPatientForm'
 import {
@@ -99,7 +100,7 @@ export default function WalkInVisitModal({ onClose, onSuccess }: Props) {
       <div className="modal-box" style={{ maxWidth: 600 }} onClick={e => e.stopPropagation()}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
           <h3 className="modal-title" style={{ margin: 0 }}>Walk-in Baru</h3>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--text-muted)' }}>×</button>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--text-muted)' }}><X size={18} /></button>
         </div>
 
         {error && <p style={{ color: 'var(--red)', fontSize: 13, marginBottom: 12 }}>{error}</p>}
@@ -129,7 +130,7 @@ export default function WalkInVisitModal({ onClose, onSuccess }: Props) {
               </div>
               <div className="modal-footer">
                 <button className="btn-secondary" onClick={onClose}>Batal</button>
-                <button className="btn-primary" onClick={() => setStep(2)}>Lanjut →</button>
+                <button className="btn-primary" onClick={() => setStep(2)}>Lanjut <ArrowRight size={14} style={{ verticalAlign: -2 }} /></button>
               </div>
             </>
           ) : (
@@ -212,7 +213,7 @@ export default function WalkInVisitModal({ onClose, onSuccess }: Props) {
               <textarea value={complaint} onChange={e => setComplaint(e.target.value)} rows={2} />
             </div>
             <div className="modal-footer">
-              <button className="btn-secondary" onClick={() => setStep(1)}>← Kembali</button>
+              <button className="btn-secondary" onClick={() => setStep(1)}><ArrowLeft size={14} style={{ verticalAlign: -2 }} /> Kembali</button>
               <button className="btn-primary" onClick={handleSubmit} disabled={!serviceId || submitting}>
                 {submitting ? 'Menyimpan...' : 'Buat Kunjungan'}
               </button>

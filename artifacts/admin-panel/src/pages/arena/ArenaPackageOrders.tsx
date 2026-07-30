@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
+import { ArrowLeft, ArrowRight, X } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { fmtRp, fmtDateTime, STATUS_LABEL, exportToCSV } from '../../lib/format'
 
@@ -134,8 +135,8 @@ export default function ArenaPackageOrders() {
         <div className="pagination">
           <span>{total > 0 ? `${from}–${to} dari ${total} hasil` : '0 hasil'}</span>
           <div className="pagination-btns">
-            <button disabled={page === 0} onClick={() => setPage(p => p - 1)}>← Prev</button>
-            <button disabled={to >= total} onClick={() => setPage(p => p + 1)}>Next →</button>
+            <button disabled={page === 0} onClick={() => setPage(p => p - 1)}><ArrowLeft size={13} style={{ verticalAlign: -2 }} /> Prev</button>
+            <button disabled={to >= total} onClick={() => setPage(p => p + 1)}>Next <ArrowRight size={13} style={{ verticalAlign: -2 }} /></button>
           </div>
         </div>
       </div>
@@ -145,7 +146,7 @@ export default function ArenaPackageOrders() {
           <div className="modal-box" style={{ maxWidth: 500 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 20 }}>
               <h3 className="modal-title" style={{ margin: 0 }}>Detail Package Order</h3>
-              <button onClick={() => setSelected(null)} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--text-muted)' }}>×</button>
+              <button onClick={() => setSelected(null)} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--text-muted)' }}><X size={18} /></button>
             </div>
             <div className="detail-row"><span className="detail-label">Order Code</span><span className="detail-value" style={{ fontWeight: 700 }}>{selected.order_code as string}</span></div>
             <div className="detail-row"><span className="detail-label">Package</span><span className="detail-value">{selected.package_name as string}</span></div>

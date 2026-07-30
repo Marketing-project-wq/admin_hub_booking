@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
+import { ArrowLeft, ArrowRight } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { fmtDateTime } from '../../lib/format'
 import { listAuditLogs, type AuditLog } from '../../lib/clinic'
@@ -130,8 +131,8 @@ export default function ClinicAuditLog() {
         <div className="pagination">
           <span>{total > 0 ? `${from}–${to} dari ${total} log` : '0 log'}</span>
           <div className="pagination-btns">
-            <button disabled={page === 0} onClick={() => setPage(p => p - 1)}>← Prev</button>
-            <button disabled={to >= total} onClick={() => setPage(p => p + 1)}>Next →</button>
+            <button disabled={page === 0} onClick={() => setPage(p => p - 1)}><ArrowLeft size={13} style={{ verticalAlign: -2 }} /> Prev</button>
+            <button disabled={to >= total} onClick={() => setPage(p => p + 1)}>Next <ArrowRight size={13} style={{ verticalAlign: -2 }} /></button>
           </div>
         </div>
       </div>
