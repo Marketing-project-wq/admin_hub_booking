@@ -11,6 +11,7 @@ import {
   type ClinicConsent, type ClinicVitalSigns, type ClinicStaffOption,
 } from '../../lib/clinic'
 import LockBadge, { LockedBanner } from '../../components/clinic/LockBadge'
+import MedicalHistoryPanel from '../../components/clinic/MedicalHistoryPanel'
 
 // ─── Narrow shapes used by the screening/consent forms ───────────────────────────
 interface PatientInfo {
@@ -1051,7 +1052,7 @@ interface TriaseVisit {
   services: { id: string; service_name: string; price: number; service: { requires_doctor: boolean } | null }[]
 }
 
-type ModalTab = 'screening' | 'consent' | 'assessment'
+type ModalTab = 'screening' | 'consent' | 'assessment' | 'riwayat'
 
 interface TherapistAssessment {
   patient_condition: string
@@ -1264,6 +1265,12 @@ export default function ClinicTriase() {
   const requiresDoctor = (visit: TriaseVisit): boolean => {
     return visit.services?.some(s => s.service?.requires_doctor === true) ?? false
   }
+
+  // Riwayat Rekam Medis (read-only, komponen sama dengan tab di ClinicDokter) —
+  // hanya untuk therapist, dokter, dan super_admin. Role di-widen ke string
+  // (pola ScreeningTab): tipe AdminUser.role tidak memuat role klinik.
+  const userRole: string | undefined = user?.role
+  const canViewHistory = userRole === 'therapist' || userRole === 'dokter' || userRole === 'super_admin'
 
   // Label tab assessment terapis mengikuti layanan visit (nama persis clinic_services.name).
   const assessmentTabLabel = (visit: TriaseVisit): string => {
@@ -1484,6 +1491,17 @@ export default function ClinicTriase() {
                     marginBottom: -2, textTransform: 'capitalize',
                   }}>{assessmentTabLabel(selectedVisit)}</button>
               )}
+              {canViewHistory && (
+                <button onClick={() => setModalTab('riwayat')}
+                  style={{
+                    flexShrink: 0,
+                    padding: '12px 20px', border: 'none', background: 'none', cursor: 'pointer', fontSize: 13,
+                    fontWeight: modalTab === 'riwayat' ? 700 : 400,
+                    color: modalTab === 'riwayat' ? 'var(--red)' : 'var(--text-muted)',
+                    borderBottom: modalTab === 'riwayat' ? '2px solid var(--red)' : '2px solid transparent',
+                    marginBottom: -2, textTransform: 'capitalize',
+                  }}>Riwayat Rekam Medis</button>
+              )}
             </div>
 
             {/* Content */}
@@ -1517,6 +1535,9 @@ export default function ClinicTriase() {
                   onUnlocked={() => fetchVisits(false)}
                   onRelocked={() => fetchVisits(false)}
                 />
+              )}
+              {modalTab === 'riwayat' && canViewHistory && (
+                <MedicalHistoryPanel patientId={selectedVisit.patient?.id ?? null} currentVisitId={selectedVisit.id} />
               )}
               {modalTab === 'assessment' && !requiresDoctor(selectedVisit) && (
                 <div style={{ padding: '16px 0', display: 'flex', flexDirection: 'column', gap: 14 }}>

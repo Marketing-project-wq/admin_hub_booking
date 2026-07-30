@@ -5,6 +5,7 @@ import { useAuth } from '../../context/AuthContext'
 import { lockRecord, orIlike, listClinicStaffOptions, logAssignmentChange, type ClinicStaffOption } from '../../lib/clinic'
 import { normalizePhone } from '../../lib/phone'
 import LockBadge, { LockedBanner } from '../../components/clinic/LockBadge'
+import MedicalHistoryPanel from '../../components/clinic/MedicalHistoryPanel'
 import PostureScanPanel from './PostureScanPanel'
 import { useIsMobile } from '../../hooks/use-mobile'
 
@@ -420,25 +421,6 @@ interface ClinicConsentData {
 
 type ModalTab = 'screening' | 'consent' | 'assessment' | 'riwayat'
 
-interface MedicalHistory {
-  visit_id: string
-  visit_date: string
-  visit_time: string | null
-  chief_complaint: string | null
-  services: { service_name: string; price: number }[]
-  assessment: {
-    diagnosis: DiagnosisData | string | null   // jsonb (baru) / string (legacy) / null
-    plan: PlanData | string | null             // jsonb (baru) / string (legacy) / null
-    // subjective/objective: jsonb setelah migrasi; string kalau data lama. Tidak dirender di Riwayat.
-    subjective: SubjectiveData | string | null
-    objective: ObjectiveData | string | null
-    assessment: string | null
-    handled_by: string | null
-    updated_at: string | null   // waktu assessment disimpan (upsert set updated_at)
-    locked_by: string | null    // siapa yang menyimpan/mengunci (fallback "oleh siapa")
-  } | null
-}
-
 async function fetchScreening(visitId: string): Promise<ClinicScreeningData | null> {
   const { data } = await supabase
     .from('clinic_screenings')
@@ -797,8 +779,6 @@ export default function ClinicDokter() {
   const [loadingScreening, setLoadingScreening] = useState(false)
   const [consentData, setConsentData] = useState<ClinicConsentData[]>([])
   const [loadingConsent, setLoadingConsent] = useState(false)
-  const [medicalHistory, setMedicalHistory] = useState<MedicalHistory[]>([])
-  const [historyLoading, setHistoryLoading] = useState(false)
   const [assessment, setAssessment] = useState<AssessmentForm>({
     subjective: emptySubjective(), objective: emptyObjective(),
     assessment: '', plan: emptyPlan(), diagnosis: emptyDiagnosis(), follow_up_date: '', notes: '', handled_by: '',
@@ -842,58 +822,6 @@ export default function ClinicDokter() {
     return () => window.clearInterval(t)
   }, [tab, loadToday])
 
-  // Fetch riwayat kunjungan pasien saat tab Riwayat dibuka.
-  useEffect(() => {
-    if (modalTab !== 'riwayat' || !selectedVisit) return
-
-    const fetchHistory = async () => {
-      setHistoryLoading(true)
-      try {
-        const patientId = selectedVisit.patient?.id
-
-        // Fetch riwayat kunjungan pasien untuk Riwayat Rekam Medis. Kunjungan
-        // saat ini SENGAJA disertakan (tidak di-neq lagi) supaya assessment yang
-        // baru disimpan langsung muncul di sini — sesuai permintaan. Selain
-        // kunjungan yang sudah paid, kunjungan saat ini selalu ikut (via .or)
-        // walau pembayarannya belum diproses di Kasir.
-        const { data: visits } = await supabase
-          .from('clinic_visits')
-          .select(`
-            id, visit_date, visit_time, chief_complaint,
-            services:clinic_visit_services(service_name, price),
-            assessment:clinic_assessments(
-              diagnosis, plan, subjective, objective, assessment, handled_by,
-              updated_at, locked_by, assessment_type
-            )
-          `)
-          .eq('patient_id', patientId)
-          .or(`payment_status.eq.paid,id.eq.${selectedVisit.id}`)
-          .order('visit_date', { ascending: false })
-          .order('visit_time', { ascending: false, nullsFirst: false })
-          .limit(10)
-
-        const history: MedicalHistory[] = (visits ?? []).map((v: any) => ({
-          visit_id: v.id,
-          visit_date: v.visit_date,
-          visit_time: v.visit_time,
-          chief_complaint: v.chief_complaint,
-          services: v.services ?? [],
-          assessment: Array.isArray(v.assessment)
-            ? (v.assessment.find((a: any) => a?.assessment_type === 'doctor') ?? null)
-            : v.assessment,
-        }))
-
-        setMedicalHistory(history)
-      } catch (e) {
-        console.error(e)
-      } finally {
-        setHistoryLoading(false)
-      }
-    }
-
-    fetchHistory()
-  }, [modalTab, selectedVisit])
-
   const handleStatusChange = async (id: string, status: string) => {
     setBusy(true)
     try {
@@ -913,8 +841,6 @@ export default function ClinicDokter() {
     setShowVisitModal(true)
     setScreeningData(null)
     setConsentData([])
-    setMedicalHistory([])
-    setHistoryLoading(false)
     setAssessmentError('')
 
     setLoadingScreening(true)
@@ -1699,119 +1625,8 @@ export default function ClinicDokter() {
               )}
 
               {/* TAB RIWAYAT - read only */}
-              {modalTab === 'riwayat' && (
-                <div style={{ padding: '16px 0' }}>
-                  {historyLoading ? (
-                    <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>Memuat riwayat...</div>
-                  ) : medicalHistory.length === 0 ? (
-                    <div style={{ textAlign: 'center', padding: 40 }}>
-                      <div style={{ fontSize: 32, marginBottom: 8 }}>📋</div>
-                      <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Belum ada riwayat kunjungan sebelumnya</div>
-                    </div>
-                  ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                      {medicalHistory.map((h, i) => (
-                        <div key={h.visit_id} style={{
-                          background: 'var(--bg-card)',
-                          border: '1px solid var(--border)',
-                          borderRadius: 12,
-                          overflow: 'hidden',
-                        }}>
-                          {/* Header kunjungan */}
-                          <div style={{
-                            background: 'var(--bg-deep)', padding: '10px 16px',
-                            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                          }}>
-                            <div>
-                              <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 900, fontStyle: 'italic', fontSize: 11, color: 'var(--text-muted)', letterSpacing: 1, textTransform: 'uppercase' }}>
-                                Kunjungan #{medicalHistory.length - i}
-                              </div>
-                              <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 13, color: 'var(--text-primary)', fontWeight: 600 }}>
-                                {new Date(h.visit_date).toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' })}
-                                {h.visit_time && ` · ${h.visit_time.slice(0, 5)}`}
-                              </div>
-                            </div>
-                            {h.assessment?.handled_by && (
-                              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{h.assessment.handled_by}</div>
-                            )}
-                          </div>
-
-                          <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-                            {/* Keluhan */}
-                            {h.chief_complaint && (
-                              <div>
-                                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 4 }}>Keluhan</div>
-                                <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6 }}>{h.chief_complaint}</div>
-                              </div>
-                            )}
-
-                            {/* Layanan */}
-                            {h.services.length > 0 && (
-                              <div>
-                                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 4 }}>Layanan</div>
-                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                                  {h.services.map(s => (
-                                    <span key={s.service_name} style={{
-                                      padding: '3px 10px', borderRadius: 999,
-                                      background: 'var(--bg-elevated)', fontSize: 12, color: 'var(--text-secondary)',
-                                      fontWeight: 500,
-                                    }}>
-                                      {s.service_name}
-                                    </span>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-
-                            {/* Assessment dokter */}
-                            {h.assessment && (
-                              <div style={{ background: 'var(--bg-elevated)', borderRadius: 8, padding: '10px 12px' }}>
-                                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 8 }}>Kesimpulan Dokter</div>
-
-                                {h.assessment.diagnosis && (() => {
-                                  const d = h.assessment.diagnosis
-                                  const txt = typeof d === 'string'
-                                    ? d
-                                    : [d.text, (d.icd10_codes ?? []).map(c => c.code).join(', ')].filter(Boolean).join(' — ')
-                                  return txt ? (
-                                    <div style={{ marginBottom: 6 }}>
-                                      <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--red)' }}>Diagnosis: </span>
-                                      <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{txt}</span>
-                                    </div>
-                                  ) : null
-                                })()}
-                                {h.assessment.assessment && (
-                                  <div style={{ marginBottom: 6 }}>
-                                    <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)' }}>Assessment: </span>
-                                    <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{h.assessment.assessment}</span>
-                                  </div>
-                                )}
-                                {h.assessment.plan && (() => {
-                                  const p = h.assessment.plan
-                                  const txt = typeof p === 'string'
-                                    ? p
-                                    : [p.treatment, p.education_followup].filter(Boolean).join(' — ')
-                                  return txt ? (
-                                    <div>
-                                      <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)' }}>Plan: </span>
-                                      <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{txt}</span>
-                                    </div>
-                                  ) : null
-                                })()}
-                                {h.assessment.updated_at && (
-                                  <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--border)', fontSize: 11, color: 'var(--text-muted)' }}>
-                                    Disimpan {fmtDateTime(h.assessment.updated_at)}
-                                    {(h.assessment.handled_by || h.assessment.locked_by) && ` · oleh ${h.assessment.handled_by || h.assessment.locked_by}`}
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
+              {modalTab === 'riwayat' && selectedVisit && (
+                <MedicalHistoryPanel patientId={selectedVisit.patient?.id ?? null} currentVisitId={selectedVisit.id} />
               )}
             </div>
 
