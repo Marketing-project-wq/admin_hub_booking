@@ -801,14 +801,6 @@ function VisitFormModal({ mode, visit, defaultPatientId, onClose, onSaved }: {
             <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} />
           </div>
 
-          <div className="form-group">
-            <label>Ditangani oleh</label>
-            <select value={handledBy} onChange={e => setHandledBy(e.target.value)}>
-              <option value="">— Pilih Staff —</option>
-              {staff.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
-            </select>
-          </div>
-
           <div className="form-row">
             <div className="form-group">
               <label>Assign Dokter</label>
