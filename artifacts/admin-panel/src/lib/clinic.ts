@@ -64,6 +64,9 @@ export interface ClinicBooking {
   // Kolom asli: jadwal pilihan staff untuk booking non-slot (slot_id null).
   manual_date?: string | null
   manual_time?: string | null
+  // Kolom asli: assignment staff (FK admin_users, nullable — opsional saat dibuat).
+  assigned_doctor_id?: string | null
+  assigned_therapist_id?: string | null
   // Derived (attached by enrichBookings from clinic_slots / clinic_services,
   // fallback manual_date/manual_time) — not columns on clinic_bookings.
   slot_date: string | null
@@ -78,6 +81,7 @@ const SLOT_SELECT = 'id, slot_date, start_time, end_time, quota, booked_count, i
 // FK relationship can never fail the whole bookings query.
 const BOOKING_FIELDS =
   'id, booking_code, service_id, slot_id, manual_date, manual_time, full_name, email, phone, notes, ' +
+  'assigned_doctor_id, assigned_therapist_id, ' +
   'price, status, payment_method, paid_at, created_at'
 
 /**
@@ -396,6 +400,30 @@ export async function cancelBooking(id: string): Promise<void> {
   }
 }
 
+// ─── Assignment staff (dokter/terapis) ───────────────────────────────────────
+export interface ClinicStaffOption { id: string; full_name: string; role: string }
+
+/** Daftar staf klinik aktif (dokter + therapist) untuk dropdown assignment.
+ *  Lewat RPC SECURITY DEFINER — RLS admin_users tidak memberi SELECT ke anon. */
+export async function listClinicStaffOptions(): Promise<ClinicStaffOption[]> {
+  const { data, error } = await supabase.rpc('list_clinic_staff_options')
+  if (error) throw error
+  return (data ?? []) as ClinicStaffOption[]
+}
+
+/** Ubah assignment di level BOOKING (isi belakangan dari modal detail).
+ *  Tidak menyentuh visit yang sudah dibuat — assignment visit independen. */
+export async function updateBookingAssignment(
+  id: string,
+  patch: { assigned_doctor_id?: string | null; assigned_therapist_id?: string | null },
+): Promise<void> {
+  const { error } = await supabase
+    .from('clinic_bookings')
+    .update({ ...patch, updated_at: new Date().toISOString() })
+    .eq('id', id)
+  if (error) throw error
+}
+
 // ─── Services ────────────────────────────────────────────────────────────────
 export async function listServices(): Promise<ClinicService[]> {
   const { data, error } = await supabase
@@ -571,6 +599,8 @@ export interface ClinicVisit {
   chief_complaint: string | null
   notes: string | null
   handled_by: string | null
+  assigned_doctor_id?: string | null
+  assigned_therapist_id?: string | null
   payment_method: string | null
   payment_amount: number | null
   payment_status: string | null
@@ -586,7 +616,8 @@ export interface ClinicVisit {
 
 const VISIT_FIELDS =
   'id, visit_code, patient_id, booking_id, visit_date, visit_time, status, ' +
-  'chief_complaint, notes, handled_by, payment_method, payment_amount, payment_status, ' +
+  'chief_complaint, notes, handled_by, assigned_doctor_id, assigned_therapist_id, ' +
+  'payment_method, payment_amount, payment_status, ' +
   'patient_package_id, follow_up_date, follow_up_notes, created_at, updated_at'
 
 const VISIT_SELECT =
@@ -676,6 +707,8 @@ export interface BookingForVisit {
   full_name: string
   phone: string | null
   email: string | null
+  assigned_doctor_id: string | null
+  assigned_therapist_id: string | null
 }
 
 /**
@@ -769,7 +802,7 @@ export async function createPatientForBooking(bookingId: string, info: NewPatien
 export async function createVisitFromBooking(bookingId: string, payload: VisitFromBookingPayload = {}): Promise<ClinicVisit> {
   const { data: bRow, error: bErr } = await supabase
     .from('clinic_bookings')
-    .select('id, patient_id, service_id, slot_id, price, payment_method, full_name, phone, email')
+    .select('id, patient_id, service_id, slot_id, price, payment_method, full_name, phone, email, assigned_doctor_id, assigned_therapist_id')
     .eq('id', bookingId).single()
   if (bErr) throw bErr
   const b = bRow as BookingForVisit
@@ -798,6 +831,10 @@ export async function createVisitFromBooking(bookingId: string, payload: VisitFr
     chief_complaint: payload.chief_complaint ?? null,
     notes: payload.notes ?? null,
     handled_by: payload.handled_by ?? null,
+    // Auto-fill assignment dari booking SEKALI di titik pembuatan visit —
+    // setelah ini assignment visit independen (boleh diubah tanpa sinkron balik).
+    assigned_doctor_id: b.assigned_doctor_id ?? null,
+    assigned_therapist_id: b.assigned_therapist_id ?? null,
     payment_method: paidOnline ? 'mayar' : null,
     payment_amount: paidOnline ? b.price : null,
     payment_status: paidOnline ? 'paid' : 'unpaid',
@@ -856,6 +893,8 @@ export interface WalkInVisitPayload {
   chief_complaint?: string | null
   notes?: string | null
   handled_by?: string | null
+  assigned_doctor_id?: string | null
+  assigned_therapist_id?: string | null
   payment_method?: string | null
   payment_amount?: number | null
 }
@@ -873,6 +912,8 @@ export async function createWalkInVisit(payload: WalkInVisitPayload): Promise<Cl
     chief_complaint: payload.chief_complaint ?? null,
     notes: payload.notes ?? null,
     handled_by: payload.handled_by ?? null,
+    assigned_doctor_id: payload.assigned_doctor_id ?? null,
+    assigned_therapist_id: payload.assigned_therapist_id ?? null,
     payment_method: payload.payment_method ?? null,
     payment_amount: payload.payment_amount ?? null,
     payment_status: 'unpaid',
@@ -1162,6 +1203,8 @@ export interface ClinicVisitRow {
   payment_amount: number | null
   payment_status: string | null
   handled_by: string | null
+  assigned_doctor_id?: string | null
+  assigned_therapist_id?: string | null
   created_by: string | null
   patient_package_id: string | null
   follow_up_date: string | null
@@ -1245,6 +1288,8 @@ export interface VisitPayload {
   chief_complaint: string | null
   notes: string | null
   handled_by: string | null
+  assigned_doctor_id?: string | null
+  assigned_therapist_id?: string | null
   payment_method: string | null
   payment_amount: number | null
   payment_status: string
@@ -1868,6 +1913,8 @@ export async function createManualBooking(payload: {
   chief_complaint: string
   services: { service_id: string; service_name: string; price: number }[]
   patient_package_id?: string | null
+  assigned_doctor_id?: string | null
+  assigned_therapist_id?: string | null
   created_by: string
 }): Promise<{ booking_id: string; booking_code: string; slot_linked: boolean }> {
   // Kode booking dari generator yang SAMA dengan booking online (CLC-YYYYMMDD-XXXXXX,
@@ -1912,6 +1959,8 @@ export async function createManualBooking(payload: {
       slot_id: slotId,
       manual_date: payload.visit_date,
       manual_time: payload.visit_time ? `${payload.visit_time}:00` : null,
+      assigned_doctor_id: payload.assigned_doctor_id ?? null,
+      assigned_therapist_id: payload.assigned_therapist_id ?? null,
       full_name: payload.patient.full_name,
       phone: payload.patient.phone,
       email: null,

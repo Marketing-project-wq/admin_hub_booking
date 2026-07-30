@@ -3,8 +3,8 @@ import { fmtRp } from '../../lib/format'
 import ClinicPatientForm, { type PatientFormValues } from '../../pages/clinic/ClinicPatientForm'
 import {
   listServices, searchPatientByIdNumber, listPatients, createPatient,
-  createWalkInVisit, todayISO,
-  type ClinicService, type ClinicPatient,
+  createWalkInVisit, todayISO, listClinicStaffOptions,
+  type ClinicService, type ClinicPatient, type ClinicStaffOption,
 } from '../../lib/clinic'
 
 interface Props {
@@ -31,6 +31,9 @@ export default function WalkInVisitModal({ onClose, onSuccess }: Props) {
   const [time, setTime] = useState('')
   const [complaint, setComplaint] = useState('')
   const [handledBy, setHandledBy] = useState('')
+  const [assignedDoctorId, setAssignedDoctorId] = useState('')
+  const [assignedTherapistId, setAssignedTherapistId] = useState('')
+  const [staffOptions, setStaffOptions] = useState<ClinicStaffOption[]>([])
   const [submitting, setSubmitting] = useState(false)
   const [visitCode, setVisitCode] = useState('')
 
@@ -38,6 +41,7 @@ export default function WalkInVisitModal({ onClose, onSuccess }: Props) {
 
   useEffect(() => {
     listServices().then(setServices).catch(err => setError('Gagal memuat layanan: ' + (err instanceof Error ? err.message : String(err))))
+    listClinicStaffOptions().then(setStaffOptions).catch(() => {})
   }, [])
 
   const runSearch = async () => {
@@ -76,6 +80,8 @@ export default function WalkInVisitModal({ onClose, onSuccess }: Props) {
         visit_time: time || null,
         chief_complaint: complaint.trim() || null,
         handled_by: handledBy.trim() || null,
+        assigned_doctor_id: assignedDoctorId || null,
+        assigned_therapist_id: assignedTherapistId || null,
         payment_amount: service ? Number(service.price) : null,
       })
       setVisitCode(visit.visit_code)
@@ -180,6 +186,26 @@ export default function WalkInVisitModal({ onClose, onSuccess }: Props) {
             <div className="form-group">
               <label>Ditangani oleh</label>
               <input type="text" value={handledBy} onChange={e => setHandledBy(e.target.value)} placeholder="Nama dokter / terapis" />
+            </div>
+            <div className="form-row">
+              <div className="form-group">
+                <label>Assign Dokter (opsional)</label>
+                <select value={assignedDoctorId} onChange={e => setAssignedDoctorId(e.target.value)}>
+                  <option value="">— Belum di-assign —</option>
+                  {staffOptions.filter(o => o.role === 'dokter').map(o => (
+                    <option key={o.id} value={o.id}>{o.full_name}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Assign Terapis (opsional)</label>
+                <select value={assignedTherapistId} onChange={e => setAssignedTherapistId(e.target.value)}>
+                  <option value="">— Belum di-assign —</option>
+                  {staffOptions.filter(o => o.role === 'therapist').map(o => (
+                    <option key={o.id} value={o.id}>{o.full_name}</option>
+                  ))}
+                </select>
+              </div>
             </div>
             <div className="form-group">
               <label>Keluhan Utama</label>

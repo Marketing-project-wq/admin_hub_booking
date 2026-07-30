@@ -6,10 +6,10 @@ import {
   listVisitsLog, addVisit, updateVisit,
   listPatientsPaged, listServicesFull, listStaff, getPatient, getPatientPackage, listPatientActivePackages, getVisitRow,
   getBookingByCode, createVisitFromBooking, todayISO,
-  getAvailableClinicSlots, assignVisitSlot,
+  getAvailableClinicSlots, assignVisitSlot, listClinicStaffOptions,
   type ClinicVisitRow, type VisitPayload, type ClinicPatient,
   type ClinicServiceFull, type ClinicStaff, type BookingWithDetails,
-  type ClinicPatientPackage, type AvailableSlot,
+  type ClinicPatientPackage, type AvailableSlot, type ClinicStaffOption,
 } from '../../lib/clinic'
 
 const PAGE_SIZE = 20
@@ -470,6 +470,11 @@ function VisitDetailModal({ visit, onClose, onSaved }: {
 }) {
   const [editing, setEditing] = useState(false)
   const [pkg, setPkg] = useState<ClinicPatientPackage | null>(null)
+  const [staffOptions, setStaffOptions] = useState<ClinicStaffOption[]>([])
+  const staffName = (id?: string | null) =>
+    id ? (staffOptions.find(o => o.id === id)?.full_name ?? '(staf nonaktif)') : '-'
+
+  useEffect(() => { listClinicStaffOptions().then(setStaffOptions).catch(() => {}) }, [])
 
   useEffect(() => {
     if (!visit.patient_package_id) { setPkg(null); return }
@@ -508,6 +513,8 @@ function VisitDetailModal({ visit, onClose, onSaved }: {
           <Label>Keluhan Utama</Label><Val>{visit.chief_complaint || '-'}</Val>
           <Label>Catatan</Label><Val>{visit.notes || '-'}</Val>
           <Label>Ditangani oleh</Label><Val>{visit.handled_by || '-'}</Val>
+          <Label>Dokter (assigned)</Label><Val>{staffName(visit.assigned_doctor_id)}</Val>
+          <Label>Terapis (assigned)</Label><Val>{staffName(visit.assigned_therapist_id)}</Val>
           <Label>Metode Bayar</Label><Val>{visit.payment_method || '-'}</Val>
           <Label>Jumlah Bayar</Label><Val>{fmtRp(visit.payment_amount ?? 0)}</Val>
           <Label>Status Bayar</Label><Val>{PAYMENT_STATUS_LABEL[visit.payment_status ?? ''] || visit.payment_status || '-'}</Val>
@@ -555,6 +562,9 @@ function VisitFormModal({ mode, visit, defaultPatientId, onClose, onSaved }: {
   const [complaint, setComplaint] = useState(visit?.chief_complaint ?? '')
   const [notes, setNotes] = useState(visit?.notes ?? '')
   const [handledBy, setHandledBy] = useState(visit?.handled_by ?? '')
+  const [assignedDoctorId, setAssignedDoctorId] = useState(visit?.assigned_doctor_id ?? '')
+  const [assignedTherapistId, setAssignedTherapistId] = useState(visit?.assigned_therapist_id ?? '')
+  const [staffOptions, setStaffOptions] = useState<ClinicStaffOption[]>([])
   const [paymentMethod, setPaymentMethod] = useState(visit?.payment_method ?? 'cash')
   const [amount, setAmount] = useState<number>(visit?.payment_amount ?? 0)
   const [paymentStatus, setPaymentStatus] = useState(visit?.payment_status ?? 'unpaid')
@@ -573,6 +583,7 @@ function VisitFormModal({ mode, visit, defaultPatientId, onClose, onSaved }: {
       .catch(err => { console.error('[ClinicVisits] services fetch FAILED:', err); setError(err instanceof Error ? err.message : 'Gagal memuat daftar layanan') })
       .finally(() => setServicesLoading(false))
     listStaff(true).then(setStaff).catch(() => {})
+    listClinicStaffOptions().then(setStaffOptions).catch(() => {})
   }, [])
 
   // Resolve the patient label when it wasn't embedded (edit, or create with ?patient_id).
@@ -653,6 +664,8 @@ function VisitFormModal({ mode, visit, defaultPatientId, onClose, onSaved }: {
       chief_complaint: complaint.trim() || null,
       notes: notes.trim() || null,
       handled_by: handledBy.trim() || null,
+      assigned_doctor_id: assignedDoctorId || null,
+      assigned_therapist_id: assignedTherapistId || null,
       payment_method: paymentMethod || null,
       payment_amount: Number(amount) || 0,
       payment_status: usePackageId ? 'package' : paymentStatus,
@@ -794,6 +807,33 @@ function VisitFormModal({ mode, visit, defaultPatientId, onClose, onSaved }: {
               <option value="">— Pilih Staff —</option>
               {staff.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
             </select>
+          </div>
+
+          <div className="form-row">
+            <div className="form-group">
+              <label>Assign Dokter</label>
+              <select value={assignedDoctorId} onChange={e => setAssignedDoctorId(e.target.value)}>
+                <option value="">— Belum di-assign —</option>
+                {staffOptions.filter(o => o.role === 'dokter').map(o => (
+                  <option key={o.id} value={o.id}>{o.full_name}</option>
+                ))}
+                {assignedDoctorId && !staffOptions.some(o => o.id === assignedDoctorId) && (
+                  <option value={assignedDoctorId}>(staf nonaktif)</option>
+                )}
+              </select>
+            </div>
+            <div className="form-group">
+              <label>Assign Terapis</label>
+              <select value={assignedTherapistId} onChange={e => setAssignedTherapistId(e.target.value)}>
+                <option value="">— Belum di-assign —</option>
+                {staffOptions.filter(o => o.role === 'therapist').map(o => (
+                  <option key={o.id} value={o.id}>{o.full_name}</option>
+                ))}
+                {assignedTherapistId && !staffOptions.some(o => o.id === assignedTherapistId) && (
+                  <option value={assignedTherapistId}>(staf nonaktif)</option>
+                )}
+              </select>
+            </div>
           </div>
 
           <div className="form-row">

@@ -7,7 +7,8 @@ import {
   getBookings, getAllBookings, confirmBooking, cancelBooking, serviceName,
   todayISO, daysAgoISO, listServices, createManualBooking, createVisitFromBooking, orIlike,
   createPatientForBooking, NeedsPatientInfoError, getAvailableSlots,
-  type ClinicBooking, type BookingFilters, type ClinicService, type ClinicSlot,
+  listClinicStaffOptions, updateBookingAssignment,
+  type ClinicBooking, type BookingFilters, type ClinicService, type ClinicSlot, type ClinicStaffOption,
 } from '../../lib/clinic'
 import { normalizePhone } from '../../lib/phone'
 
@@ -60,6 +61,10 @@ export default function ClinicBookings() {
   const [manualDate, setManualDate] = useState(new Date().toISOString().slice(0, 10))
   const [manualTime, setManualTime] = useState('')
   const [manualComplaint, setManualComplaint] = useState('')
+  const [manualDoctorId, setManualDoctorId] = useState('')
+  const [manualTherapistId, setManualTherapistId] = useState('')
+  // Staf klinik aktif (dokter/therapist) untuk dropdown assignment — via RPC.
+  const [staffOptions, setStaffOptions] = useState<ClinicStaffOption[]>([])
   const [manualPatientMode, setManualPatientMode] = useState<'search' | 'new'>('search')
   const [newPatientForm, setNewPatientForm] = useState({
     full_name: '', phone: '', gender: 'male', date_of_birth: '',
@@ -224,6 +229,7 @@ export default function ClinicBookings() {
   }, [fetchData, fetchArrivedBookings])
 
   useEffect(() => { listServices().then(setServices).catch(() => {}) }, [])
+  useEffect(() => { listClinicStaffOptions().then(setStaffOptions).catch(() => {}) }, [])
 
   // Auto-clear toast.
   useEffect(() => {
@@ -296,6 +302,8 @@ export default function ClinicBookings() {
         chief_complaint: manualComplaint,
         services: allServices,
         patient_package_id: usePackageId ?? undefined,
+        assigned_doctor_id: manualDoctorId || null,
+        assigned_therapist_id: manualTherapistId || null,
         created_by: user?.full_name ?? 'Admin',
       })
       setManualBookingResult({ code: booking_code, slotLinked: slot_linked, needsSlot: manualNeedsSlot })
@@ -382,6 +390,23 @@ export default function ClinicBookings() {
     return () => { cancelled = true }
   }, [showManualModal, manualNeedsSlot, manualDate])
 
+  // Ubah assignment dari modal detail booking ("isi belakangan"). Save-on-change;
+  // TIDAK menyentuh visit yang sudah dibuat dari booking ini (independen).
+  const handleAssignChange = async (
+    b: ClinicBooking,
+    key: 'assigned_doctor_id' | 'assigned_therapist_id',
+    value: string | null,
+  ) => {
+    try {
+      await updateBookingAssignment(b.id, { [key]: value })
+      setSelected(prev => (prev && prev.id === b.id ? { ...prev, [key]: value } : prev))
+      setToast('Assignment booking diperbarui')
+      fetchData()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Gagal memperbarui assignment')
+    }
+  }
+
   const resetManualModal = () => {
     setManualStep(1)
     setManualBookingResult(null)
@@ -392,6 +417,8 @@ export default function ClinicBookings() {
     setManualDate(new Date().toISOString().slice(0, 10))
     setManualTime('')
     setManualComplaint('')
+    setManualDoctorId('')
+    setManualTherapistId('')
     setManualError(null)
     setManualPatientMode('search')
     setNewPatientForm({ full_name: '', phone: '', gender: 'male',
@@ -593,6 +620,32 @@ export default function ClinicBookings() {
               <Field label="Telp" value={selected.phone || '-'} />
               <Field label="Tgl Slot" value={fmtDate(selected.slot_date)} />
               <Field label="Jam" value={fmtTime(selected.slot_time)} />
+              <Field label="Dokter" value={
+                <select value={selected.assigned_doctor_id ?? ''}
+                  onChange={e => handleAssignChange(selected, 'assigned_doctor_id', e.target.value || null)}
+                  style={{ width: '100%', maxWidth: 260, padding: '6px 8px', borderRadius: 6, fontSize: 13 }}>
+                  <option value="">— Belum di-assign —</option>
+                  {staffOptions.filter(o => o.role === 'dokter').map(o => (
+                    <option key={o.id} value={o.id}>{o.full_name}</option>
+                  ))}
+                  {selected.assigned_doctor_id && !staffOptions.some(o => o.id === selected.assigned_doctor_id) && (
+                    <option value={selected.assigned_doctor_id}>(staf nonaktif)</option>
+                  )}
+                </select>
+              } />
+              <Field label="Terapis" value={
+                <select value={selected.assigned_therapist_id ?? ''}
+                  onChange={e => handleAssignChange(selected, 'assigned_therapist_id', e.target.value || null)}
+                  style={{ width: '100%', maxWidth: 260, padding: '6px 8px', borderRadius: 6, fontSize: 13 }}>
+                  <option value="">— Belum di-assign —</option>
+                  {staffOptions.filter(o => o.role === 'therapist').map(o => (
+                    <option key={o.id} value={o.id}>{o.full_name}</option>
+                  ))}
+                  {selected.assigned_therapist_id && !staffOptions.some(o => o.id === selected.assigned_therapist_id) && (
+                    <option value={selected.assigned_therapist_id}>(staf nonaktif)</option>
+                  )}
+                </select>
+              } />
               <Field label="Status" value={<span className={`badge ${(STATUS_LABEL[selected.status] || { css: '' }).css}`}>{(STATUS_LABEL[selected.status] || { label: selected.status }).label}</span>} />
               <Field label="Harga" value={fmtRp(selected.price)} />
               <Field label="Pembayaran" value={selected.payment_method || '-'} />
@@ -927,6 +980,36 @@ export default function ClinicBookings() {
                             color: 'var(--text-primary)', fontSize: 13, boxSizing: 'border-box' }} />
                       </>
                     )}
+                  </div>
+                </div>
+
+                {/* Assignment staff — opsional, boleh diisi belakangan */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
+                  <div>
+                    <label style={{ fontSize: 11, color: 'var(--text-secondary)', textTransform: 'uppercase',
+                      letterSpacing: 1, display: 'block', marginBottom: 6 }}>Assign Dokter (opsional)</label>
+                    <select value={manualDoctorId} onChange={e => setManualDoctorId(e.target.value)}
+                      style={{ width: '100%', padding: '10px 12px', borderRadius: 8,
+                        background: 'var(--bg-input)', border: '1px solid var(--border-strong)',
+                        color: 'var(--text-primary)', fontSize: 13, boxSizing: 'border-box' }}>
+                      <option value="">— Belum di-assign —</option>
+                      {staffOptions.filter(o => o.role === 'dokter').map(o => (
+                        <option key={o.id} value={o.id}>{o.full_name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 11, color: 'var(--text-secondary)', textTransform: 'uppercase',
+                      letterSpacing: 1, display: 'block', marginBottom: 6 }}>Assign Terapis (opsional)</label>
+                    <select value={manualTherapistId} onChange={e => setManualTherapistId(e.target.value)}
+                      style={{ width: '100%', padding: '10px 12px', borderRadius: 8,
+                        background: 'var(--bg-input)', border: '1px solid var(--border-strong)',
+                        color: 'var(--text-primary)', fontSize: 13, boxSizing: 'border-box' }}>
+                      <option value="">— Belum di-assign —</option>
+                      {staffOptions.filter(o => o.role === 'therapist').map(o => (
+                        <option key={o.id} value={o.id}>{o.full_name}</option>
+                      ))}
+                    </select>
                   </div>
                 </div>
 

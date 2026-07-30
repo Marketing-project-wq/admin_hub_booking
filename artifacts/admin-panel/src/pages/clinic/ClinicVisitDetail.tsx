@@ -3,8 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { fmtDate, fmtTime, fmtRp } from '../../lib/format'
 import { useIsMobile } from '../../hooks/use-mobile'
 import {
-  getVisit, getPatient,
-  type ClinicVisit, type ClinicPatient,
+  getVisit, getPatient, listClinicStaffOptions,
+  type ClinicVisit, type ClinicPatient, type ClinicStaffOption,
 } from '../../lib/clinic'
 import { getTransactionByVisit, type ClinicTransaction } from '../../lib/clinicBilling'
 import ClinicCloseBillModal from '../../components/clinic/ClinicCloseBillModal'
@@ -171,6 +171,11 @@ function InfoTab({ visit, patient, transaction, onCloseBill, onViewReceipt }: {
   transaction: ClinicTransaction | null; onCloseBill: () => void; onViewReceipt: () => void
 }) {
   const navigate = useNavigate()
+  const [staffOptions, setStaffOptions] = useState<ClinicStaffOption[]>([])
+  const staffName = (id?: string | null) =>
+    id ? (staffOptions.find(o => o.id === id)?.full_name ?? '(staf nonaktif)') : '-'
+
+  useEffect(() => { listClinicStaffOptions().then(setStaffOptions).catch(() => {}) }, [])
 
   return (
     <div>
@@ -190,6 +195,8 @@ function InfoTab({ visit, patient, transaction, onCloseBill, onViewReceipt }: {
             : '-'} />
           <Info label="Total Layanan" value={fmtRp(visit.services.reduce((sum, s) => sum + s.price, 0))} />
           <Info label="Ditangani oleh" value={visit.handled_by || '-'} />
+          <Info label="Dokter (assigned)" value={staffName(visit.assigned_doctor_id)} />
+          <Info label="Terapis (assigned)" value={staffName(visit.assigned_therapist_id)} />
           <Info label="Metode Bayar" value={visit.payment_method || '-'} />
           <Info label="Jumlah Bayar" value={fmtRp(visit.payment_amount ?? 0)} />
           <Info label="Status Bayar" value={visit.payment_status || '-'} />
