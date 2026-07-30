@@ -7,8 +7,8 @@ import { useIsMobile } from '../../hooks/use-mobile'
 import {
   getScreeningByVisit, upsertScreening,
   getConsentsByVisit, upsertConsent,
-  lockRecord,
-  type ClinicConsent, type ClinicVitalSigns,
+  lockRecord, listClinicStaffOptions,
+  type ClinicConsent, type ClinicVitalSigns, type ClinicStaffOption,
 } from '../../lib/clinic'
 import LockBadge, { LockedBanner } from '../../components/clinic/LockBadge'
 
@@ -1047,6 +1047,7 @@ interface TriaseVisit {
     emergency_contact_name: string | null
     emergency_contact_phone: string | null
   } | null
+  assigned_therapist_id: string | null
   services: { id: string; service_name: string; price: number; service: { requires_doctor: boolean } | null }[]
 }
 
@@ -1063,7 +1064,7 @@ interface LockInfo { id: string; isLocked: boolean; lockedAt: string | null; loc
 interface LockRow { id: string; visit_id: string; is_locked: boolean | null; locked_at: string | null; locked_by: string | null }
 
 const TRIASE_SELECT = `
-  id, visit_code, visit_date, visit_time, status,
+  id, visit_code, visit_date, visit_time, status, assigned_therapist_id,
   patient:clinic_patients(id, full_name, patient_code, phone, date_of_birth, gender, id_type, id_number, address, occupation, emergency_contact_name, emergency_contact_phone),
   services:clinic_visit_services(id, service_name, price, service:clinic_services(requires_doctor))
 `
@@ -1082,6 +1083,7 @@ export default function ClinicTriase() {
   const isMobile = useIsMobile()
   const { user } = useAuth()
   const [visits, setVisits] = useState<TriaseVisit[]>([])
+  const [staffMap, setStaffMap] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
   const [screeningStatus, setScreeningStatus] = useState<Record<string, boolean>>({})
   const [consentStatus, setConsentStatus] = useState<Record<string, boolean>>({})
@@ -1104,6 +1106,13 @@ export default function ClinicTriase() {
     setToast(msg)
     window.setTimeout(() => setToast(''), 3000)
   }
+
+  // Peta id staf → nama untuk menampilkan terapis yang di-assign pada kartu triase.
+  useEffect(() => {
+    listClinicStaffOptions()
+      .then((opts: ClinicStaffOption[]) => setStaffMap(Object.fromEntries(opts.map(o => [o.id, o.full_name]))))
+      .catch(() => {})
+  }, [])
 
   const fetchVisits = useCallback(async (showSpinner = true) => {
     if (showSpinner) setLoading(true)
@@ -1360,6 +1369,11 @@ export default function ClinicTriase() {
                     <span style={{ fontSize: 12, color: 'var(--text-secondary)', fontFamily: 'monospace' }}>{v.patient?.patient_code || '-'}</span>
                     {v.services.length > 0 && (
                       <span style={{ fontSize: 11, padding: '1px 8px', borderRadius: 999, background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}>{v.services.map(s => s.service_name).join(', ')}</span>
+                    )}
+                    {v.assigned_therapist_id && staffMap[v.assigned_therapist_id] && (
+                      <span style={{ fontSize: 11, padding: '1px 8px', borderRadius: 999, background: 'rgba(52,211,153,0.12)', color: 'var(--green)', fontWeight: 600 }}>
+                        🧑‍⚕️ Terapis: {staffMap[v.assigned_therapist_id]}
+                      </span>
                     )}
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../../lib/supabase'
 import { fmtDate, fmtTime, fmtDateTime } from '../../lib/format'
 import { useAuth } from '../../context/AuthContext'
-import { lockRecord, orIlike } from '../../lib/clinic'
+import { lockRecord, orIlike, listClinicStaffOptions, type ClinicStaffOption } from '../../lib/clinic'
 import { normalizePhone } from '../../lib/phone'
 import LockBadge, { LockedBanner } from '../../components/clinic/LockBadge'
 import PostureScanPanel from './PostureScanPanel'
@@ -347,6 +347,7 @@ interface DokterVisit {
   status: string
   chief_complaint: string | null
   handled_by: string | null
+  assigned_doctor_id: string | null
   patient_package_id: string | null
   patient: {
     id: string
@@ -578,7 +579,7 @@ async function saveAssessment(visitId: string, patientId: string, form: Assessme
 }
 
 const VISIT_SELECT = `
-  id, visit_code, visit_date, visit_time, status, chief_complaint, handled_by, patient_package_id,
+  id, visit_code, visit_date, visit_time, status, chief_complaint, handled_by, assigned_doctor_id, patient_package_id,
   patient:clinic_patients(id, full_name, patient_code, phone, date_of_birth, gender),
   services:clinic_visit_services(id, service_id, service_name, price, service:clinic_services(requires_doctor))
 `
@@ -698,12 +699,13 @@ type Tab = typeof TABS[number]
 const TAB_LABEL: Record<Tab, string> = { jadwal: 'Jadwal Hari Ini', antrian: 'Antrian Aktif', riwayat: 'Riwayat Pasien' }
 
 // ─── Visit card ─────────────────────────────────────────────────────────────────
-function VisitCard({ visit, queue = false, onStatusChange, onOpen, busy }: {
+function VisitCard({ visit, queue = false, onStatusChange, onOpen, busy, doctorName }: {
   visit: DokterVisit
   queue?: boolean
   onStatusChange: (id: string, status: string) => void
   onOpen: (visit: DokterVisit) => void
   busy: boolean
+  doctorName?: string
 }) {
   const isMobile = useIsMobile()
   const s = visit.status
@@ -734,6 +736,9 @@ function VisitCard({ visit, queue = false, onStatusChange, onOpen, busy }: {
           <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{visit.patient?.full_name || '-'}</div>
           <div style={{ fontSize: 11, color: 'var(--text-secondary)', fontFamily: 'monospace' }}>{visit.patient?.patient_code || '-'}</div>
           <div style={{ fontSize: 13, marginTop: 2, color: 'var(--text-secondary)' }}>{visit.services.map(s => s.service_name).join(', ') || '-'}</div>
+          {doctorName && (
+            <span style={{ display: 'inline-block', marginTop: 4, marginRight: 6, fontSize: 11, fontWeight: 600, padding: '1px 8px', borderRadius: 999, background: 'rgba(59,130,246,0.15)', color: 'var(--blue)' }}>🩺 Dokter: {doctorName}</span>
+          )}
           {visit.patient_package_id && (
             <span style={{ display: 'inline-block', marginTop: 4, fontSize: 11, fontWeight: 600, padding: '1px 8px', borderRadius: 999, background: '#DBEAFE', color: '#1D4ED8' }}>📦 Paket</span>
           )}
@@ -801,8 +806,16 @@ export default function ClinicDokter() {
   const [tab, setTab] = useState<Tab>('jadwal')
 
   const [todayVisits, setTodayVisits] = useState<DokterVisit[]>([])
+  const [staffMap, setStaffMap] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+
+  // Peta id staf → nama untuk menampilkan dokter yang di-assign pada kartu EMR.
+  useEffect(() => {
+    listClinicStaffOptions()
+      .then((opts: ClinicStaffOption[]) => setStaffMap(Object.fromEntries(opts.map(o => [o.id, o.full_name]))))
+      .catch(() => {})
+  }, [])
   const [busy, setBusy] = useState(false)
 
   // Visit detail modal
@@ -1178,7 +1191,7 @@ export default function ClinicDokter() {
           ) : todayVisits.length === 0 ? (
             <EmptyState>Tidak ada jadwal hari ini</EmptyState>
           ) : todayVisits.map(v => (
-            <VisitCard key={v.id} visit={v} onStatusChange={handleStatusChange} onOpen={openVisitModal} busy={busy} />
+            <VisitCard key={v.id} visit={v} onStatusChange={handleStatusChange} onOpen={openVisitModal} busy={busy} doctorName={v.assigned_doctor_id ? staffMap[v.assigned_doctor_id] : undefined} />
           ))}
         </div>
       )}
@@ -1194,7 +1207,7 @@ export default function ClinicDokter() {
           ) : queue.length === 0 ? (
             <EmptyState>Antrian kosong</EmptyState>
           ) : queue.map(v => (
-            <VisitCard key={v.id} visit={v} queue onStatusChange={handleStatusChange} onOpen={openVisitModal} busy={busy} />
+            <VisitCard key={v.id} visit={v} queue onStatusChange={handleStatusChange} onOpen={openVisitModal} busy={busy} doctorName={v.assigned_doctor_id ? staffMap[v.assigned_doctor_id] : undefined} />
           ))}
         </div>
       )}
