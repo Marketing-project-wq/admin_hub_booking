@@ -418,7 +418,7 @@ interface ClinicConsentData {
   signed_by_name: string | null
 }
 
-type ModalTab = 'screening' | 'consent' | 'assessment' | 'riwayat' | 'postur'
+type ModalTab = 'screening' | 'consent' | 'assessment' | 'riwayat'
 
 interface MedicalHistory {
   visit_id: string
@@ -776,6 +776,8 @@ export default function ClinicDokter() {
   const [newNoteType, setNewNoteType] = useState<AdditionalNoteType>('psikologis')
   // Status scan postur visit ini — untuk blok "Analisis Postur" (pengganti Diagram Tubuh).
   const [postureViewsScanned, setPostureViewsScanned] = useState<number | null>(null)
+  // Panel Scan Postur inline di blok Analisis Postur (tab terpisah sudah dihapus).
+  const [showPosturePanel, setShowPosturePanel] = useState(false)
   // ICD-10 picker
   const [icdQuery, setIcdQuery] = useState('')
   const [icdResults, setIcdResults] = useState<{ code: string; display: string }[]>([])
@@ -875,6 +877,7 @@ export default function ClinicDokter() {
   const openVisitModal = async (visit: DokterVisit) => {
     setSelectedVisit(visit)
     setModalTab('screening')
+    setShowPosturePanel(false)
     setShowVisitModal(true)
     setScreeningData(null)
     setConsentData([])
@@ -1155,7 +1158,7 @@ export default function ClinicDokter() {
 
             {/* Tab Bar */}
             <div style={{ display: 'flex', flexWrap: 'nowrap', overflowX: 'auto', borderBottom: '2px solid var(--border)', background: 'var(--bg-deep)', flexShrink: 0 }}>
-              {(['screening', 'consent', 'assessment', 'riwayat', 'postur'] as const).map(t => (
+              {(['screening', 'consent', 'assessment', 'riwayat'] as const).map(t => (
                 <button
                   key={t}
                   onClick={() => setModalTab(t)}
@@ -1168,7 +1171,7 @@ export default function ClinicDokter() {
                     marginBottom: -2, textTransform: 'capitalize',
                   }}
                 >
-                  {t === 'screening' ? 'Screening' : t === 'consent' ? 'Consent' : t === 'assessment' ? 'Assessment Dokter' : t === 'riwayat' ? 'Riwayat Rekam Medis' : 'Scan Postur'}
+                  {t === 'screening' ? 'Screening' : t === 'consent' ? 'Consent' : t === 'assessment' ? 'Assessment Dokter' : 'Riwayat Rekam Medis'}
                 </button>
               ))}
             </div>
@@ -1459,7 +1462,7 @@ export default function ClinicDokter() {
                         </div>
                       </EmrBlock>
 
-                      {/* ── Analisis Postur — menggantikan Diagram Tubuh manual ────── */}
+                      {/* ── Analisis Postur — Scan Postur inline (tab terpisah dihapus) ── */}
                       <EmrBlock label="Analisis Postur">
                         <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '0 0 10px' }}>
                           {postureViewsScanned === null
@@ -1468,10 +1471,21 @@ export default function ClinicDokter() {
                               ? 'Belum ada scan postur untuk visit ini.'
                               : `${postureViewsScanned} dari 3 view sudah discan — garis analisis (bahu/pinggul/plumb) otomatis dari deteksi pose.`}
                         </p>
-                        <button type="button" className="btn-secondary" style={{ width: 'auto', padding: '8px 16px' }}
-                          onClick={() => setModalTab('postur')}>
-                          Buka Scan Postur →
-                        </button>
+                        {/* SPAN, bukan <button>: fieldset lock tidak boleh memblokir MELIHAT panel —
+                            saat terkunci panel tetap bisa dibuka read-only (kontrol di dalamnya
+                            tetap dinonaktifkan fieldset). */}
+                        <span role="button" tabIndex={0} className="btn-secondary"
+                          onClick={() => setShowPosturePanel(s => !s)}
+                          onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setShowPosturePanel(s => !s) } }}
+                          style={{ width: 'auto', padding: '8px 16px', display: 'inline-block', cursor: 'pointer', userSelect: 'none' }}>
+                          {showPosturePanel ? 'Sembunyikan Scan Postur ▴'
+                            : postureViewsScanned ? 'Tampilkan Scan Postur ▾' : 'Mulai Scan Postur ▾'}
+                        </span>
+                        {showPosturePanel && selectedVisit && (
+                          <div style={{ marginTop: 14 }}>
+                            <PostureScanPanel visitId={selectedVisit.id} patientId={selectedVisit.patient?.id ?? ''} />
+                          </div>
+                        )}
                       </EmrBlock>
 
                       {/* ── Skala Risiko Jatuh — Tahap D (opsional, default tertutup) ── */}
@@ -1766,9 +1780,6 @@ export default function ClinicDokter() {
                     </div>
                   )}
                 </div>
-              )}
-              {modalTab === 'postur' && selectedVisit && (
-                <PostureScanPanel visitId={selectedVisit.id} patientId={selectedVisit.patient?.id ?? ''} />
               )}
             </div>
 
