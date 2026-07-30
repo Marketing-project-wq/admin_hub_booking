@@ -362,17 +362,27 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    // ─── Increment clinic slot booked_count ───────────────────────────────────
+    // ─── Claim slot klinik (ledger clinic_slot_claims) ────────────────────────
+    // Pengganti increment_clinic_slot_booked lama yang menaikkan booked_count
+    // TANPA baris ledger — saat check-in, release 'booking' jadi no-op lalu claim
+    // 'visit' menambah lagi → satu kursi terhitung dobel. claim_clinic_slot
+    // idempoten per (slot,'booking',id) + cek kapasitas, dan membuat baris ledger
+    // sehingga handover check-in (release 'booking' → claim 'visit') net-0.
     if (tableName === "clinic_bookings" && newStatus === "confirmed" && updated?.length > 0) {
-      const slotId = (updated[0] as { slot_id?: string }).slot_id
-      if (slotId) {
-        console.log("🏥 Incrementing clinic slot booked_count for slot:", slotId)
+      const { id: bookingId, slot_id: slotId } = updated[0] as { id?: string; slot_id?: string }
+      if (slotId && bookingId) {
+        console.log("🏥 Claiming clinic slot:", slotId, "for booking:", bookingId)
         const { error: slotErr } = await supabase
-          .rpc("increment_clinic_slot_booked", { p_slot_id: slotId })
+          .rpc("claim_clinic_slot", {
+            p_slot_id: slotId,
+            p_claimed_by_type: "booking",
+            p_claimed_by_id: bookingId,
+          })
         if (slotErr) {
-          console.error("❌ Slot increment error:", slotErr)
+          // Non-blocking (pembayaran sudah diterima) — termasuk 'Slot penuh'.
+          console.error("❌ Slot claim error:", slotErr)
         } else {
-          console.log("✅ Slot booked_count incremented")
+          console.log("✅ Slot claimed (type=booking)")
         }
       }
     }
