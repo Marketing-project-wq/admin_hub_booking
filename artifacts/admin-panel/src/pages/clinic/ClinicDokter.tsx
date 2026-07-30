@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../../lib/supabase'
 import { fmtDate, fmtTime, fmtDateTime } from '../../lib/format'
 import { useAuth } from '../../context/AuthContext'
-import { lockRecord, orIlike, listClinicStaffOptions, type ClinicStaffOption } from '../../lib/clinic'
+import { lockRecord, orIlike, listClinicStaffOptions, logAssignmentChange, type ClinicStaffOption } from '../../lib/clinic'
 import { normalizePhone } from '../../lib/phone'
 import LockBadge, { LockedBanner } from '../../components/clinic/LockBadge'
 import PostureScanPanel from './PostureScanPanel'
@@ -771,13 +771,21 @@ export default function ClinicDokter() {
       .catch(() => {})
   }, [])
 
-  // Assign / ubah dokter untuk sebuah kunjungan langsung dari EMR.
+  // Assign / ubah dokter untuk sebuah kunjungan langsung dari EMR. Setiap
+  // perubahan dicatat ke audit log.
   const assignDoctor = async (visitId: string, doctorId: string) => {
+    const prevId = todayVisits.find(v => v.id === visitId)?.assigned_doctor_id ?? ''
+    if (prevId === doctorId) return
     setTodayVisits(prev => prev.map(v => v.id === visitId ? { ...v, assigned_doctor_id: doctorId || null } : v))
     const { error: assignErr } = await supabase.from('clinic_visits')
       .update({ assigned_doctor_id: doctorId || null, updated_at: new Date().toISOString() })
       .eq('id', visitId)
-    if (assignErr) setError('Gagal menyimpan dokter yang di-assign')
+    if (assignErr) { setError('Gagal menyimpan dokter yang di-assign'); return }
+    const nm = (id: string) => doctorOptions.find(o => o.id === id)?.full_name ?? null
+    try {
+      await logAssignmentChange(visitId, user?.full_name ?? '-', user?.role ?? null,
+        [{ field: 'doctor', from: nm(prevId), to: nm(doctorId) }])
+    } catch { /* log best-effort */ }
   }
   const [busy, setBusy] = useState(false)
 
