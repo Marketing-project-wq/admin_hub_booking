@@ -30,12 +30,21 @@ const VIEWS: { key: ViewKey; label: string; instruksi: string }[] = [
 interface AnnotationPoint { id: string; x: number; y: number; note: string }
 // Garis HANYA antar 2 titik custom yang ada (by id) — tidak ada garis lepas.
 interface AnnotationLine { id: string; point_a_id: string; point_b_id: string; angle_deg: number; note: string }
+// Garis otomatis (turunan landmark) bisa DISEMBUNYIKAN per scan — bukan dihapus
+// permanen, karena selalu bisa dihitung ulang dari landmarks.
+type AutoLineKey = 'shoulder' | 'hip' | 'plumb'
+const AUTO_LINES: { key: AutoLineKey; label: string; color: string }[] = [
+  { key: 'shoulder', label: 'Bahu', color: '#ef4444' },
+  { key: 'hip', label: 'Pinggul', color: '#3b82f6' },
+  { key: 'plumb', label: 'Plumb', color: '#22c55e' },
+]
 interface Annotations {
   general_note: string
   points: AnnotationPoint[]
   lines: AnnotationLine[]
+  hidden_auto_lines: AutoLineKey[]
 }
-const emptyAnnotations = (): Annotations => ({ general_note: '', points: [], lines: [] })
+const emptyAnnotations = (): Annotations => ({ general_note: '', points: [], lines: [], hidden_auto_lines: [] })
 // Id pendek unik — pola sama newPointId body-diagram (ClinicDokter).
 const newAnnotationId = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4)
 
@@ -69,9 +78,12 @@ function parseAnnotations(raw: unknown): Annotations {
           note: typeof l.note === 'string' ? l.note : '',
         }))
     : []
+  const hidden_auto_lines = Array.isArray(r.hidden_auto_lines)
+    ? (r.hidden_auto_lines as unknown[]).filter((k): k is AutoLineKey => k === 'shoulder' || k === 'hip' || k === 'plumb')
+    : []
   return {
     general_note: typeof r.general_note === 'string' ? r.general_note : '',
-    points, lines,
+    points, lines, hidden_auto_lines,
   }
 }
 
@@ -131,22 +143,25 @@ function Overlay({ scan }: { scan: Scan }) {
   const msh = mid(lsh, rsh), mank = mid(lank, rank)
   const S = Math.max(w, h)
   const sw = S / 260, r = sw * 1.4, fs = S / 24
+  // Clamp kanan lebih longgar (fs*7) — label kini memuat NAMA garis, bukan cuma derajat.
   const Label = ({ x, y, text, color }: { x: number; y: number; text: string; color: string }) => (
-    <text x={clamp(x, fs, w - fs * 3.5)} y={clamp(y, fs, h - fs * 0.3)} fontSize={fs} fill={color}
+    <text x={clamp(x, fs, w - fs * 7)} y={clamp(y, fs, h - fs * 0.3)} fontSize={fs} fill={color}
       stroke="#000" strokeWidth={fs / 12} paintOrder="stroke" fontWeight={700}>{text}</text>
   )
+  // Garis yang disembunyikan lewat Daftar Garis tidak digambar (beserta labelnya).
+  const hidden = new Set(scan.annotations.hidden_auto_lines)
   return (
     <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none"
       style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
-      <line x1={lsh.x} y1={lsh.y} x2={rsh.x} y2={rsh.y} stroke="#ef4444" strokeWidth={sw} />
-      <line x1={lhip.x} y1={lhip.y} x2={rhip.x} y2={rhip.y} stroke="#3b82f6" strokeWidth={sw} />
-      <line x1={msh.x} y1={msh.y} x2={mank.x} y2={mank.y} stroke="#22c55e" strokeWidth={sw} />
+      {!hidden.has('shoulder') && <line x1={lsh.x} y1={lsh.y} x2={rsh.x} y2={rsh.y} stroke="#ef4444" strokeWidth={sw} />}
+      {!hidden.has('hip') && <line x1={lhip.x} y1={lhip.y} x2={rhip.x} y2={rhip.y} stroke="#3b82f6" strokeWidth={sw} />}
+      {!hidden.has('plumb') && <line x1={msh.x} y1={msh.y} x2={mank.x} y2={mank.y} stroke="#22c55e" strokeWidth={sw} />}
       {[lsh, rsh, lhip, rhip, lank, rank].map((p, i) => (
         <circle key={i} cx={p.x} cy={p.y} r={r} fill="#fff" stroke="#111" strokeWidth={sw * 0.4} />
       ))}
-      <Label x={Math.max(lsh.x, rsh.x) + fs * 0.3} y={Math.min(lsh.y, rsh.y) - fs * 0.3} text={fmtDeg(scan.angles.shoulder_tilt_deg)} color="#ef4444" />
-      <Label x={Math.max(lhip.x, rhip.x) + fs * 0.3} y={Math.max(lhip.y, rhip.y) + fs} text={fmtDeg(scan.angles.hip_tilt_deg)} color="#3b82f6" />
-      <Label x={mank.x + fs * 0.3} y={(msh.y + mank.y) / 2} text={fmtDeg(scan.angles.lateral_deviation_deg)} color="#22c55e" />
+      {!hidden.has('shoulder') && <Label x={Math.max(lsh.x, rsh.x) + fs * 0.3} y={Math.min(lsh.y, rsh.y) - fs * 0.3} text={`Bahu ${fmtDeg(scan.angles.shoulder_tilt_deg)}`} color="#ef4444" />}
+      {!hidden.has('hip') && <Label x={Math.max(lhip.x, rhip.x) + fs * 0.3} y={Math.max(lhip.y, rhip.y) + fs} text={`Pinggul ${fmtDeg(scan.angles.hip_tilt_deg)}`} color="#3b82f6" />}
+      {!hidden.has('plumb') && <Label x={mank.x + fs * 0.3} y={(msh.y + mank.y) / 2} text={`Plumb ${fmtDeg(scan.angles.lateral_deviation_deg)}`} color="#22c55e" />}
     </svg>
   )
 }
@@ -416,6 +431,24 @@ export default function PostureScanPanel({ visitId, patientId }: { visitId: stri
   const patchAnnotations = (view: ViewKey, patch: Partial<Annotations>) => {
     setScans(s => (s[view] ? { ...s, [view]: { ...s[view]!, annotations: { ...s[view]!.annotations, ...patch } } } : s))
     setAnnoDirty(d => ({ ...d, [view]: true }))
+  }
+
+  // Sembunyikan/tampilkan garis otomatis — ikut dirty-tracking & tombol Simpan
+  // Anotasi yang sama dengan anotasi manual (tersimpan di jsonb annotations).
+  const toggleAutoLine = (view: ViewKey, key: AutoLineKey) => {
+    const cur = scans[view]?.annotations
+    if (!cur) return
+    patchAnnotations(view, {
+      hidden_auto_lines: cur.hidden_auto_lines.includes(key)
+        ? cur.hidden_auto_lines.filter(k => k !== key)
+        : [...cur.hidden_auto_lines, key],
+    })
+  }
+  // Hapus garis manual langsung dari Daftar Garis — tanpa perlu Mode Anotasi.
+  const deleteManualLine = (view: ViewKey, lineId: string) => {
+    const cur = scans[view]?.annotations
+    if (!cur) return
+    patchAnnotations(view, { lines: cur.lines.filter(l => l.id !== lineId) })
   }
 
   // Tap area kosong: mode link → batal pilih titik A; mode biasa → titik baru + dialog.
@@ -784,6 +817,46 @@ export default function PostureScanPanel({ visitId, patientId }: { visitId: stri
                       Foto &amp; hasil deteksi ini belum masuk rekam — klik Simpan.
                     </p>
                   )}
+
+                  {/* Daftar Garis — selalu terlihat; jalur sembunyikan/hapus TANPA Mode Anotasi */}
+                  <div style={{ marginTop: 10 }}>
+                    <label style={{ display: 'block', fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Daftar Garis</label>
+                    {AUTO_LINES.map(al => {
+                      const lineHidden = scan.annotations.hidden_auto_lines.includes(al.key)
+                      const deg = al.key === 'shoulder' ? scan.angles.shoulder_tilt_deg
+                        : al.key === 'hip' ? scan.angles.hip_tilt_deg
+                        : scan.angles.lateral_deviation_deg
+                      return (
+                        <div key={al.key} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', borderBottom: '1px solid var(--border)', fontSize: 12, opacity: lineHidden ? 0.55 : 1 }}>
+                          <span style={{ width: 18, height: 3, borderRadius: 2, background: al.color, flexShrink: 0 }} />
+                          <span style={{ flex: 1 }}>{al.label} <span style={{ color: 'var(--text-muted)' }}>(otomatis)</span></span>
+                          <span style={{ fontFamily: 'monospace' }}>{fmtDeg(deg)}</span>
+                          <button type="button" onClick={() => toggleAutoLine(v.key, al.key)}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, fontWeight: 600, color: lineHidden ? '#22c55e' : 'var(--red)', flexShrink: 0, padding: 0 }}>
+                            {lineHidden ? '↩ Tampilkan' : '✕ Sembunyikan'}
+                          </button>
+                        </div>
+                      )
+                    })}
+                    {scan.annotations.lines.map((l, i) => (
+                      <div key={l.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', borderBottom: '1px solid var(--border)', fontSize: 12 }}>
+                        <span style={{ width: 18, height: 0, borderTop: '3px dashed #f97316', flexShrink: 0 }} />
+                        <button type="button" onClick={() => setLineDraft({ view: v.key, line: l, isNew: false })}
+                          title="Klik untuk edit catatan garis"
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-primary)', fontSize: 12, textAlign: 'left', flex: 1, padding: 0, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          Garis manual {i + 1}{l.note ? ` — ${l.note}` : ''}
+                        </button>
+                        <span style={{ fontFamily: 'monospace' }}>{fmtDeg(l.angle_deg)}</span>
+                        <button type="button" onClick={() => deleteManualLine(v.key, l.id)}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, fontWeight: 600, color: 'var(--red)', flexShrink: 0, padding: 0 }}>✕ Hapus</button>
+                      </div>
+                    ))}
+                    {scan.annotations.lines.length === 0 && (
+                      <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '4px 0 0' }}>
+                        Garis manual: belum ada — aktifkan ✏ Anotasi lalu 🔗 Hubungkan Garis untuk menambah.
+                      </p>
+                    )}
+                  </div>
 
                   {/* Catatan Umum — selalu terlihat, tanpa perlu Mode Anotasi */}
                   <div style={{ marginTop: 10 }}>

@@ -114,10 +114,6 @@ interface ObjectiveData {
   legacy_migrated?: true
 }
 
-/** Urutan pencarian ekstensi gambar diagram tubuh: .png dulu, lalu .jpg, lalu .jpeg. */
-const BODY_IMAGE_EXTS = ['png', 'jpg', 'jpeg'] as const
-
-const newPointId = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4)
 const emptyPainAssessment = (): PainAssessmentData => ({
   nrs_score: null, locations: [], cause: '', duration: '', frequency: null,
 })
@@ -216,63 +212,6 @@ function EmrBlock({ label, children }: { label: React.ReactNode; children: React
   )
 }
 
-/**
- * Siluet tubuh SKEMATIK (stick-figure) — SVG ORISINAL yang dibangun murni dari
- * bentuk geometris dasar: lingkaran (kepala/tangan), rounded-rect (torso, lengan,
- * tungkai, panggul), dan ellipse (telapak kaki). BUKAN ilustrasi anatomis dan
- * tidak menjiplak/men-trace gambar mana pun. Tampak 'back' hanya menambah garis
- * tengah tipis sebagai pembeda visual — tanpa detail anatomi.
- * viewBox tetap 0 0 200 500 supaya rasio konsisten & koordinat persen stabil.
- */
-function BodySilhouette({ view }: { view: 'front' | 'back' }) {
-  const shape = { fill: 'var(--bg-elevated)', stroke: 'var(--border-strong)', strokeWidth: 1.25 }
-  const guide = { fill: 'var(--border-strong)', opacity: 0.35 }
-  return (
-    <g>
-      {/* Kepala (oval) + leher pendek */}
-      <ellipse cx={100} cy={44} rx={25} ry={31} {...shape} />
-      <rect x={92} y={68} width={16} height={14} rx={7} {...shape} />
-
-      {/* Bahu/dada lebar (92) → pinggang meruncing (58) → panggul (68) */}
-      <ellipse cx={100} cy={118} rx={46} ry={40} {...shape} />
-      <rect x={71} y={142} width={58} height={58} rx={22} {...shape} />
-      <rect x={66} y={192} width={68} height={54} rx={24} {...shape} />
-
-      {/* Lengan kiri: lengan atas — siku — lengan bawah — telapak tangan */}
-      <rect x={40} y={92} width={20} height={72} rx={10} {...shape} />
-      <circle cx={50} cy={166} r={11} {...shape} />
-      <rect x={40} y={168} width={20} height={68} rx={10} {...shape} />
-      <ellipse cx={50} cy={248} rx={11} ry={14} {...shape} />
-
-      {/* Lengan kanan */}
-      <rect x={140} y={92} width={20} height={72} rx={10} {...shape} />
-      <circle cx={150} cy={166} r={11} {...shape} />
-      <rect x={140} y={168} width={20} height={68} rx={10} {...shape} />
-      <ellipse cx={150} cy={248} rx={11} ry={14} {...shape} />
-
-      {/* Tungkai kiri: paha — lutut — betis — telapak kaki */}
-      <rect x={74} y={240} width={24} height={100} rx={12} {...shape} />
-      <circle cx={86} cy={343} r={12} {...shape} />
-      <rect x={75} y={346} width={22} height={100} rx={11} {...shape} />
-      <ellipse cx={86} cy={458} rx={16} ry={12} {...shape} />
-
-      {/* Tungkai kanan */}
-      <rect x={102} y={240} width={24} height={100} rx={12} {...shape} />
-      <circle cx={114} cy={343} r={12} {...shape} />
-      <rect x={103} y={346} width={22} height={100} rx={11} {...shape} />
-      <ellipse cx={114} cy={458} rx={16} ry={12} {...shape} />
-
-      {/* Tampak belakang: garis tengah + garis bahu & pinggang (opacity rendah) */}
-      {view === 'back' && (
-        <>
-          <rect x={97.5} y={92} width={5} height={104} rx={2.5} {...guide} />
-          <rect x={62} y={102} width={76} height={4} rx={2} {...guide} />
-          <rect x={76} y={186} width={48} height={4} rx={2} {...guide} />
-        </>
-      )}
-    </g>
-  )
-}
 
 /** Replikasi persis Collapsible di ClinicTriase.tsx:354-366 (module-local, tak di-export). */
 function Collapsible({ title, defaultOpen = false, children }: { title: string; defaultOpen?: boolean; children: React.ReactNode }) {
@@ -835,16 +774,13 @@ export default function ClinicDokter() {
   const [loadingAssessment, setLoadingAssessment] = useState(false)
   const [savingAssessment, setSavingAssessment] = useState(false)
   const [newNoteType, setNewNoteType] = useState<AdditionalNoteType>('psikologis')
-  const [bodyView, setBodyView] = useState<'front' | 'back'>('front')
-  const [pointDraft, setPointDraft] = useState<(BodyPoint & { isNew: boolean }) | null>(null)
+  // Status scan postur visit ini — untuk blok "Analisis Postur" (pengganti Diagram Tubuh).
+  const [postureViewsScanned, setPostureViewsScanned] = useState<number | null>(null)
   // ICD-10 picker
   const [icdQuery, setIcdQuery] = useState('')
   const [icdResults, setIcdResults] = useState<{ code: string; display: string }[]>([])
   const [icdSearching, setIcdSearching] = useState(false)
   const icdTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  // Index ekstensi yang sedang dicoba, dilacak per basis nama file (mis. 'front-male').
-  // Naik tiap kali <img> gagal; kalau sudah melewati daftar ekstensi → fallback ke siluet SVG.
-  const [bodyExtIndex, setBodyExtIndex] = useState<Record<string, number>>({})
   const [assessmentError, setAssessmentError] = useState('')
   const [assessmentId, setAssessmentId] = useState<string | null>(null)
   const [assessmentLocked, setAssessmentLocked] = useState(false)
@@ -1002,28 +938,6 @@ export default function ClinicDokter() {
   const patchPain = (patch: Partial<PainAssessmentData>) =>
     setAssessment(p => ({ ...p, objective: { ...p.objective, pain_assessment: { ...p.objective.pain_assessment, ...patch } } }))
 
-  // ── Body diagram helpers ──────────────────────────────────────────────────
-  // Klik di siluet → titik baru pada koordinat itu, disimpan sebagai PERSEN
-  // terhadap bounding box SVG (aman terhadap resize container).
-  const handleDiagramClick = (e: React.MouseEvent<SVGSVGElement>) => {
-    if (assessmentLocked) return
-    const rect = e.currentTarget.getBoundingClientRect()
-    if (!rect.width || !rect.height) return
-    const x = Math.min(100, Math.max(0, ((e.clientX - rect.left) / rect.width) * 100))
-    const y = Math.min(100, Math.max(0, ((e.clientY - rect.top) / rect.height) * 100))
-    setPointDraft({ id: newPointId(), view: bodyView, x, y, part_label: '', notes: '', isNew: true })
-  }
-  const savePoint = () => {
-    if (!pointDraft) return
-    const { isNew, ...p } = pointDraft
-    patchObj({ body_points: isNew ? [...obj.body_points, p] : obj.body_points.map(bp => (bp.id === p.id ? p : bp)) })
-    setPointDraft(null)
-  }
-  const deletePoint = (id: string) => {
-    patchObj({ body_points: obj.body_points.filter(bp => bp.id !== id) })
-    setPointDraft(null)
-  }
-  const viewPoints = obj.body_points.filter(p => p.view === bodyView)
   // Fall risk — risk_level SELALU turunan dari test_seconds (tidak dipilih manual).
   const setFallSeconds = (secs: number | null) =>
     patchObj({ fall_risk: { test_seconds: secs, risk_level: computeFallRisk(secs) } })
@@ -1092,13 +1006,16 @@ export default function ClinicDokter() {
     userRole === 'super_admin' ||
     (userRole === 'dokter' && !!assessment.handled_by && assessment.handled_by === user?.full_name)
 
-  // Gender pasien menentukan file gambar; selain 'male'/'female' (atau kosong) → default 'male'.
-  const patientGender: 'male' | 'female' = selectedVisit?.patient?.gender === 'female' ? 'female' : 'male'
-  const bodyImageKey = `${bodyView}-${patientGender}`
-  const bodyExtTried = bodyExtIndex[bodyImageKey] ?? 0
-  // Semua ekstensi sudah dicoba dan gagal → pakai siluet SVG.
-  const bodyImageFailed = bodyExtTried >= BODY_IMAGE_EXTS.length
-  const bodyImageSrc = bodyImageFailed ? '' : `/images/body-diagram/${bodyImageKey}.${BODY_IMAGE_EXTS[bodyExtTried]}`
+  // Jumlah view (depan/samping/belakang) yang sudah discan untuk visit terpilih.
+  useEffect(() => {
+    if (!selectedVisit?.id) { setPostureViewsScanned(null); return }
+    let active = true
+    supabase.from('clinic_posture_scans').select('view').eq('visit_id', selectedVisit.id)
+      .then(({ data }) => {
+        if (active) setPostureViewsScanned(new Set(((data ?? []) as { view: string }[]).map(r => r.view)).size)
+      })
+    return () => { active = false }
+  }, [selectedVisit?.id])
 
   const handleSaveAssessment = async (): Promise<boolean> => {
     if (!selectedVisit?.id || !selectedVisit?.patient?.full_name) return false
@@ -1542,77 +1459,19 @@ export default function ClinicDokter() {
                         </div>
                       </EmrBlock>
 
-                      {/* ── Diagram Tubuh — Tahap C ────────────────────────────────── */}
-                      <EmrBlock label="Diagram Tubuh">
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16, alignItems: 'start' }}>
-                          <div>
-                            <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
-                              {(['front', 'back'] as const).map(v => {
-                                const on = bodyView === v
-                                return (
-                                  <button type="button" key={v} onClick={() => setBodyView(v)}
-                                    style={{ padding: '6px 16px', borderRadius: 8, cursor: 'pointer', fontSize: 13, border: '1px solid',
-                                      borderColor: on ? 'var(--red)' : 'var(--border-strong)', background: on ? 'var(--red)' : 'transparent',
-                                      color: on ? '#fff' : 'var(--text-secondary)', fontWeight: on ? 700 : 400 }}>
-                                    {v === 'front' ? 'Depan' : 'Belakang'}
-                                  </button>
-                                )
-                              })}
-                            </div>
-                            <div style={{ maxWidth: 260, margin: '0 auto', border: '1px solid var(--border)', borderRadius: 8, background: 'var(--bg-input)', padding: 8 }}>
-                              {/* Kotak referensi koordinat — rasio dikunci 200:500 (2:5), sama dgn viewBox SVG.
-                                  Gambar asli & siluet SVG mengisi kotak yang PERSIS sama, jadi posisi titik
-                                  (persen x/y) identik di kedua mode. */}
-                              <div style={{ position: 'relative', width: '100%', aspectRatio: '200 / 500' }}>
-                                {!bodyImageFailed && (
-                                  <img
-                                    key={bodyImageSrc}
-                                    src={bodyImageSrc}
-                                    alt=""
-                                    onError={() => setBodyExtIndex(m => ({ ...m, [bodyImageKey]: (m[bodyImageKey] ?? 0) + 1 }))}
-                                    style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'fill', display: 'block', pointerEvents: 'none' }}
-                                  />
-                                )}
-                                <svg viewBox="0 0 200 500" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'block', cursor: assessmentLocked ? 'default' : 'crosshair' }} onClick={handleDiagramClick}>
-                                {/* Fallback: siluet SVG hanya digambar kalau gambar asli belum ada / gagal dimuat. */}
-                                {bodyImageFailed && <BodySilhouette view={bodyView} />}
-                                {viewPoints.map((p, i) => (
-                                  <g key={p.id} style={{ cursor: assessmentLocked ? 'default' : 'pointer' }}
-                                    onClick={ev => { ev.stopPropagation(); if (!assessmentLocked) setPointDraft({ ...p, isNew: false }) }}>
-                                    <circle cx={(p.x / 100) * 200} cy={(p.y / 100) * 500} r={11} fill="var(--red)" stroke="#fff" strokeWidth={2} />
-                                    <text x={(p.x / 100) * 200} y={(p.y / 100) * 500 + 4} textAnchor="middle" fontSize={12} fontWeight={700} fill="#fff">{i + 1}</text>
-                                  </g>
-                                ))}
-                                </svg>
-                              </div>
-                            </div>
-                            <p style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'center', marginTop: 6 }}>
-                              Klik pada diagram untuk menambah titik. Klik titik untuk mengubah.
-                            </p>
-                          </div>
-
-                          <div>
-                            <label style={emrSubLabel}>Daftar Titik ({obj.body_points.length})</label>
-                            {obj.body_points.length === 0 ? (
-                              <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '6px 0 0' }}>Belum ada titik.</p>
-                            ) : (['front', 'back'] as const)
-                              .flatMap(v => obj.body_points.filter(p => p.view === v).map((p, i) => ({ p, v, n: i + 1 })))
-                              .map(({ p, v, n }) => (
-                                <div key={p.id} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
-                                  <span style={{ flexShrink: 0, width: 22, height: 22, borderRadius: 999, background: 'var(--red)', color: '#fff', fontSize: 11, fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>{n}</span>
-                                  <div style={{ flex: 1, minWidth: 0 }}>
-                                    <div style={{ fontSize: 13, fontWeight: 600 }}>
-                                      {p.part_label || '(tanpa nama)'}
-                                      <span className="badge" style={{ marginLeft: 8, background: 'var(--bg-card)', color: 'var(--text-secondary)' }}>{v === 'front' ? 'Depan' : 'Belakang'}</span>
-                                    </div>
-                                    {p.notes && <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2, whiteSpace: 'pre-wrap' }}>{p.notes}</div>}
-                                  </div>
-                                  <button type="button" onClick={() => deletePoint(p.id)}
-                                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--red)', fontSize: 12, fontWeight: 600, flexShrink: 0 }}>Hapus</button>
-                                </div>
-                              ))}
-                          </div>
-                        </div>
+                      {/* ── Analisis Postur — menggantikan Diagram Tubuh manual ────── */}
+                      <EmrBlock label="Analisis Postur">
+                        <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '0 0 10px' }}>
+                          {postureViewsScanned === null
+                            ? 'Memuat status scan…'
+                            : postureViewsScanned === 0
+                              ? 'Belum ada scan postur untuk visit ini.'
+                              : `${postureViewsScanned} dari 3 view sudah discan — garis analisis (bahu/pinggul/plumb) otomatis dari deteksi pose.`}
+                        </p>
+                        <button type="button" className="btn-secondary" style={{ width: 'auto', padding: '8px 16px' }}
+                          onClick={() => setModalTab('postur')}>
+                          Buka Scan Postur →
+                        </button>
                       </EmrBlock>
 
                       {/* ── Skala Risiko Jatuh — Tahap D (opsional, default tertutup) ── */}
@@ -1641,50 +1500,6 @@ export default function ClinicDokter() {
                       </Collapsible>
                     </div>
 
-                    {pointDraft && (
-                      <div className="modal-overlay" onClick={() => setPointDraft(null)}>
-                        <div className="modal-box" style={{ maxWidth: 460 }} onClick={e => e.stopPropagation()}>
-                          <h3 className="modal-title" style={{ marginTop: 0 }}>{pointDraft.isNew ? 'Tambah Titik' : 'Edit Titik'}</h3>
-                          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
-                            Tampak {pointDraft.view === 'front' ? 'Depan' : 'Belakang'} · x {pointDraft.x.toFixed(1)}% · y {pointDraft.y.toFixed(1)}%
-                          </div>
-
-                          <label style={emrSubLabel}>Bagian Tubuh</label>
-                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
-                            {SPORTS_BODY_PARTS.map(part => {
-                              const on = pointDraft.part_label === part
-                              return (
-                                <button type="button" key={part} onClick={() => setPointDraft(d => (d ? { ...d, part_label: part } : d))}
-                                  style={{ padding: '5px 12px', borderRadius: 999, cursor: 'pointer', fontSize: 12.5, border: '1px solid',
-                                    borderColor: on ? 'var(--red)' : 'var(--border-strong)',
-                                    background: on ? 'rgba(192,57,43,0.2)' : 'var(--bg-elevated)', color: on ? '#fff' : 'var(--text-secondary)', fontWeight: on ? 600 : 400 }}>{part}</button>
-                              )
-                            })}
-                          </div>
-                          <input type="text" value={pointDraft.part_label} onChange={e => setPointDraft(d => (d ? { ...d, part_label: e.target.value } : d))}
-                            placeholder="Atau ketik bagian tubuh lain..." style={emrField} />
-
-                          <div style={{ marginTop: 12 }}>
-                            <label style={emrSubLabel}>Catatan</label>
-                            <textarea value={pointDraft.notes} onChange={e => setPointDraft(d => (d ? { ...d, notes: e.target.value } : d))}
-                              rows={3} placeholder="Catatan temuan pada titik ini..." style={{ ...emrField, resize: 'vertical' }} />
-                          </div>
-
-                          <div className="modal-footer" style={{ marginTop: 16, display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                            <div>
-                              {!pointDraft.isNew && (
-                                <button type="button" onClick={() => deletePoint(pointDraft.id)}
-                                  style={{ background: 'none', border: '1px solid var(--red)', color: 'var(--red)', borderRadius: 8, padding: '8px 16px', cursor: 'pointer', fontWeight: 600 }}>Hapus</button>
-                              )}
-                            </div>
-                            <div style={{ display: 'flex', gap: 8 }}>
-                              <button type="button" className="btn-secondary" style={{ width: 'auto', padding: '8px 16px' }} onClick={() => setPointDraft(null)}>Batal</button>
-                              <button type="button" className="btn-primary" style={{ width: 'auto', padding: '8px 16px' }} onClick={savePoint}>Simpan</button>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )}
 
                     {/* Clinical Impression / Assessment (dulu satu .map bersama Plan; Plan dipindah
                         ke bawah Diagnosis, markup & perilaku Plan tak berubah) */}
