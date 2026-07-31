@@ -1611,6 +1611,89 @@ export async function resetClinicUserPassword(id: string, newPassword: string): 
 
 // ─── Lock / Unlock ────────────────────────────────────────────────────────────
 
+// ─── Resume Medis (cetak per assessment dokter) ──────────────────────────────
+export interface DoctorAssessmentListItem {
+  assessment_id: string
+  visit_id: string
+  visit_code: string
+  visit_date: string | null
+  handled_by: string | null
+}
+/** Daftar assessment DOKTER milik satu pasien — untuk dropdown pilih kunjungan. */
+export async function listDoctorAssessments(patientId: string): Promise<DoctorAssessmentListItem[]> {
+  const { data, error } = await supabase
+    .from('clinic_assessments')
+    .select('id, visit_id, handled_by, visit:clinic_visits(visit_code, visit_date)')
+    .eq('patient_id', patientId)
+    .eq('assessment_type', 'doctor')
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return ((data ?? []) as any[]).map(r => ({
+    assessment_id: r.id,
+    visit_id: r.visit_id,
+    visit_code: r.visit?.visit_code ?? '-',
+    visit_date: r.visit?.visit_date ?? null,
+    handled_by: r.handled_by ?? null,
+  }))
+}
+
+export interface MedicalResumeBundle {
+  // Kolom jsonb dibiarkan unknown — parsing toleran-legacy dilakukan di komponen
+  // resume (pola MedicalHistoryPanel), bukan mengimpor tipe SOAP dari ClinicDokter.
+  assessment: {
+    subjective: unknown
+    objective: unknown
+    diagnosis: unknown
+    plan: unknown
+    vital_signs: unknown   // legacy dokter {temperature, systolic, diastolic, pulse, respiratory_rate}
+    handled_by: string | null
+    updated_at: string | null
+  }
+  visit: { visit_code: string; visit_date: string | null; visit_time: string | null } | null
+  services: { service_name: string; price: number }[]
+  screeningVitals: ClinicVitalSigns | null   // sumber vital TERKINI (Triase)
+  postureScans: { view: string; angles: Record<string, number>; general_note: string }[]
+}
+/** Bundle lengkap satu resume: assessment + visit + layanan + vital screening + scan postur. */
+export async function getMedicalResumeBundle(assessmentId: string): Promise<MedicalResumeBundle> {
+  const { data, error } = await supabase
+    .from('clinic_assessments')
+    .select('id, visit_id, subjective, objective, diagnosis, plan, vital_signs, handled_by, updated_at, visit:clinic_visits(visit_code, visit_date, visit_time, services:clinic_visit_services(service_name, price))')
+    .eq('id', assessmentId)
+    .single()
+  if (error) throw error
+  const row = data as any
+
+  let screeningVitals: ClinicVitalSigns | null = null
+  let postureScans: MedicalResumeBundle['postureScans'] = []
+  if (row.visit_id) {
+    const [scr, scans] = await Promise.all([
+      supabase.from('clinic_screenings').select('vital_signs').eq('visit_id', row.visit_id).maybeSingle(),
+      supabase.from('clinic_posture_scans').select('view, angles, annotations').eq('visit_id', row.visit_id).order('created_at', { ascending: true }),
+    ])
+    screeningVitals = (scr.data as { vital_signs: ClinicVitalSigns } | null)?.vital_signs ?? null
+    postureScans = ((scans.data ?? []) as any[]).map(s => ({
+      view: s.view,
+      angles: s.angles ?? {},
+      general_note: s.annotations?.general_note ?? '',
+    }))
+  }
+
+  return {
+    assessment: {
+      subjective: row.subjective, objective: row.objective, diagnosis: row.diagnosis,
+      plan: row.plan, vital_signs: row.vital_signs,
+      handled_by: row.handled_by ?? null, updated_at: row.updated_at ?? null,
+    },
+    visit: row.visit
+      ? { visit_code: row.visit.visit_code, visit_date: row.visit.visit_date, visit_time: row.visit.visit_time }
+      : null,
+    services: row.visit?.services ?? [],
+    screeningVitals,
+    postureScans,
+  }
+}
+
 export type LockableTable = 'clinic_screenings' | 'clinic_consents' | 'clinic_assessments' | 'clinic_transactions'
 
 export interface AuditLog {

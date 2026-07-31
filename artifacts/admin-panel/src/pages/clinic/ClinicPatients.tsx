@@ -3,6 +3,7 @@ import { ArrowLeft, ArrowRight, X } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { fmtDate } from '../../lib/format'
 import ClinicPatientForm, { type PatientFormValues } from './ClinicPatientForm'
+import MedicalResumeModal from '../../components/clinic/MedicalResumeModal'
 import {
   listPatientsPaged, createPatient, updatePatient, deactivatePatient, listPatientPackages,
   type ClinicPatient, type ClinicPatientPackage,
@@ -101,7 +102,8 @@ export default function ClinicPatients() {
     } finally { setSaving(false) }
   }
 
-  const closeDetail = () => { setSelected(null); setEditing(false); setFormError(''); setConfirmDeactivate(false) }
+  const [showResume, setShowResume] = useState(false)
+  const closeDetail = () => { setSelected(null); setEditing(false); setFormError(''); setConfirmDeactivate(false); setShowResume(false) }
 
   const from = total > 0 ? page * PAGE_SIZE + 1 : 0
   const to = Math.min((page + 1) * PAGE_SIZE, total)
@@ -254,6 +256,9 @@ export default function ClinicPatients() {
                 <PatientPackagesSection patientId={selected.id} />
 
                 <div className="modal-footer" style={{ flexWrap: 'wrap' }}>
+                  <button className="btn-secondary" onClick={() => setShowResume(true)}>
+                    Resume Medis
+                  </button>
                   <button className="btn-secondary" onClick={() => navigate(`/clinic/visits?patient_id=${selected.id}`)}>
                     Lihat Riwayat Kunjungan
                   </button>
@@ -264,6 +269,10 @@ export default function ClinicPatients() {
             )}
           </div>
         </div>
+      )}
+
+      {selected && showResume && (
+        <MedicalResumeModal patient={selected} onClose={() => setShowResume(false)} />
       )}
     </div>
   )
