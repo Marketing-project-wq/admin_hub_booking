@@ -401,6 +401,7 @@ interface ClinicScreeningData {
   health_musculoskeletal: string[]
   health_special: string[]
   health_female: string[]
+  last_menstrual_period: string | null
   health_medications: string | null
   health_allergies: string[]
   drug_allergy_detail: string | null
@@ -1225,6 +1226,7 @@ export default function ClinicDokter() {
                     {(screeningData.health_cardiovascular.length > 0 || screeningData.health_metabolic.length > 0 ||
                       screeningData.health_respiratory.length > 0 || screeningData.health_musculoskeletal.length > 0 ||
                       screeningData.health_special.length > 0 || !!screeningData.health_medications ||
+                      screeningData.health_female.length > 0 || !!screeningData.last_menstrual_period ||
                       screeningData.health_allergies.length > 0 || !!screeningData.blood_type ||
                       screeningData.is_smoker != null || !!screeningData.drug_allergy_detail) && (
                       <div style={{ marginBottom: 12 }}>
@@ -1246,6 +1248,13 @@ export default function ClinicDokter() {
                         <ChipRow label="Respirasi" items={screeningData.health_respiratory} />
                         <ChipRow label="Muskuloskeletal" items={screeningData.health_musculoskeletal} />
                         <ChipRow label="Kondisi Khusus" items={screeningData.health_special} />
+                        <ChipRow label="Khusus Perempuan" items={screeningData.health_female} />
+                        {screeningData.last_menstrual_period && (
+                          <div style={{ fontSize: 12, marginBottom: 8 }}>
+                            <span style={{ color: '#6B7280' }}>HPHT (Haid Terakhir): </span>
+                            <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>{fmtDate(screeningData.last_menstrual_period)}</span>
+                          </div>
+                        )}
                         <ChipRow label="Obat-obatan" items={screeningData.health_medications ? [screeningData.health_medications] : []} />
                         <ChipRow label="Alergi" items={screeningData.health_allergies} />
                         {screeningData.drug_allergy_detail && (

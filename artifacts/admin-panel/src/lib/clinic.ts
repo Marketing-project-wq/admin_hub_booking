@@ -1434,6 +1434,7 @@ export interface ClinicScreening {
   health_musculoskeletal: string[]
   health_special: string[]
   health_female: string[]
+  last_menstrual_period: string | null
   health_medications: string | null
   health_allergies: string[]
   drug_allergy_detail: string | null

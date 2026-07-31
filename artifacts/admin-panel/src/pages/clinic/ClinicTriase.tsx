@@ -70,7 +70,7 @@ const HEALTH_METABOLIC = ['Diabetes tipe 1', 'Diabetes tipe 2', 'Gangguan tiroid
 const HEALTH_RESPIRATORY = ['Asma', 'PPOK', 'Sesak napas saat aktivitas', 'Epilepsi/kejang', 'Vertigo', 'Migrain', 'Tidak Tahu', 'Tidak ada']
 const HEALTH_MUSCULOSKELETAL = ['Osteoporosis', 'Osteoarthritis', 'Rheumatoid arthritis', 'Hernia/HNP', 'Skoliosis', 'Cedera ligamen/otot kronis', 'Riwayat Cedera Olahraga', 'Riwayat Operasi Ortopedi', 'Riwayat Patah Tulang', 'Tidak Tahu', 'Tidak ada']
 const HEALTH_SPECIAL = ['Pacemaker/implan logam', 'Kanker/sedang kemoterapi', 'Gangguan pembekuan darah', 'Penyakit kulit di area treatment', 'Baru selesai operasi (< 3 bulan)', 'Gangguan Ginjal', 'Tidak Tahu', 'Tidak ada']
-const HEALTH_FEMALE = ['Sedang hamil', 'Sedang menstruasi', 'Menyusui', 'Menggunakan KB hormonal', 'Tidak ada']
+const HEALTH_FEMALE = ['Sedang hamil', 'Sedang menstruasi', 'Menyusui', 'Menggunakan KB hormonal', 'Siklus teratur', 'Siklus tidak teratur', 'Menopause', 'Tidak ada']
 const HEALTH_ALLERGIES = ['Obat-obatan', 'Makanan', 'Latex', 'Plester/perekat', 'Antiseptik', 'Debu', 'Dingin', 'Serbuk Sari', 'Tidak ada']
 const BLOOD_TYPES = ['A', 'B', 'AB', 'O', 'Tidak tahu']
 const ACTIVITY_LEVELS = ['Rendah', 'Sedang', 'Tinggi', 'Atlet']
@@ -459,6 +459,7 @@ interface ScreeningForm {
   health_musculoskeletal: string[]
   health_special: string[]
   health_female: string[]
+  last_menstrual_period: string
   health_medications: string
   health_allergies: string[]
   drug_allergy_detail: string
@@ -473,7 +474,7 @@ const emptyScreening = (): ScreeningForm => ({
   msk_function: [], msk_additional: [], msk_history: [],
   blood_type: '', is_smoker: false,
   health_cardiovascular: [], health_metabolic: [], health_respiratory: [], health_musculoskeletal: [],
-  health_special: [], health_female: [], health_medications: '', health_allergies: [], drug_allergy_detail: '', health_surgeries: '',
+  health_special: [], health_female: [], last_menstrual_period: '', health_medications: '', health_allergies: [], drug_allergy_detail: '', health_surgeries: '',
   physical_activity_level: '', physical_activity_type: '',
 })
 
@@ -520,6 +521,7 @@ function ScreeningTab({ visit, patient, onToast, onSaved, isLocked, recordId, lo
           health_cardiovascular: data.health_cardiovascular ?? [], health_metabolic: data.health_metabolic ?? [],
           health_respiratory: data.health_respiratory ?? [], health_musculoskeletal: data.health_musculoskeletal ?? [],
           health_special: data.health_special ?? [], health_female: data.health_female ?? [],
+          last_menstrual_period: data.last_menstrual_period ?? '',
           health_medications: data.health_medications ?? '', health_allergies: data.health_allergies ?? [],
           drug_allergy_detail: data.drug_allergy_detail ?? '',
           health_surgeries: data.health_surgeries ?? '',
@@ -612,6 +614,7 @@ function ScreeningTab({ visit, patient, onToast, onSaved, isLocked, recordId, lo
         health_cardiovascular: form.health_cardiovascular, health_metabolic: form.health_metabolic,
         health_respiratory: form.health_respiratory, health_musculoskeletal: form.health_musculoskeletal,
         health_special: form.health_special, health_female: form.health_female,
+        last_menstrual_period: form.last_menstrual_period || null,
         health_medications: form.health_medications || null, health_allergies: form.health_allergies,
         drug_allergy_detail: form.drug_allergy_detail || null,
         health_surgeries: form.health_surgeries || null,
@@ -733,7 +736,20 @@ function ScreeningTab({ visit, patient, onToast, onSaved, isLocked, recordId, lo
           <Sub label="D.4 Muskuloskeletal"><ChipSelect options={HEALTH_MUSCULOSKELETAL} value={form.health_musculoskeletal} onChange={v => set('health_musculoskeletal', v)} /></Sub>
           <Sub label="D.5 Kondisi Khusus"><ChipSelect options={HEALTH_SPECIAL} value={form.health_special} onChange={v => set('health_special', v)} /></Sub>
           {patient?.gender === 'female' && (
-            <Sub label="D.6 Khusus Perempuan"><ChipSelect options={HEALTH_FEMALE} value={form.health_female} onChange={v => set('health_female', v)} /></Sub>
+            <Sub label="D.6 Khusus Perempuan">
+              <ChipSelect options={HEALTH_FEMALE} value={form.health_female} onChange={v => set('health_female', v)} />
+              {/* HPHT selalu tampil (tidak disembunyikan saat chip Menopause dicentang):
+                  menghindari nilai tersimpan diam-diam / terhapus otomatis saat field
+                  di-hide, dan HPHT tetap bisa relevan utk perimenopause. */}
+              <div style={{ marginTop: 10 }}>
+                <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>
+                  HPHT — Hari Pertama Haid Terakhir (opsional)
+                </label>
+                <input type="date" value={form.last_menstrual_period}
+                  onChange={e => set('last_menstrual_period', e.target.value)}
+                  style={{ width: 'auto', minWidth: 180 }} />
+              </div>
+            </Sub>
           )}
           <Sub label="D.7 Obat yang Dikonsumsi">
             <textarea value={form.health_medications} onChange={e => set('health_medications', e.target.value)} rows={2} style={{ width: '100%' }} />
