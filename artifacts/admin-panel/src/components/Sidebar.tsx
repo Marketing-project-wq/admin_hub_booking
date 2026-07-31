@@ -56,6 +56,13 @@ const UNIT_MENUS: Record<string, MenuItem[]> = {
   ],
 }
 
+// Logo brand per unit, varian per tema (putih utk dark, gelap utk light).
+// Unit tanpa entri (gym) tetap render teks 20FIT + label unit.
+const UNIT_LOGOS: Record<string, { dark: string; light: string; alt: string }> = {
+  clinic: { dark: '/20fit-sports-clinic-white.png', light: '/20fit-sports-clinic-black.png', alt: '20FIT Sports Clinic' },
+  arena: { dark: '/20fit-arena-white.png', light: '/20fit-arena-black.png', alt: '20FIT Arena' },
+}
+
 export default function Sidebar({ currentUnit, open, onClose }: SidebarProps) {
   const { user, logout } = useAuth()
   const { theme, toggleTheme } = useTheme()
@@ -82,12 +89,13 @@ export default function Sidebar({ currentUnit, open, onClose }: SidebarProps) {
         padding: '24px 20px 16px',
         borderBottom: '1px solid var(--sidebar-border)',
       }}>
-        {currentUnit === 'clinic' ? (
-          /* Logo Sports Clinic — varian per tema (putih utk dark, gelap utk light),
-             pola switch sama dengan ikon sun/moon di bawah. Rasio asli 7216x2500. */
+        {UNIT_LOGOS[currentUnit] ? (
+          /* Switch varian per tema — pola sama dengan ikon sun/moon di bawah.
+             width tetap + height auto: proporsional utk rasio apa pun
+             (clinic 7216x2500, arena 1080x608). */
           <img
-            src={theme === 'dark' ? '/20fit-sports-clinic-white.png' : '/20fit-sports-clinic-black.png'}
-            alt="20FIT Sports Clinic"
+            src={theme === 'dark' ? UNIT_LOGOS[currentUnit].dark : UNIT_LOGOS[currentUnit].light}
+            alt={UNIT_LOGOS[currentUnit].alt}
             style={{ width: 192, maxWidth: '100%', height: 'auto', display: 'block' }}
           />
         ) : (
