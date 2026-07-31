@@ -94,7 +94,11 @@ export default function ClinicKasir() {
           bookings:clinic_bookings!clinic_bookings_visit_id_fkey(payment_method, status, price, service_id)
         `)
         .eq('payment_status', 'unpaid')
-        .in('status', ['in_progress', 'completed'])
+        // in_progress/completed lintas tanggal, PLUS scheduled KHUSUS hari ini
+        // (pasien kiosk yang belum ditriase tetap bisa ditagih). Scheduled masa
+        // depan (follow-up appointment) & lampau (urusan carry-over Triase)
+        // sengaja TIDAK ikut. todayISO() = tanggal lokal (bukan toISOString/UTC).
+        .or(`status.in.(in_progress,completed),and(status.eq.scheduled,visit_date.eq.${todayISO()})`)
         .order('visit_date', { ascending: false })
         .order('visit_time', { ascending: true })
       if (err) throw err
