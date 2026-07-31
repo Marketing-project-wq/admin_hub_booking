@@ -61,6 +61,22 @@ export default function MedicalResumeModal({ patient, onClose }: {
     return () => document.body.classList.remove('resume-print-mode')
   }, [])
 
+  // Nama file default dialog "Save as PDF" browser mengikuti document.title —
+  // set ke "Resume Medis_{Nama}_{Tanggal Kunjungan}" selama data siap. Judul asli
+  // ditangkap di awal effect (bukan hardcode) dan dipulihkan di cleanup; React
+  // menjalankan cleanup lama SEBELUM effect baru, jadi restore tetap akurat
+  // walau user berganti-ganti kunjungan.
+  const visitDateForTitle = bundle?.visit?.visit_date ?? null
+  useEffect(() => {
+    if (!bundle) return
+    const originalTitle = document.title
+    document.title = `Resume Medis_${patient.full_name}_${fmtDate(visitDateForTitle)}`
+      .replace(/[\\/:*?"<>|]/g, '-')
+      .replace(/\s+/g, ' ')
+      .trim()
+    return () => { document.title = originalTitle }
+  }, [bundle, visitDateForTitle, patient.full_name])
+
   useEffect(() => {
     listDoctorAssessments(patient.id)
       .then(rows => {
