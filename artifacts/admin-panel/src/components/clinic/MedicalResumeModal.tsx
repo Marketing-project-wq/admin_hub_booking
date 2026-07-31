@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 import { fmtDate, fmtTime } from '../../lib/format'
 import {
@@ -51,6 +52,14 @@ export default function MedicalResumeModal({ patient, onClose }: {
   const [bundle, setBundle] = useState<MedicalResumeBundle | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+
+  // Penanda print: selama modal terbuka, #root aplikasi bisa di-display:none saat
+  // print (display menghapus RUANG — beda dengan visibility:hidden yang menyisakan
+  // ruang kosong dan bikin dokumen "turun" ke tengah/bawah halaman).
+  useEffect(() => {
+    document.body.classList.add('resume-print-mode')
+    return () => document.body.classList.remove('resume-print-mode')
+  }, [])
 
   useEffect(() => {
     listDoctorAssessments(patient.id)
@@ -120,16 +129,30 @@ export default function MedicalResumeModal({ patient, onClose }: {
 
   const sel = list?.find(l => l.assessment_id === selectedId)
 
-  return (
-    <div className="modal-overlay resume-no-print-overlay" onClick={onClose}
-      style={{ overflowY: 'auto', alignItems: 'flex-start', padding: '24px 12px' }}>
+  // PORTAL ke document.body: overlay keluar dari #root DAN dari semua ancestor
+  // ber-backdrop-filter/transform (glass styling) yang merusak containing block
+  // positioning saat print. Saat print: #root di-display:none (tanpa sisa ruang),
+  // overlay direset total jadi flow statis, lembar mengalir dari atas halaman —
+  // sekaligus membuat page-break dokumen panjang bekerja normal (posisi absolut
+  // pada trik visibility lama bisa memotong konten multi-halaman).
+  return createPortal(
+    <div className="modal-overlay resume-overlay" onClick={onClose}
+      style={{ overflowY: 'auto', padding: '24px 12px' }}>
       <style>{`
         @media print {
-          body * { visibility: hidden; }
-          .resume-sheet, .resume-sheet * { visibility: visible; }
-          .resume-sheet { position: absolute; left: 0; top: 0; width: 100%; max-width: none; margin: 0; padding: 0; border-radius: 0; box-shadow: none; }
-          .resume-no-print, .resume-no-print-overlay > *:not(.resume-wrap) { display: none !important; }
-          .resume-no-print-overlay { position: static !important; overflow: visible !important; padding: 0 !important; background: none !important; }
+          body.resume-print-mode #root { display: none !important; }
+          .resume-no-print { display: none !important; }
+          .resume-overlay {
+            position: static !important; inset: auto !important;
+            display: block !important; height: auto !important; min-height: 0 !important;
+            overflow: visible !important; padding: 0 !important; background: none !important;
+            -webkit-backdrop-filter: none !important; backdrop-filter: none !important;
+          }
+          .resume-wrap { max-width: none !important; }
+          .resume-sheet {
+            width: 100% !important; max-width: none !important; margin: 0 !important;
+            padding: 0 !important; border-radius: 0 !important; box-shadow: none !important;
+          }
           @page { size: A4; margin: 14mm; }
         }
       `}</style>
@@ -296,6 +319,7 @@ export default function MedicalResumeModal({ patient, onClose }: {
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
