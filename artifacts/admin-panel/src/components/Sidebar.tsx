@@ -82,25 +82,37 @@ export default function Sidebar({ currentUnit, open, onClose }: SidebarProps) {
         padding: '24px 20px 16px',
         borderBottom: '1px solid var(--sidebar-border)',
       }}>
-        <h2 className="brand-small" style={{
-          fontFamily: "'Anton', sans-serif",
-          fontWeight: 400,
-          fontSize: 22,
-          letterSpacing: 2,
-          color: 'var(--sidebar-text-strong)',
-          margin: 0,
-        }}>20FIT</h2>
-        <span className="unit-label" style={{
-          fontFamily: "'Barlow Condensed', sans-serif",
-          fontWeight: 700,
-          fontStyle: 'italic',
-          fontSize: 10,
-          letterSpacing: 3,
-          color: 'var(--red)',
-          textTransform: 'uppercase',
-          display: 'block',
-          marginTop: 2,
-        }}>{currentUnit.toUpperCase()}</span>
+        {currentUnit === 'clinic' ? (
+          /* Logo Sports Clinic — varian per tema (putih utk dark, gelap utk light),
+             pola switch sama dengan ikon sun/moon di bawah. Rasio asli 7216x2500. */
+          <img
+            src={theme === 'dark' ? '/20fit-sports-clinic-white.png' : '/20fit-sports-clinic-black.png'}
+            alt="20FIT Sports Clinic"
+            style={{ width: 192, maxWidth: '100%', height: 'auto', display: 'block' }}
+          />
+        ) : (
+          <>
+            <h2 className="brand-small" style={{
+              fontFamily: "'Anton', sans-serif",
+              fontWeight: 400,
+              fontSize: 22,
+              letterSpacing: 2,
+              color: 'var(--sidebar-text-strong)',
+              margin: 0,
+            }}>20FIT</h2>
+            <span className="unit-label" style={{
+              fontFamily: "'Barlow Condensed', sans-serif",
+              fontWeight: 700,
+              fontStyle: 'italic',
+              fontSize: 10,
+              letterSpacing: 3,
+              color: 'var(--red)',
+              textTransform: 'uppercase',
+              display: 'block',
+              marginTop: 2,
+            }}>{currentUnit.toUpperCase()}</span>
+          </>
+        )}
       </div>
 
       <nav className="sidebar-menu">
