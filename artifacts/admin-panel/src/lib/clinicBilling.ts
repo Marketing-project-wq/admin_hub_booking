@@ -101,6 +101,42 @@ export async function createTransaction(payload: CreateTransactionPayload): Prom
   return data as unknown as ClinicTransaction
 }
 
+// Edit transaksi (setelah unlock) via RPC ATOMIK update_clinic_transaction:
+// validasi + update + sinkron clinic_visits.payment_amount/method + audit diff
+// + re-lock, semuanya satu transaksi DB. Lihat migration 20260731.
+export interface UpdateTransactionPayload {
+  transaction_id: string
+  service_price: number
+  discount: number
+  admin_fee: number
+  total_amount: number
+  payment_method: string
+  payment_detail: Record<string, string>
+  notes: string | null
+  cashier_name: string | null
+  reason: string
+  performed_by: string
+  performed_by_role: string | null
+}
+export async function updateClinicTransaction(p: UpdateTransactionPayload): Promise<ClinicTransaction> {
+  const { data, error } = await supabase.rpc('update_clinic_transaction', {
+    p_transaction_id: p.transaction_id,
+    p_service_price: p.service_price,
+    p_discount: p.discount,
+    p_admin_fee: p.admin_fee,
+    p_total_amount: p.total_amount,
+    p_payment_method: p.payment_method,
+    p_payment_detail: p.payment_detail,
+    p_notes: p.notes,
+    p_cashier_name: p.cashier_name,
+    p_reason: p.reason,
+    p_performed_by: p.performed_by,
+    p_performed_by_role: p.performed_by_role,
+  })
+  if (error) throw error
+  return data as unknown as ClinicTransaction
+}
+
 // Update status visit setelah bayar
 export async function completeVisitPayment(visitId: string, method: string, amount: number): Promise<void> {
   const { error } = await supabase

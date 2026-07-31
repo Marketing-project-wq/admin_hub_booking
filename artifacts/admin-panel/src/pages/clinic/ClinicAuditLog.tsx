@@ -21,6 +21,7 @@ function ActionBadge({ action }: { action: string }) {
     unlock: { label: 'Dibuka', style: { background: '#FEF3C7', color: '#92400E' } },
     relock: { label: 'Dikunci', style: { background: '#D1FAE5', color: '#065F46' } },
     reassign: { label: 'Reassign', style: { background: '#DBEAFE', color: '#1D4ED8' } },
+    edit_transaction: { label: 'Edit Transaksi', style: { background: '#FEE2E2', color: '#991B1B' } },
   }
   const m = map[action] ?? { label: action, style: { background: '#F3F4F6', color: '#374151' } }
   return <span className="badge" style={m.style}>{m.label}</span>

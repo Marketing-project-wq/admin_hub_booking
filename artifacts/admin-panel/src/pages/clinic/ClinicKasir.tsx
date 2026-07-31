@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
-import { ArrowLeft, ArrowRight } from 'lucide-react'
+import { ArrowLeft, ArrowRight, X } from 'lucide-react'
 import { fmtRp, fmtDate, fmtTime, fmtDateTime, exportToCSV } from '../../lib/format'
 import { supabase } from '../../lib/supabase'
 import { todayISO } from '../../lib/clinic'
-import { listTransactions, getTodaySummary, type ClinicTransaction } from '../../lib/clinicBilling'
+import { useAuth } from '../../context/AuthContext'
+import { listTransactions, getTodaySummary, updateClinicTransaction, type ClinicTransaction } from '../../lib/clinicBilling'
 import ClinicReceiptModal from '../../components/clinic/ClinicReceiptModal'
 import ClinicCloseBillModal from '../../components/clinic/ClinicCloseBillModal'
 import LockBadge from '../../components/clinic/LockBadge'
@@ -59,6 +60,15 @@ export default function ClinicKasir() {
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const [receipt, setReceipt] = useState<ClinicTransaction | null>(null)
+
+  // Edit transaksi (setelah unlock). Dua tingkat akses (frontend-level, konsisten
+  // model kontrol akses app): field finansial hanya super_admin; non-finansial
+  // (notes/kasir/detail bayar) untuk pemilik permission can_payment.
+  const { user, hasPermission } = useAuth()
+  const kasirRole: string | undefined = user?.role
+  const isSuperAdmin = kasirRole === 'super_admin'
+  const canEditTransaction = isSuperAdmin || hasPermission('can_payment')
+  const [editTrx, setEditTrx] = useState<ClinicTransaction | null>(null)
 
   // Menunggu Pembayaran
   const [pendingVisits, setPendingVisits] = useState<PendingVisit[]>([])
@@ -271,6 +281,9 @@ export default function ClinicKasir() {
                   />
                 </td>
                 <td style={{ whiteSpace: 'nowrap' }}>
+                  {!lk.is_locked && canEditTransaction && (
+                    <button className="action-btn" style={{ color: 'var(--red)', marginRight: 6 }} onClick={() => setEditTrx(t)}>Edit</button>
+                  )}
                   <button className="action-btn detail" onClick={() => setReceipt(t)}>Kwitansi</button>
                 </td>
               </tr>
@@ -288,6 +301,16 @@ export default function ClinicKasir() {
       </div>
 
       {receipt && <ClinicReceiptModal transaction={receipt} onClose={() => setReceipt(null)} />}
+      {editTrx && (
+        <EditTransactionModal
+          trx={editTrx}
+          isSuperAdmin={isSuperAdmin}
+          performedBy={user?.full_name ?? '-'}
+          performedByRole={kasirRole ?? null}
+          onClose={() => setEditTrx(null)}
+          onSaved={() => { setEditTrx(null); fetchData() }}
+        />
+      )}
 
       {closeBillVisit && closeBillVisit.patient && (
         <ClinicCloseBillModal
@@ -309,6 +332,194 @@ export default function ClinicKasir() {
           onSuccess={() => { setCloseBillVisit(null); fetchPending(); fetchData() }}
         />
       )}
+    </div>
+  )
+}
+
+// ─── Edit Transaksi (setelah unlock) ─────────────────────────────────────────
+// Simpan lewat RPC atomik update_clinic_transaction: validasi + update + sinkron
+// clinic_visits + audit diff + RE-LOCK otomatis dalam satu transaksi DB.
+// Field finansial hanya aktif untuk super_admin; non-finansial untuk can_payment.
+const EDIT_METHODS = ['cash', 'transfer', 'qris', 'debit', 'kredit']
+
+function EditTransactionModal({ trx, isSuperAdmin, performedBy, performedByRole, onClose, onSaved }: {
+  trx: ClinicTransaction
+  isSuperAdmin: boolean
+  performedBy: string
+  performedByRole: string | null
+  onClose: () => void
+  onSaved: () => void
+}) {
+  const [servicePrice, setServicePrice] = useState(trx.service_price)
+  const [discount, setDiscount] = useState(trx.discount)
+  const [adminFee, setAdminFee] = useState(trx.admin_fee ?? 0)
+  const [payMethod, setPayMethod] = useState(trx.payment_method)
+  const [transferRef, setTransferRef] = useState(trx.payment_detail?.transfer_ref ?? '')
+  const [cardLast4, setCardLast4] = useState(trx.payment_detail?.card_last4 ?? '')
+  const [bankName, setBankName] = useState(trx.payment_detail?.bank_name ?? '')
+  const [notes, setNotes] = useState(trx.notes ?? '')
+  const [cashierName, setCashierName] = useState(trx.cashier_name ?? '')
+  const [reason, setReason] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  // Total SELALU turunan komponen (read-only) — persamaan yang sama di-enforce RPC.
+  const total = servicePrice - discount + adminFee
+  // Simpan hanya aktif kalau ada perubahan nyata vs nilai awal (alasan tidak dihitung) —
+  // selaras perilaku RPC yang no-op saat tidak ada perubahan.
+  const isDirty =
+    servicePrice !== trx.service_price ||
+    discount !== trx.discount ||
+    adminFee !== (trx.admin_fee ?? 0) ||
+    payMethod !== trx.payment_method ||
+    transferRef !== (trx.payment_detail?.transfer_ref ?? '') ||
+    cardLast4 !== (trx.payment_detail?.card_last4 ?? '') ||
+    bankName !== (trx.payment_detail?.bank_name ?? '') ||
+    notes !== (trx.notes ?? '') ||
+    cashierName !== (trx.cashier_name ?? '')
+  const isCard = payMethod === 'debit' || payMethod === 'kredit'
+  const numStyle: React.CSSProperties = { width: '100%', boxSizing: 'border-box' }
+  const label: React.CSSProperties = { fontSize: 11, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: 1, display: 'block', marginBottom: 4 }
+  const parseNum = (s: string) => Number(s.replace(/\D/g, '')) || 0
+
+  const handleSave = async () => {
+    setError('')
+    if (!reason.trim()) { setError('Alasan perubahan wajib diisi.'); return }
+    if (!payMethod.trim()) { setError('Metode pembayaran wajib diisi.'); return }
+    if (discount > servicePrice) { setError('Diskon tidak boleh melebihi harga layanan.'); return }
+    if (adminFee < 0) { setError('Biaya admin tidak boleh negatif.'); return }
+    setSaving(true)
+    try {
+      const payment_detail: Record<string, string> = {}
+      if (payMethod === 'transfer' && transferRef.trim()) payment_detail.transfer_ref = transferRef.trim()
+      if (isCard) {
+        if (cardLast4.trim()) payment_detail.card_last4 = cardLast4.trim()
+        if (bankName.trim()) payment_detail.bank_name = bankName.trim()
+      }
+      await updateClinicTransaction({
+        transaction_id: trx.id,
+        service_price: servicePrice,
+        discount,
+        admin_fee: adminFee,
+        total_amount: total,
+        payment_method: payMethod,
+        payment_detail,
+        notes: notes.trim() || null,
+        cashier_name: cashierName.trim() || null,
+        reason: reason.trim(),
+        performed_by: performedBy,
+        performed_by_role: performedByRole,
+      })
+      onSaved()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Gagal menyimpan perubahan')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-box" style={{ maxWidth: 520 }} onClick={e => e.stopPropagation()}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+          <h3 className="modal-title" style={{ margin: 0 }}>Edit Transaksi</h3>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}><X size={18} /></button>
+        </div>
+        <div style={{ fontFamily: 'monospace', fontSize: 12, color: 'var(--text-muted)', marginBottom: 14 }}>
+          {trx.transaction_code} · {trx.service_name}
+        </div>
+
+        {!isSuperAdmin && (
+          <p style={{ fontSize: 12, color: 'var(--text-muted)', background: 'var(--bg-elevated)', borderRadius: 8, padding: '8px 10px', margin: '0 0 12px' }}>
+            Field finansial hanya bisa diubah super admin — Anda dapat mengubah catatan, nama kasir, dan detail pembayaran.
+          </p>
+        )}
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 12 }}>
+          <div>
+            <label style={label}>Harga Layanan</label>
+            <input type="text" inputMode="numeric" pattern="[0-9]*" value={String(servicePrice)} disabled={!isSuperAdmin}
+              onFocus={e => e.target.select()} onChange={e => setServicePrice(parseNum(e.target.value))} style={numStyle} />
+          </div>
+          <div>
+            <label style={label}>Diskon</label>
+            <input type="text" inputMode="numeric" pattern="[0-9]*" value={String(discount)} disabled={!isSuperAdmin}
+              onFocus={e => e.target.select()} onChange={e => setDiscount(parseNum(e.target.value))} style={numStyle} />
+          </div>
+          <div>
+            <label style={label}>Biaya Admin</label>
+            <input type="text" inputMode="numeric" pattern="[0-9]*" value={String(adminFee)} disabled={!isSuperAdmin}
+              onFocus={e => e.target.select()} onChange={e => setAdminFee(parseNum(e.target.value))} style={numStyle} />
+          </div>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+          <div>
+            <label style={label}>Metode Pembayaran</label>
+            <select value={payMethod} disabled={!isSuperAdmin} onChange={e => setPayMethod(e.target.value)} style={numStyle}>
+              {!EDIT_METHODS.includes(trx.payment_method) && (
+                <option value={trx.payment_method}>{trx.payment_method}</option>
+              )}
+              {EDIT_METHODS.map(m => <option key={m} value={m}>{METHOD_LABEL[m] ?? m}</option>)}
+            </select>
+          </div>
+          <div style={{ alignSelf: 'end', textAlign: 'right' }}>
+            <label style={label}>Total (otomatis)</label>
+            <div style={{ fontWeight: 800, fontSize: 18, color: discount > servicePrice ? 'var(--red)' : 'var(--text-primary)' }}>{fmtRp(total)}</div>
+          </div>
+        </div>
+
+        {payMethod === 'transfer' && (
+          <div style={{ marginBottom: 12 }}>
+            <label style={label}>Ref Transfer</label>
+            <input type="text" value={transferRef} onChange={e => setTransferRef(e.target.value)} style={numStyle} />
+          </div>
+        )}
+        {isCard && (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+            <div>
+              <label style={label}>Bank</label>
+              <input type="text" value={bankName} onChange={e => setBankName(e.target.value)} style={numStyle} />
+            </div>
+            <div>
+              <label style={label}>4 Digit Kartu</label>
+              <input type="text" value={cardLast4} maxLength={4} onChange={e => setCardLast4(e.target.value)} style={numStyle} />
+            </div>
+          </div>
+        )}
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+          <div>
+            <label style={label}>Nama Kasir</label>
+            <input type="text" value={cashierName} onChange={e => setCashierName(e.target.value)} style={numStyle} />
+          </div>
+          <div>
+            <label style={label}>Catatan</label>
+            <input type="text" value={notes} onChange={e => setNotes(e.target.value)} style={numStyle} />
+          </div>
+        </div>
+
+        <div style={{ marginBottom: 12 }}>
+          <label style={label}>Alasan Perubahan (wajib)</label>
+          <textarea value={reason} onChange={e => setReason(e.target.value)} rows={2}
+            placeholder="Mis. salah input diskon saat Close Bill..." style={{ width: '100%', boxSizing: 'border-box', resize: 'vertical' }} />
+        </div>
+
+        {error && <p style={{ color: 'var(--red)', fontSize: 13, margin: '0 0 10px' }}>{error}</p>}
+
+        <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '0 0 12px' }}>
+          Setelah disimpan, transaksi otomatis terkunci kembali dan perubahan tercatat di Audit Log
+          (field, nilai lama, nilai baru). Total tagihan visit ikut disinkronkan.
+        </p>
+
+        <div className="modal-footer">
+          <button className="btn-secondary" onClick={onClose} disabled={saving}>Batal</button>
+          <button className="btn-primary" onClick={handleSave} disabled={saving || !isDirty}
+            title={isDirty ? undefined : 'Belum ada perubahan'}>
+            {saving ? 'Menyimpan...' : 'Simpan Perubahan'}
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
