@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useImperativeHandle, forwardRef } from 'react'
-import { ArrowRight, Check, ChevronDown, ChevronUp, Circle, X } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, ChevronDown, ChevronUp, Circle, X } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { fmtDate, fmtTime, fmtDateTime } from '../../lib/format'
@@ -8,7 +8,7 @@ import { useIsMobile } from '../../hooks/use-mobile'
 import {
   getScreeningByVisit, upsertScreening,
   getConsentsByVisit, upsertConsent,
-  lockRecord, listClinicStaffOptions, logAssignmentChange,
+  lockRecord, listClinicStaffOptions, logAssignmentChange, todayISO, shiftDay,
   type ClinicConsent, type ClinicVitalSigns, type ClinicStaffOption,
 } from '../../lib/clinic'
 import LockBadge, { LockedBanner } from '../../components/clinic/LockBadge'
@@ -1090,6 +1090,8 @@ export default function ClinicTriase() {
   const isMobile = useIsMobile()
   const { user } = useAuth()
   const [visits, setVisits] = useState<TriaseVisit[]>([])
+  // Tanggal terpilih — default hari ini (mode normal + tunggakan); tanggal lain = mode jelajah.
+  const [selectedDate, setSelectedDate] = useState(todayISO)
   const [therapistOptions, setTherapistOptions] = useState<ClinicStaffOption[]>([])
   const [loading, setLoading] = useState(true)
   const [screeningStatus, setScreeningStatus] = useState<Record<string, boolean>>({})
@@ -1143,13 +1145,19 @@ export default function ClinicTriase() {
     if (showSpinner) setLoading(true)
     try {
       const today = new Date().toISOString().slice(0, 10)
-      // Hari ini PLUS tunggakan: visit lama yang masih scheduled/in_progress
-      // tetap tampil (tanpa batas mundur) sampai selesai/dibatalkan — screening/
-      // consent yang belum diisi tidak boleh "hilang" saat tanggal berganti.
-      const { data, error } = await supabase
-        .from('clinic_visits')
-        .select(TRIASE_SELECT)
-        .or(`and(visit_date.eq.${today},status.in.(scheduled,in_progress,completed)),and(visit_date.lt.${today},status.in.(scheduled,in_progress))`)
+      let q = supabase.from('clinic_visits').select(TRIASE_SELECT)
+      if (selectedDate === today) {
+        // MODE HARI INI — hari ini PLUS tunggakan: visit lama yang masih
+        // scheduled/in_progress tetap tampil (tanpa batas mundur) sampai
+        // selesai/dibatalkan — screening/consent yang belum diisi tidak boleh
+        // "hilang" saat tanggal berganti.
+        q = q.or(`and(visit_date.eq.${today},status.in.(scheduled,in_progress,completed)),and(visit_date.lt.${today},status.in.(scheduled,in_progress))`)
+      } else {
+        // MODE JELAJAH — satu tanggal spesifik pilihan user, tanpa carry-over
+        // tunggakan (badge Tertinggal juga tidak berlaku di mode ini).
+        q = q.eq('visit_date', selectedDate).in('status', ['scheduled', 'in_progress', 'completed'])
+      }
+      const { data, error } = await q
         .order('visit_date', { ascending: true })
         .order('visit_time', { ascending: true, nullsFirst: false })
       if (error) throw error
@@ -1200,7 +1208,7 @@ export default function ClinicTriase() {
     } finally {
       if (showSpinner) setLoading(false)
     }
-  }, [])
+  }, [selectedDate])
 
   useEffect(() => { fetchVisits() }, [fetchVisits])
 
@@ -1252,10 +1260,14 @@ export default function ClinicTriase() {
   const handleConsentSaved = async () => {
     if (!selectedVisit) return
     try {
+      // Guard: HANYA upgrade scheduled -> in_progress. Consent susulan pada visit
+      // yang sudah completed (mis. sudah di-Close Bill) TIDAK boleh menurunkan
+      // status — tanpa guard ini visit paid muncul lagi di antrian sebagai tunggakan.
       await supabase
         .from('clinic_visits')
         .update({ status: 'in_progress', updated_at: new Date().toISOString() })
         .eq('id', selectedVisit.id)
+        .eq('status', 'scheduled')
     } catch (e) {
       console.error(e)
     }
@@ -1358,7 +1370,26 @@ export default function ClinicTriase() {
       <div className="page-header" style={{ flexWrap: 'wrap', gap: 10 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           <h2 className="page-title" style={{ margin: 0 }}>Triase</h2>
-          <span style={{ color: 'var(--text-muted)', fontSize: 13 }}>{fmtDate(today)}</span>
+          {/* Navigator tanggal (pola ClinicSlots) — tanggal lain = mode jelajah */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            <button className="btn-secondary" style={{ width: 'auto', padding: '4px 10px', fontSize: 12 }}
+              onClick={() => setSelectedDate(d => shiftDay(d, -1))} aria-label="Hari sebelumnya">
+              <ArrowLeft size={12} style={{ verticalAlign: -2 }} /> Sebelumnya
+            </button>
+            <input type="date" value={selectedDate}
+              onChange={e => e.target.value && setSelectedDate(e.target.value)}
+              style={{ width: 'auto', padding: '4px 8px', fontSize: 13 }} />
+            <button className="btn-secondary" style={{ width: 'auto', padding: '4px 10px', fontSize: 12 }}
+              onClick={() => setSelectedDate(d => shiftDay(d, 1))} aria-label="Hari berikutnya">
+              Berikutnya <ArrowRight size={12} style={{ verticalAlign: -2 }} />
+            </button>
+            {selectedDate !== today && (
+              <button onClick={() => setSelectedDate(today)}
+                style={{ background: 'none', border: 'none', color: 'var(--red)', fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>
+                Kembali ke Hari Ini
+              </button>
+            )}
+          </div>
         </div>
         {!loading && visits.length > 0 && (
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -1373,7 +1404,7 @@ export default function ClinicTriase() {
         <p style={{ color: 'var(--text-muted)' }}>Memuat data...</p>
       ) : visits.length === 0 ? (
         <div style={{ textAlign: 'center', padding: 60, color: 'var(--text-muted)' }}>
-          <p>Tidak ada pasien hari ini</p>
+          <p>{selectedDate === today ? 'Tidak ada pasien hari ini' : `Tidak ada pasien pada ${fmtDate(selectedDate)}`}</p>
         </div>
       ) : (
         <div>
@@ -1399,7 +1430,7 @@ export default function ClinicTriase() {
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
                     <span style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 15 }}>{v.patient?.full_name || '-'}</span>
-                    {v.visit_date < today && (
+                    {selectedDate === today && v.visit_date < today && (
                       <span style={{ fontSize: 11, fontWeight: 700, padding: '1px 8px', borderRadius: 999, background: '#FEF3C7', color: '#92400E' }}>
                         Tertinggal · {fmtDate(v.visit_date)}
                       </span>
