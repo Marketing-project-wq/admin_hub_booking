@@ -11,6 +11,12 @@ import LockBadge from '../../components/clinic/LockBadge'
 
 const PAGE_SIZE = 20
 
+// ── Allowlist edit FINANSIAL transaksi (service_price/discount/admin_fee/method) ──
+// SENGAJA allowlist email manual, BUKAN role-based: ketiganya ber-role 'admin',
+// tapi TIDAK semua admin clinic boleh (mis. clinic@20fit.id & akun dokter tidak).
+// Tambah/kurangi orang: cukup edit daftar ini. super_admin selalu boleh.
+const FINANCE_EDIT_ALLOWLIST = ['reyhan@20fit.id', 'jonathan@20fit.id', 'zahra@20fit.id']
+
 const METHOD_FILTERS = ['all', 'cash', 'transfer', 'qris', 'debit', 'kredit']
 const METHOD_LABEL: Record<string, string> = { all: 'Semua', cash: 'Cash', transfer: 'Transfer', qris: 'QRIS', debit: 'Debit', kredit: 'Kredit' }
 
@@ -62,12 +68,13 @@ export default function ClinicKasir() {
   const [receipt, setReceipt] = useState<ClinicTransaction | null>(null)
 
   // Edit transaksi (setelah unlock). Dua tingkat akses (frontend-level, konsisten
-  // model kontrol akses app): field finansial hanya super_admin; non-finansial
-  // (notes/kasir/detail bayar) untuk pemilik permission can_payment.
+  // model kontrol akses app): field finansial untuk super_admin + email di
+  // FINANCE_EDIT_ALLOWLIST; non-finansial (notes/kasir/detail bayar) untuk can_payment.
   const { user, hasPermission } = useAuth()
   const kasirRole: string | undefined = user?.role
   const isSuperAdmin = kasirRole === 'super_admin'
-  const canEditTransaction = isSuperAdmin || hasPermission('can_payment')
+  const canEditFinance = isSuperAdmin || FINANCE_EDIT_ALLOWLIST.includes((user?.email ?? '').toLowerCase())
+  const canEditTransaction = canEditFinance || hasPermission('can_payment')
   const [editTrx, setEditTrx] = useState<ClinicTransaction | null>(null)
 
   // Menunggu Pembayaran
@@ -304,7 +311,7 @@ export default function ClinicKasir() {
       {editTrx && (
         <EditTransactionModal
           trx={editTrx}
-          isSuperAdmin={isSuperAdmin}
+          canEditFinance={canEditFinance}
           performedBy={user?.full_name ?? '-'}
           performedByRole={kasirRole ?? null}
           onClose={() => setEditTrx(null)}
@@ -342,9 +349,9 @@ export default function ClinicKasir() {
 // Field finansial hanya aktif untuk super_admin; non-finansial untuk can_payment.
 const EDIT_METHODS = ['cash', 'transfer', 'qris', 'debit', 'kredit']
 
-function EditTransactionModal({ trx, isSuperAdmin, performedBy, performedByRole, onClose, onSaved }: {
+function EditTransactionModal({ trx, canEditFinance, performedBy, performedByRole, onClose, onSaved }: {
   trx: ClinicTransaction
-  isSuperAdmin: boolean
+  canEditFinance: boolean
   performedBy: string
   performedByRole: string | null
   onClose: () => void
@@ -429,26 +436,26 @@ function EditTransactionModal({ trx, isSuperAdmin, performedBy, performedByRole,
           {trx.transaction_code} · {trx.service_name}
         </div>
 
-        {!isSuperAdmin && (
+        {!canEditFinance && (
           <p style={{ fontSize: 12, color: 'var(--text-muted)', background: 'var(--bg-elevated)', borderRadius: 8, padding: '8px 10px', margin: '0 0 12px' }}>
-            Field finansial hanya bisa diubah super admin — Anda dapat mengubah catatan, nama kasir, dan detail pembayaran.
+            Field finansial hanya bisa diubah akun berwenang (super admin / allowlist) — Anda dapat mengubah catatan, nama kasir, dan detail pembayaran.
           </p>
         )}
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 12 }}>
           <div>
             <label style={label}>Harga Layanan</label>
-            <input type="text" inputMode="numeric" pattern="[0-9]*" value={String(servicePrice)} disabled={!isSuperAdmin}
+            <input type="text" inputMode="numeric" pattern="[0-9]*" value={String(servicePrice)} disabled={!canEditFinance}
               onFocus={e => e.target.select()} onChange={e => setServicePrice(parseNum(e.target.value))} style={numStyle} />
           </div>
           <div>
             <label style={label}>Diskon</label>
-            <input type="text" inputMode="numeric" pattern="[0-9]*" value={String(discount)} disabled={!isSuperAdmin}
+            <input type="text" inputMode="numeric" pattern="[0-9]*" value={String(discount)} disabled={!canEditFinance}
               onFocus={e => e.target.select()} onChange={e => setDiscount(parseNum(e.target.value))} style={numStyle} />
           </div>
           <div>
             <label style={label}>Biaya Admin</label>
-            <input type="text" inputMode="numeric" pattern="[0-9]*" value={String(adminFee)} disabled={!isSuperAdmin}
+            <input type="text" inputMode="numeric" pattern="[0-9]*" value={String(adminFee)} disabled={!canEditFinance}
               onFocus={e => e.target.select()} onChange={e => setAdminFee(parseNum(e.target.value))} style={numStyle} />
           </div>
         </div>
@@ -456,7 +463,7 @@ function EditTransactionModal({ trx, isSuperAdmin, performedBy, performedByRole,
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
           <div>
             <label style={label}>Metode Pembayaran</label>
-            <select value={payMethod} disabled={!isSuperAdmin} onChange={e => setPayMethod(e.target.value)} style={numStyle}>
+            <select value={payMethod} disabled={!canEditFinance} onChange={e => setPayMethod(e.target.value)} style={numStyle}>
               {!EDIT_METHODS.includes(trx.payment_method) && (
                 <option value={trx.payment_method}>{trx.payment_method}</option>
               )}
