@@ -1086,6 +1086,9 @@ const TRIASE_SELECT = `
   patient:clinic_patients(id, full_name, patient_code, phone, date_of_birth, gender, id_type, id_number, address, occupation, emergency_contact_name, emergency_contact_phone),
   services:clinic_visit_services(id, service_name, price, service:clinic_services(requires_doctor))
 `
+// Varian utk mode search by nama: !inner agar filter ilike pada kolom embed
+// (patient.full_name) menyaring baris visit-nya, bukan cuma mengosongkan embed.
+const TRIASE_SELECT_SEARCH = TRIASE_SELECT.replace('patient:clinic_patients(', 'patient:clinic_patients!inner(')
 
 type StepState = 'done' | 'active' | 'todo'
 function StepChip({ label, state }: { label: string; state: StepState }) {
@@ -1108,6 +1111,13 @@ export default function ClinicTriase() {
   const [visits, setVisits] = useState<TriaseVisit[]>([])
   // Tanggal terpilih — default hari ini (mode normal + tunggakan); tanggal lain = mode jelajah.
   const [selectedDate, setSelectedDate] = useState(todayISO)
+  // Mode search (mode ketiga): cari pasien LINTAS semua tanggal, independen dari
+  // selectedDate — selectedDate tidak disentuh, jadi mengosongkan search otomatis
+  // kembali ke mode sebelumnya. Pola debounce 300ms = ClinicPatients/ClinicKasir.
+  const [searchInput, setSearchInput] = useState('')
+  const [search, setSearch] = useState('')
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const searchActive = search.trim() !== ''
   const [therapistOptions, setTherapistOptions] = useState<ClinicStaffOption[]>([])
   const [loading, setLoading] = useState(true)
   const [screeningStatus, setScreeningStatus] = useState<Record<string, boolean>>({})
@@ -1160,22 +1170,42 @@ export default function ClinicTriase() {
   const fetchVisits = useCallback(async (showSpinner = true) => {
     if (showSpinner) setLoading(true)
     try {
-      const today = new Date().toISOString().slice(0, 10)
-      let q = supabase.from('clinic_visits').select(TRIASE_SELECT)
-      if (selectedDate === today) {
-        // MODE HARI INI — hari ini PLUS tunggakan: visit lama yang masih
-        // scheduled/in_progress tetap tampil (tanpa batas mundur) sampai
-        // selesai/dibatalkan — screening/consent yang belum diisi tidak boleh
-        // "hilang" saat tanggal berganti.
-        q = q.or(`and(visit_date.eq.${today},status.in.(scheduled,in_progress,completed)),and(visit_date.lt.${today},status.in.(scheduled,in_progress))`)
+      // todayISO() = tanggal LOKAL. Sebelumnya toISOString() (UTC): antara
+      // 00:00-07:00 WIB "today" = kemarin, halaman salah jatuh ke mode jelajah.
+      const today = todayISO()
+      const term = search.trim()
+      let q
+      if (term) {
+        // MODE SEARCH — lintas SEMUA tanggal, independen dari selectedDate.
+        // Completed lama ikut (use-case: "riwayat pasien ini kapan saja");
+        // cancelled tetap dikecualikan, konsisten dua mode lain.
+        const esc = term.replace(/[\\%_]/g, m => '\\' + m)
+        // Kode visit produksi berprefix VST- atau VIS- (dua-duanya ada di data).
+        if (/^(vst|vis)-/i.test(term)) {
+          q = supabase.from('clinic_visits').select(TRIASE_SELECT).ilike('visit_code', `${esc}%`)
+        } else {
+          q = supabase.from('clinic_visits').select(TRIASE_SELECT_SEARCH).ilike('patient.full_name', `%${esc}%`)
+        }
+        q = q.in('status', ['scheduled', 'in_progress', 'completed'])
       } else {
-        // MODE JELAJAH — satu tanggal spesifik pilihan user, tanpa carry-over
-        // tunggakan (badge Tertinggal juga tidak berlaku di mode ini).
-        q = q.eq('visit_date', selectedDate).in('status', ['scheduled', 'in_progress', 'completed'])
+        q = supabase.from('clinic_visits').select(TRIASE_SELECT)
+        if (selectedDate === today) {
+          // MODE HARI INI — hari ini PLUS tunggakan: visit lama yang masih
+          // scheduled/in_progress tetap tampil (tanpa batas mundur) sampai
+          // selesai/dibatalkan — screening/consent yang belum diisi tidak boleh
+          // "hilang" saat tanggal berganti.
+          q = q.or(`and(visit_date.eq.${today},status.in.(scheduled,in_progress,completed)),and(visit_date.lt.${today},status.in.(scheduled,in_progress))`)
+        } else {
+          // MODE JELAJAH — satu tanggal spesifik pilihan user, tanpa carry-over
+          // tunggakan (badge Tertinggal juga tidak berlaku di mode ini).
+          q = q.eq('visit_date', selectedDate).in('status', ['scheduled', 'in_progress', 'completed'])
+        }
       }
-      const { data, error } = await q
-        .order('visit_date', { ascending: true })
-        .order('visit_time', { ascending: true, nullsFirst: false })
+      // Search: terbaru dulu + limit 50 (lintas semua tanggal, nama umum bisa
+      // banyak match). Mode antrian: urutan naik seperti semula.
+      const { data, error } = await (term
+        ? q.order('visit_date', { ascending: false }).order('visit_time', { ascending: false, nullsFirst: false }).limit(50)
+        : q.order('visit_date', { ascending: true }).order('visit_time', { ascending: true, nullsFirst: false }))
       if (error) throw error
       const rows = (data ?? []) as unknown as TriaseVisit[]
       setVisits(rows)
@@ -1224,7 +1254,7 @@ export default function ClinicTriase() {
     } finally {
       if (showSpinner) setLoading(false)
     }
-  }, [selectedDate])
+  }, [selectedDate, search])
 
   useEffect(() => { fetchVisits() }, [fetchVisits])
 
@@ -1376,7 +1406,7 @@ export default function ClinicTriase() {
     ? { id: selectedVisit.id, patient_id: selectedVisit.patient?.id ?? null, patient: selectedVisit.patient }
     : null
 
-  const today = new Date().toISOString().slice(0, 10)
+  const today = todayISO() // LOKAL, bukan toISOString (UTC) — konsisten dengan fetchVisits
   const readyCount = visits.filter(v => screeningStatus[v.id] && consentStatus[v.id]).length
   const needScreening = visits.filter(v => !screeningStatus[v.id]).length
   const needConsent = visits.filter(v => screeningStatus[v.id] && !consentStatus[v.id]).length
@@ -1386,28 +1416,46 @@ export default function ClinicTriase() {
       <div className="page-header" style={{ flexWrap: 'wrap', gap: 10 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           <h2 className="page-title" style={{ margin: 0 }}>Triase</h2>
-          {/* Navigator tanggal (pola ClinicSlots) — tanggal lain = mode jelajah */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-            <button className="btn-secondary" style={{ width: 'auto', padding: '4px 10px', fontSize: 12 }}
-              onClick={() => setSelectedDate(d => shiftDay(d, -1))} aria-label="Hari sebelumnya">
-              <ArrowLeft size={12} style={{ verticalAlign: -2 }} /> Sebelumnya
-            </button>
-            <input type="date" value={selectedDate}
-              onChange={e => e.target.value && setSelectedDate(e.target.value)}
-              style={{ width: 'auto', padding: '4px 8px', fontSize: 13 }} />
-            <button className="btn-secondary" style={{ width: 'auto', padding: '4px 10px', fontSize: 12 }}
-              onClick={() => setSelectedDate(d => shiftDay(d, 1))} aria-label="Hari berikutnya">
-              Berikutnya <ArrowRight size={12} style={{ verticalAlign: -2 }} />
-            </button>
-            {selectedDate !== today && (
-              <button onClick={() => setSelectedDate(today)}
-                style={{ background: 'none', border: 'none', color: 'var(--red)', fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>
-                Kembali ke Hari Ini
+          {/* Navigator tanggal (pola ClinicSlots) — tanggal lain = mode jelajah.
+              Disembunyikan saat mode search (pencarian lintas tanggal, navigator
+              tidak berpengaruh); selectedDate tidak diubah, jadi mengosongkan
+              search kembali persis ke mode sebelumnya. */}
+          {!searchActive && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+              <button className="btn-secondary" style={{ width: 'auto', padding: '4px 10px', fontSize: 12 }}
+                onClick={() => setSelectedDate(d => shiftDay(d, -1))} aria-label="Hari sebelumnya">
+                <ArrowLeft size={12} style={{ verticalAlign: -2 }} /> Sebelumnya
               </button>
-            )}
-          </div>
+              <input type="date" value={selectedDate}
+                onChange={e => e.target.value && setSelectedDate(e.target.value)}
+                style={{ width: 'auto', padding: '4px 8px', fontSize: 13 }} />
+              <button className="btn-secondary" style={{ width: 'auto', padding: '4px 10px', fontSize: 12 }}
+                onClick={() => setSelectedDate(d => shiftDay(d, 1))} aria-label="Hari berikutnya">
+                Berikutnya <ArrowRight size={12} style={{ verticalAlign: -2 }} />
+              </button>
+              {selectedDate !== today && (
+                <button onClick={() => setSelectedDate(today)}
+                  style={{ background: 'none', border: 'none', color: 'var(--red)', fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>
+                  Kembali ke Hari Ini
+                </button>
+              )}
+            </div>
+          )}
+          <input type="text" placeholder="Cari pasien (nama / kode visit)" value={searchInput}
+            onChange={e => {
+              const val = e.target.value
+              setSearchInput(val)
+              if (searchTimer.current) clearTimeout(searchTimer.current)
+              searchTimer.current = setTimeout(() => setSearch(val), 300)
+            }}
+            style={{ width: 220, padding: '5px 10px', fontSize: 13 }} />
+          {searchActive && !loading && (
+            <span className="badge" style={{ background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>
+              Hasil pencarian lintas tanggal · {visits.length} hasil
+            </span>
+          )}
         </div>
-        {!loading && visits.length > 0 && (
+        {!searchActive && !loading && visits.length > 0 && (
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             <span className="badge" style={{ background: '#EAF3DE', color: '#3B6D11' }}>{readyCount} siap dokter</span>
             <span className="badge" style={{ background: '#FEE2E2', color: 'var(--red)' }}>{needScreening} perlu screening</span>
@@ -1420,7 +1468,7 @@ export default function ClinicTriase() {
         <p style={{ color: 'var(--text-muted)' }}>Memuat data...</p>
       ) : visits.length === 0 ? (
         <div style={{ textAlign: 'center', padding: 60, color: 'var(--text-muted)' }}>
-          <p>{selectedDate === today ? 'Tidak ada pasien hari ini' : `Tidak ada pasien pada ${fmtDate(selectedDate)}`}</p>
+          <p>{searchActive ? `Tidak ada hasil untuk "${search.trim()}"` : selectedDate === today ? 'Tidak ada pasien hari ini' : `Tidak ada pasien pada ${fmtDate(selectedDate)}`}</p>
         </div>
       ) : (
         <div>
@@ -1505,6 +1553,11 @@ export default function ClinicTriase() {
               </div>
             )
           })}
+          {searchActive && visits.length === 50 && (
+            <p style={{ color: 'var(--text-muted)', fontSize: 12, textAlign: 'center', marginTop: 8 }}>
+              Menampilkan 50 hasil teratas — persempit kata kunci untuk hasil lebih spesifik.
+            </p>
+          )}
         </div>
       )}
 
