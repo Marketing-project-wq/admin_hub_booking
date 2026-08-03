@@ -57,7 +57,7 @@ const MSK_LOCATION = [
   'Leher', 'Bahu kanan', 'Bahu kiri', 'Punggung atas', 'Punggung bawah', 'Pinggul kanan',
   'Pinggul kiri', 'Lutut kanan', 'Lutut kiri', 'Pergelangan kaki kanan', 'Pergelangan kaki kiri',
   'Siku kanan', 'Siku kiri', 'Pergelangan tangan kanan', 'Pergelangan tangan kiri',
-  'Otot paha/hamstring/betis', 'Lainnya',
+  'Otot paha', 'Otot hamstring', 'Otot betis', 'Lainnya',
 ]
 const MSK_CHARACTER = ['Nyeri otot (pegal/kaku)', 'Nyeri sendi/tulang', 'Nyeri menjalar', 'Rasa kebas/kesemutan', 'Rasa lemah/hilang kekuatan']
 const MSK_TIMING = ['Setelah olahraga (DOMS)', 'Saat gerakan tertentu', 'Saat istirahat', 'Saat malam hari', 'Setelah trauma', 'Bertahap tanpa trauma']
@@ -387,9 +387,16 @@ function MultiCheck({ options, value, onChange }: { options: string[]; value: st
 
 function ChipSelect({ options, value, onChange }: { options: string[]; value: string[]; onChange: (v: string[]) => void }) {
   const toggle = (opt: string) => onChange(value.includes(opt) ? value.filter(o => o !== opt) : [...value, opt])
+  // Toleran-legacy: value tersimpan yang sudah tidak ada di daftar opsi (mis.
+  // 'Otot paha/hamstring/betis' sebelum dipecah jadi 3) tetap dirender apa
+  // adanya sebagai chip terpilih — TANPA auto-split/mapping — dan bisa diklik
+  // untuk dihapus. Tanpa ini, value lama tersembunyi diam-diam tapi ikut
+  // tersimpan ulang. Sekali dihapus, chip legacy hilang dari form (tidak bisa
+  // dipilih lagi) — memang dimaksudkan diganti opsi baru.
+  const legacyValues = value.filter(v => !options.includes(v))
   return (
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-      {options.map(opt => {
+      {[...options, ...legacyValues].map(opt => {
         const on = value.includes(opt)
         return (
           <button type="button" key={opt} onClick={() => toggle(opt)}
