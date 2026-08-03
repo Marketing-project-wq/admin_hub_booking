@@ -4,7 +4,7 @@ import { fmtRp, fmtDate, fmtTime, fmtDateTime, exportToCSV } from '../../lib/for
 import { supabase } from '../../lib/supabase'
 import { todayISO } from '../../lib/clinic'
 import { useAuth } from '../../context/AuthContext'
-import { listTransactions, getTodaySummary, updateClinicTransaction, parseHistoricalNotes, type ClinicTransaction } from '../../lib/clinicBilling'
+import { listTransactions, getTodaySummary, updateClinicTransaction, cancelClinicPayment, parseHistoricalNotes, type ClinicTransaction } from '../../lib/clinicBilling'
 import ClinicReceiptModal from '../../components/clinic/ClinicReceiptModal'
 import ClinicCloseBillModal from '../../components/clinic/ClinicCloseBillModal'
 import LockBadge from '../../components/clinic/LockBadge'
@@ -321,6 +321,9 @@ export default function ClinicKasir() {
           performedByRole={kasirRole ?? null}
           onClose={() => setEditTrx(null)}
           onSaved={() => { setEditTrx(null); fetchData() }}
+          // Setelah batal bayar: transaksi hilang dari riwayat DAN visit muncul
+          // lagi di daftar pending Close Bill — refresh keduanya.
+          onCancelled={() => { setEditTrx(null); fetchData(); fetchPending() }}
         />
       )}
 
@@ -354,13 +357,14 @@ export default function ClinicKasir() {
 // Field finansial hanya aktif untuk super_admin; non-finansial untuk can_payment.
 const EDIT_METHODS = ['cash', 'transfer', 'qris', 'debit', 'kredit']
 
-function EditTransactionModal({ trx, canEditFinance, performedBy, performedByRole, onClose, onSaved }: {
+function EditTransactionModal({ trx, canEditFinance, performedBy, performedByRole, onClose, onSaved, onCancelled }: {
   trx: ClinicTransaction
   canEditFinance: boolean
   performedBy: string
   performedByRole: string | null
   onClose: () => void
   onSaved: () => void
+  onCancelled: () => void
 }) {
   const [servicePrice, setServicePrice] = useState(trx.service_price)
   const [discount, setDiscount] = useState(trx.discount)
@@ -374,6 +378,10 @@ function EditTransactionModal({ trx, canEditFinance, performedBy, performedByRol
   const [reason, setReason] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  // Batalkan Pembayaran — konfirmasi 2 langkah (destruktif: hapus baris transaksi).
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false)
+  const [cancelReason, setCancelReason] = useState('')
+  const [cancelling, setCancelling] = useState(false)
 
   // Total SELALU turunan komponen (read-only) — persamaan yang sama di-enforce RPC.
   const total = servicePrice - discount + adminFee
@@ -393,6 +401,25 @@ function EditTransactionModal({ trx, canEditFinance, performedBy, performedByRol
   const numStyle: React.CSSProperties = { width: '100%', boxSizing: 'border-box' }
   const label: React.CSSProperties = { fontSize: 11, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: 1, display: 'block', marginBottom: 4 }
   const parseNum = (s: string) => Number(s.replace(/\D/g, '')) || 0
+
+  const handleCancelPayment = async () => {
+    setError('')
+    if (!cancelReason.trim()) { setError('Alasan pembatalan wajib diisi.'); return }
+    setCancelling(true)
+    try {
+      await cancelClinicPayment({
+        transaction_id: trx.id,
+        reason: cancelReason.trim(),
+        performed_by: performedBy,
+        performed_by_role: performedByRole,
+      })
+      onCancelled()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Gagal membatalkan pembayaran')
+    } finally {
+      setCancelling(false)
+    }
+  }
 
   const handleSave = async () => {
     setError('')
@@ -524,9 +551,54 @@ function EditTransactionModal({ trx, canEditFinance, performedBy, performedByRol
           (field, nilai lama, nilai baru). Total tagihan visit ikut disinkronkan.
         </p>
 
+        {/* ── Batalkan Pembayaran (destruktif — reset total, beda dari edit).
+            Hanya utk akun finansial; modal ini sendiri hanya terbuka saat
+            transaksi sudah di-unlock. Konfirmasi 2 langkah + alasan wajib. ── */}
+        {canEditFinance && (
+          <div style={{ borderTop: '1px dashed var(--border-strong)', paddingTop: 12, marginBottom: 4 }}>
+            {!showCancelConfirm ? (
+              <button type="button" onClick={() => { setShowCancelConfirm(true); setError('') }}
+                disabled={saving || cancelling}
+                style={{ background: 'none', border: '1px solid var(--red)', color: 'var(--red)', borderRadius: 8, padding: '7px 14px', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>
+                Batalkan Pembayaran…
+              </button>
+            ) : (
+              <div style={{ background: '#FEE2E2', border: '1px solid #DC2626', borderRadius: 8, padding: 12 }}>
+                <div style={{ fontWeight: 800, fontSize: 13, color: '#991B1B', marginBottom: 6 }}>
+                  Batalkan pembayaran {trx.transaction_code}?
+                </div>
+                <ul style={{ fontSize: 12, color: '#991B1B', margin: '0 0 10px', paddingLeft: 18, lineHeight: 1.6 }}>
+                  <li>Transaksi <strong>dihapus permanen</strong> dari riwayat (tidak bisa dikembalikan).</li>
+                  <li>Visit kembali berstatus <strong>belum dibayar</strong> dan muncul lagi di daftar Menunggu Pembayaran untuk di-Close Bill ulang.</li>
+                  <li>Paket yang dibeli lewat transaksi ini ikut terhapus; sesi paket yang terpotong dikembalikan (bila terekam).</li>
+                  <li>Pembatalan tercatat di Audit Log beserta alasan.</li>
+                </ul>
+                <label style={{ fontSize: 11, color: '#991B1B', textTransform: 'uppercase', letterSpacing: 1, display: 'block', marginBottom: 4 }}>
+                  Alasan Pembatalan (wajib)
+                </label>
+                <textarea value={cancelReason} onChange={e => setCancelReason(e.target.value)} rows={2}
+                  placeholder="Mis. salah pilih jenis pemeriksaan saat Close Bill..."
+                  style={{ width: '100%', boxSizing: 'border-box', resize: 'vertical', marginBottom: 10 }} />
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                  <button type="button" className="btn-secondary" style={{ width: 'auto', padding: '7px 14px' }}
+                    onClick={() => { setShowCancelConfirm(false); setCancelReason('') }} disabled={cancelling}>
+                    Jangan Batalkan
+                  </button>
+                  <button type="button" onClick={handleCancelPayment}
+                    disabled={cancelling || !cancelReason.trim()}
+                    title={cancelReason.trim() ? undefined : 'Isi alasan pembatalan dulu'}
+                    style={{ background: '#DC2626', border: 'none', color: '#fff', borderRadius: 8, padding: '7px 14px', fontSize: 12.5, fontWeight: 700, cursor: cancelReason.trim() ? 'pointer' : 'not-allowed', opacity: cancelling || !cancelReason.trim() ? 0.6 : 1 }}>
+                    {cancelling ? 'Membatalkan...' : 'Ya, Hapus & Batalkan Pembayaran'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="modal-footer">
-          <button className="btn-secondary" onClick={onClose} disabled={saving}>Batal</button>
-          <button className="btn-primary" onClick={handleSave} disabled={saving || !isDirty}
+          <button className="btn-secondary" onClick={onClose} disabled={saving || cancelling}>Batal</button>
+          <button className="btn-primary" onClick={handleSave} disabled={saving || cancelling || !isDirty}
             title={isDirty ? undefined : 'Belum ada perubahan'}>
             {saving ? 'Menyimpan...' : 'Simpan Perubahan'}
           </button>

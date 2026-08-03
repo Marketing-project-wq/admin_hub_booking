@@ -24,6 +24,7 @@ export interface ClinicTransaction {
   patient_package_id: string | null
   is_package_purchase: boolean
   package_id: string | null
+  used_package_ids: string[] | null
   created_at: string
   updated_at: string
   // joined
@@ -164,6 +165,26 @@ export interface UpdateTransactionPayload {
   performed_by: string
   performed_by_role: string | null
 }
+// Batalkan pembayaran (reset total, beda dari edit): RPC atomik menghapus
+// transaksi, mengembalikan visit ke unpaid (status klinis utuh — muncul lagi di
+// pending Close Bill), menghapus paket hasil pembelian transaksi (guard: hanya
+// bila belum terpakai), mengembalikan sesi paket dari rekaman used_package_ids,
+// dan mencatat audit 'cancel_payment'. Guard RPC: unlock dulu + alasan wajib.
+export async function cancelClinicPayment(p: {
+  transaction_id: string
+  reason: string
+  performed_by: string
+  performed_by_role: string | null
+}): Promise<void> {
+  const { error } = await supabase.rpc('cancel_clinic_payment', {
+    p_transaction_id: p.transaction_id,
+    p_reason: p.reason,
+    p_performed_by: p.performed_by,
+    p_performed_by_role: p.performed_by_role,
+  })
+  if (error) throw error
+}
+
 export async function updateClinicTransaction(p: UpdateTransactionPayload): Promise<ClinicTransaction> {
   const { data, error } = await supabase.rpc('update_clinic_transaction', {
     p_transaction_id: p.transaction_id,
