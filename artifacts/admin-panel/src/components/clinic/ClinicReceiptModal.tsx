@@ -1,8 +1,8 @@
-import React, { useEffect } from 'react'
+import React, { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 import { fmtRp, fmtDateTime } from '../../lib/format'
-import { parseHistoricalNotes, type ClinicTransaction } from '../../lib/clinicBilling'
+import { parseHistoricalNotes, getLegacyPatientInfo, type ClinicTransaction, type LegacyPatientInfo } from '../../lib/clinicBilling'
 
 // Kwitansi A4 — layout meniru format kwitansi lama klinik (kop + judul "Kuitansi"
 // di kanan, Info Pasien, tabel Info Tagihan, Catatan + breakdown, footer
@@ -49,7 +49,21 @@ export default function ClinicReceiptModal({ transaction: t, onClose }: {
   const isCard = method === 'debit' || method === 'kredit'
   const methodLabel = METHOD_LABEL[method] ?? (t.payment_method || '-')
   // Fallback transaksi historis (patient_id null): nama pasien dari notes "Pasien: ...".
-  const patientName = t.patient?.full_name ?? parseHistoricalNotes(t.notes).pasien ?? '-'
+  const histName = !t.patient_id ? parseHistoricalNotes(t.notes).pasien : null
+  const patientName = t.patient?.full_name ?? histName ?? '-'
+
+  // Lookup referensi sistem lama utk telepon/alamat/No. RM — HANYA transaksi
+  // tanpa patient_id (histName non-null); nama ambigu/tak ketemu -> null -> '-'.
+  const [legacy, setLegacy] = useState<LegacyPatientInfo | null>(null)
+  useEffect(() => {
+    setLegacy(null)
+    if (!histName) return
+    let active = true
+    getLegacyPatientInfo(histName)
+      .then(info => { if (active) setLegacy(info) })
+      .catch(() => { /* lookup gagal = tampil '-' seperti sebelumnya */ })
+    return () => { active = false }
+  }, [histName])
 
   useEffect(() => {
     document.body.classList.add('receipt-print-mode')
@@ -121,9 +135,15 @@ export default function ClinicReceiptModal({ transaction: t, onClose }: {
           {/* Info Pasien */}
           <div style={sectionTitle}>Info Pasien</div>
           <InfoRow label="Nama Pasien" value={patientName} />
-          <InfoRow label="No. Telepon" value={t.patient?.phone ?? '-'} />
-          <InfoRow label="Alamat" value={t.patient?.address || '-'} />
-          <InfoRow label="No. RM" value={<span style={{ fontFamily: 'monospace' }}>{t.patient?.patient_code ?? '-'}</span>} />
+          <InfoRow label="No. Telepon" value={t.patient?.phone ?? legacy?.no_telp ?? '-'} />
+          <InfoRow label="Alamat" value={t.patient?.address || legacy?.alamat || '-'} />
+          <InfoRow label="No. RM" value={
+            t.patient?.patient_code
+              ? <span style={{ fontFamily: 'monospace' }}>{t.patient.patient_code}</span>
+              : legacy?.mrn
+                ? <><span style={{ fontFamily: 'monospace' }}>{legacy.mrn}</span> <span style={{ fontSize: 10.5, color: MUTED }}>(RM sistem lama)</span></>
+                : '-'
+          } />
 
           {/* Info Tagihan */}
           <div style={sectionTitle}>Info Tagihan</div>

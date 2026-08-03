@@ -50,6 +50,35 @@ export function parseHistoricalNotes(notes: string | null | undefined): {
   return { pasien: grab('Pasien'), nakes: grab('Nakes'), staff: grab('Staff'), note: grab('Note') }
 }
 
+// Tabel referensi clinic_legacy_patient_import (876 baris export sistem lama
+// "Klinik Pintar") — TERPISAH dari clinic_patients, tanpa FK, murni lookup
+// tampilan utk transaksi historis. Baris is_ambiguous_name=true (nama dipakai
+// >1 pasien berbeda) WAJIB diabaikan — tidak bisa dipastikan pasien yang mana.
+export interface LegacyPatientInfo {
+  mrn: string
+  nama_pasien: string
+  no_telp: string | null
+  alamat: string | null
+  tanggal_lahir: string | null
+  jenis_kelamin: string | null
+  email: string | null
+}
+
+export async function getLegacyPatientInfo(namaPasien: string): Promise<LegacyPatientInfo | null> {
+  const name = namaPasien.trim()
+  if (!name) return null
+  // ilike tanpa wildcard = equality case-insensitive; escape %/_/\ agar literal.
+  const escaped = name.replace(/[\\%_]/g, m => '\\' + m)
+  const { data } = await supabase
+    .from('clinic_legacy_patient_import')
+    .select('mrn, nama_pasien, no_telp, alamat, tanggal_lahir, jenis_kelamin, email')
+    .ilike('nama_pasien', escaped)
+    .eq('is_ambiguous_name', false)
+    .limit(1)
+    .maybeSingle()
+  return (data as LegacyPatientInfo | null) ?? null
+}
+
 export interface CreateTransactionPayload {
   visit_id?: string
   patient_id: string
