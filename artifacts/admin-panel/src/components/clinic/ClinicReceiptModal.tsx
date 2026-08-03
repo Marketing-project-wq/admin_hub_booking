@@ -1,115 +1,174 @@
-import React from 'react'
+import React, { useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 import { fmtRp, fmtDateTime } from '../../lib/format'
 import type { ClinicTransaction } from '../../lib/clinicBilling'
 
-interface Props {
-  transaction: ClinicTransaction
-  onClose: () => void
-}
+// Kwitansi A4 — layout meniru format kwitansi lama klinik (kop + judul "Kuitansi"
+// di kanan, Info Pasien, tabel Info Tagihan, Catatan + breakdown, footer
+// disclaimer). Data apa adanya dari clinic_transactions: 1 layanan per transaksi
+// (Qty selalu 1), 1 metode pembayaran, admin_fee; kategori tanpa infrastruktur
+// data (Obat & BHP, Vaksin) sengaja tidak ditampilkan.
+// Pola print = MedicalResumeModal (portal + body class + #root display:none):
+// pola lama visibility+absolute rusak oleh backdrop-filter overlay, dan class
+// no-print di overlay (ancestor print-area) membuat display:none menelan
+// seluruh isi cetakan.
 
-const Divider = () => <div style={{ borderTop: '1px dashed #9CA3AF', margin: '10px 0' }} />
+const METHOD_LABEL: Record<string, string> = { cash: 'Tunai', transfer: 'Transfer', qris: 'QRIS', debit: 'Debit', kredit: 'Kredit' }
 
-const Row = ({ label, value }: { label: string; value: React.ReactNode }) => (
-  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 12, marginBottom: 3 }}>
-    <span style={{ color: '#374151' }}>{label}</span>
-    <span style={{ fontWeight: 600, textAlign: 'right' }}>{value}</span>
+// Angka di tabel tanpa prefix "Rp" — kolomnya sudah berlabel (Rp), meniru referensi.
+const num = (n: number | null | undefined) => (Number(n) || 0).toLocaleString('id-ID')
+
+const RED = '#C0392B'
+const INK = '#111827'
+const MUTED = '#4B5563'
+
+const InfoRow = ({ label, value }: { label: string; value: React.ReactNode }) => (
+  <div style={{ display: 'flex', gap: 8, padding: '2.5px 0', fontSize: 12.5 }}>
+    <span style={{ color: MUTED, width: 120, flexShrink: 0, fontWeight: 600 }}>{label}</span>
+    <span style={{ flex: 1 }}>: {value ?? '-'}</span>
   </div>
 )
 
-export default function ClinicReceiptModal({ transaction: t, onClose }: Props) {
-  const patientName = t.patient?.full_name ?? '-'
-  const patientCode = t.patient?.patient_code ?? '-'
+const SumRow = ({ label, value, strong }: { label: string; value: string; strong?: boolean }) => (
+  <div style={{
+    display: 'flex', justifyContent: 'space-between', gap: 16, padding: '3px 0',
+    fontSize: strong ? 14 : 12.5, fontWeight: strong ? 800 : 600,
+    borderTop: strong ? `1.5px solid ${INK}` : 'none', marginTop: strong ? 4 : 0, paddingTop: strong ? 6 : 3,
+  }}>
+    <span style={{ color: strong ? INK : MUTED }}>{label}</span>
+    <span>{value}</span>
+  </div>
+)
+
+export default function ClinicReceiptModal({ transaction: t, onClose }: {
+  transaction: ClinicTransaction
+  onClose: () => void
+}) {
   const method = (t.payment_method || '').toLowerCase()
   const isCard = method === 'debit' || method === 'kredit'
+  const methodLabel = METHOD_LABEL[method] ?? (t.payment_method || '-')
 
-  return (
-    <div className="modal-overlay receipt-no-print" onClick={onClose}>
+  useEffect(() => {
+    document.body.classList.add('receipt-print-mode')
+    return () => document.body.classList.remove('receipt-print-mode')
+  }, [])
+
+  const th: React.CSSProperties = { textAlign: 'left', padding: '7px 10px', fontSize: 11.5, fontWeight: 700, color: INK, background: '#F3F4F6' }
+  const td: React.CSSProperties = { padding: '7px 10px', fontSize: 12.5, borderBottom: '1px solid #E5E7EB' }
+  const sectionTitle: React.CSSProperties = { fontSize: 14, fontWeight: 800, color: RED, borderBottom: '1.5px solid #E5E7EB', padding: '14px 0 4px', marginBottom: 8 }
+
+  return createPortal(
+    <div className="modal-overlay receipt-overlay" onClick={onClose}
+      style={{ overflowY: 'auto', padding: '24px 12px' }}>
       <style>{`
         @media print {
-          body * { visibility: hidden !important; }
-          .receipt-print-area, .receipt-print-area * { visibility: visible !important; }
-          .receipt-print-area { position: absolute !important; left: 0; top: 0; width: 80mm; box-shadow: none !important; margin: 0 !important; padding: 8mm 6mm !important; max-height: none !important; overflow: visible !important; }
+          body.receipt-print-mode #root { display: none !important; }
           .receipt-no-print { display: none !important; }
+          .receipt-overlay {
+            position: static !important; inset: auto !important;
+            display: block !important; height: auto !important; min-height: 0 !important;
+            overflow: visible !important; padding: 0 !important; background: none !important;
+            -webkit-backdrop-filter: none !important; backdrop-filter: none !important;
+          }
+          .receipt-wrap { max-width: none !important; }
+          .receipt-sheet {
+            width: 100% !important; max-width: none !important; margin: 0 !important;
+            padding: 0 !important; border-radius: 0 !important; box-shadow: none !important;
+          }
+          @page { size: A4; margin: 14mm; }
         }
       `}</style>
-
-      <div
-        className="modal-box receipt-print-area"
-        // A kwitansi is paper — force white bg + dark ink in every theme so it
-        // stays readable in dark mode and prints correctly.
-        style={{ maxWidth: 480, width: '100%', maxHeight: '90vh', overflowY: 'auto', fontFamily: 'Georgia, "Times New Roman", serif', background: '#fff', color: '#1a1a1a', colorScheme: 'light' }}
-        onClick={e => e.stopPropagation()}
-      >
-        {/* Controls — hidden on print */}
-        <div className="receipt-no-print" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-          <button className="btn-primary" style={{ width: 'auto', padding: '8px 16px' }} onClick={() => window.print()}>Print Kwitansi</button>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: 'var(--text-muted)', lineHeight: 1 }}><X size={18} /></button>
+      <div className="receipt-wrap" style={{ width: '100%', maxWidth: 800, margin: '0 auto' }} onClick={e => e.stopPropagation()}>
+        {/* Kontrol — tidak ikut tercetak */}
+        <div className="receipt-no-print" style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginBottom: 12 }}>
+          <button className="btn-primary" style={{ width: 'auto', padding: '8px 16px' }} onClick={() => window.print()}>
+            Print / Simpan PDF
+          </button>
+          <button className="btn-secondary" style={{ width: 'auto', padding: '8px 12px' }} onClick={onClose}>
+            <X size={14} style={{ verticalAlign: -2 }} /> Tutup
+          </button>
         </div>
 
-        {/* ── Receipt content ── */}
-        {/* Header */}
-        <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: 28, fontWeight: 800, letterSpacing: 1 }}>20FIT</div>
-          <div style={{ fontSize: 12, letterSpacing: 3, color: '#374151', marginTop: -2 }}>SPORTS CLINIC</div>
-          <div style={{ fontSize: 11, color: '#6B7280', marginTop: 6 }}>Jl. Sinabung No. 9, Jakarta Selatan</div>
-          <div style={{ fontSize: 11, color: '#6B7280' }}>(021) 20FIT-ID</div>
-        </div>
-        <Divider />
-
-        {/* Transaction meta */}
-        <Row label="ID TRANSAKSI" value={<span style={{ fontFamily: 'monospace' }}>{t.transaction_code}</span>} />
-        <Row label="TANGGAL" value={fmtDateTime(t.created_at)} />
-        <Row label="KASIR" value={t.cashier_name || '-'} />
-        <Divider />
-
-        {/* Patient */}
-        <Row label="PASIEN" value={patientName} />
-        <Row label="NO. REKAM MEDIS" value={<span style={{ fontFamily: 'monospace' }}>{patientCode}</span>} />
-        <Divider />
-
-        {/* Services table */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, fontWeight: 700, color: '#6B7280', textTransform: 'uppercase', marginBottom: 4 }}>
-          <span>Layanan</span><span>Harga</span>
-        </div>
-        <Row label={t.service_name} value={fmtRp(t.service_price)} />
-        {t.discount > 0 && <Row label="Diskon" value={`-${fmtRp(t.discount)}`} />}
-        {(t.admin_fee ?? 0) > 0 && <Row label="Biaya Admin" value={fmtRp(t.admin_fee)} />}
-        <div style={{ borderTop: '1px solid #374151', margin: '8px 0' }} />
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, fontWeight: 800 }}>
-          <span>TOTAL</span><span>{fmtRp(t.total_amount)}</span>
-        </div>
-        <Divider />
-
-        {/* Payment */}
-        <Row label="METODE PEMBAYARAN" value={(t.payment_method || '-').toUpperCase()} />
-        {isCard && (
-          <Row label="Kartu" value={`${t.payment_detail?.bank_name || '-'} · **** ${t.payment_detail?.card_last4 || '----'}`} />
-        )}
-        {method === 'transfer' && t.payment_detail?.transfer_ref && (
-          <Row label="Ref" value={t.payment_detail.transfer_ref} />
-        )}
-        <Divider />
-
-        {/* Signatures */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 24, marginTop: 18, fontSize: 12 }}>
-          <div style={{ flex: 1, textAlign: 'center' }}>
-            <div style={{ color: '#374151' }}>Kasir</div>
-            <div style={{ borderBottom: '1px solid #9CA3AF', height: 40 }} />
-            <div style={{ marginTop: 4, fontWeight: 600 }}>{t.cashier_name || '-'}</div>
+        {/* Lembar kwitansi — HARDCODE putih/gelap: dokumen resmi tidak ikut tema. */}
+        <div className="receipt-sheet" style={{ background: '#fff', color: INK, width: '100%', padding: '28px 34px', borderRadius: 8, fontSize: 12.5, lineHeight: 1.55, colorScheme: 'light' }}>
+          {/* Kop */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 24, borderBottom: `2.5px solid ${INK}`, paddingBottom: 12 }}>
+            <div>
+              <img src="/20fit-sports-clinic-black.png" alt="20FIT Sports Clinic" style={{ width: 190, height: 'auto', display: 'block' }} />
+              <div style={{ fontSize: 11, color: MUTED, marginTop: 8, maxWidth: 320 }}>
+                Jl. Sinabung No.9, RT.8/RW.5, Gunung, Kec. Kby. Baru, Jakarta Selatan
+              </div>
+              <div style={{ fontSize: 11, color: MUTED }}>(021) 20FIT-ID</div>
+            </div>
+            <div style={{ textAlign: 'right', flexShrink: 0 }}>
+              <div style={{ fontSize: 24, fontWeight: 800, color: RED, letterSpacing: 0.5 }}>Kuitansi</div>
+              <div style={{ fontFamily: 'monospace', fontSize: 13, fontWeight: 700, marginTop: 2 }}>{t.transaction_code}</div>
+              <div style={{ fontSize: 11, color: MUTED, marginTop: 4 }}>Dibuat pada {fmtDateTime(t.created_at)}</div>
+              <div style={{ fontSize: 11, color: MUTED }}>Diubah pada {fmtDateTime(t.updated_at)}</div>
+              <div style={{ fontSize: 11, color: MUTED, marginTop: 4 }}>Kasir: {t.cashier_name || '-'}</div>
+            </div>
           </div>
-          <div style={{ flex: 1, textAlign: 'center' }}>
-            <div style={{ color: '#374151' }}>Pasien</div>
-            <div style={{ borderBottom: '1px solid #9CA3AF', height: 40 }} />
-            <div style={{ marginTop: 4, fontWeight: 600 }}>{patientName}</div>
-          </div>
-        </div>
 
-        <div style={{ textAlign: 'center', fontSize: 10.5, color: '#6B7280', marginTop: 18, lineHeight: 1.6 }}>
-          <div>Terima kasih telah mempercayai layanan 20FIT Sports Clinic</div>
-          <div>Kwitansi ini sah tanpa tanda tangan basah jika pembayaran dilakukan secara digital</div>
+          {/* Info Pasien */}
+          <div style={sectionTitle}>Info Pasien</div>
+          <InfoRow label="Nama Pasien" value={t.patient?.full_name ?? '-'} />
+          <InfoRow label="No. Telepon" value={t.patient?.phone ?? '-'} />
+          <InfoRow label="Alamat" value={t.patient?.address || '-'} />
+          <InfoRow label="No. RM" value={<span style={{ fontFamily: 'monospace' }}>{t.patient?.patient_code ?? '-'}</span>} />
+
+          {/* Info Tagihan */}
+          <div style={sectionTitle}>Info Tagihan</div>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr>
+                <th style={th}>Item</th>
+                <th style={{ ...th, textAlign: 'center', width: 60 }}>Qty</th>
+                <th style={{ ...th, textAlign: 'right', width: 130 }}>Harga (Rp)</th>
+                <th style={{ ...th, textAlign: 'right', width: 130 }}>Total Harga (Rp)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td style={{ ...td, fontWeight: 700 }} colSpan={4}>Layanan</td></tr>
+              <tr>
+                <td style={td}>{t.service_name}</td>
+                <td style={{ ...td, textAlign: 'center' }}>1</td>
+                <td style={{ ...td, textAlign: 'right' }}>{num(t.service_price)}</td>
+                <td style={{ ...td, textAlign: 'right' }}>{num(t.service_price)}</td>
+              </tr>
+            </tbody>
+          </table>
+
+          {/* Catatan + breakdown */}
+          <div style={{ display: 'flex', gap: 32, marginTop: 16, alignItems: 'flex-start' }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13, fontWeight: 800, color: RED, marginBottom: 4 }}>Catatan</div>
+              <div style={{ fontSize: 12, color: MUTED, whiteSpace: 'pre-wrap' }}>{t.notes || '-'}</div>
+            </div>
+            <div style={{ width: 300, flexShrink: 0 }}>
+              <SumRow label="Subtotal Layanan" value={fmtRp(t.service_price)} />
+              <SumRow label="Total Diskon" value={t.discount > 0 ? `-${fmtRp(t.discount)}` : fmtRp(0)} />
+              <SumRow label="Biaya Administrasi" value={fmtRp(t.admin_fee ?? 0)} />
+              <SumRow label="Total Tagihan" value={fmtRp(t.total_amount)} strong />
+              <SumRow label={`Dibayar via ${methodLabel}`} value={fmtRp(t.total_amount)} />
+              {isCard && (
+                <div style={{ fontSize: 11, color: MUTED, textAlign: 'right' }}>
+                  Kartu: {t.payment_detail?.bank_name || '-'} · **** {t.payment_detail?.card_last4 || '----'}
+                </div>
+              )}
+              {method === 'transfer' && t.payment_detail?.transfer_ref && (
+                <div style={{ fontSize: 11, color: MUTED, textAlign: 'right' }}>Ref: {t.payment_detail.transfer_ref}</div>
+              )}
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div style={{ textAlign: 'center', fontSize: 10.5, color: MUTED, marginTop: 28, borderTop: '1px solid #E5E7EB', paddingTop: 10, lineHeight: 1.6 }}>
+            Dokumen digital ini sah diterbitkan oleh 20FIT Sports Clinic dan diproses secara komputerisasi — sah tanpa tanda tangan basah.
+          </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
