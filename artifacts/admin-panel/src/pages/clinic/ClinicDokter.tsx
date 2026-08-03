@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
-import { ChevronDown, ChevronUp, X } from 'lucide-react'
+import { ArrowLeft, ArrowRight, ChevronDown, ChevronUp, X } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { fmtDate, fmtTime, fmtDateTime } from '../../lib/format'
 import { useAuth } from '../../context/AuthContext'
-import { lockRecord, orIlike, listClinicStaffOptions, logAssignmentChange, type ClinicStaffOption } from '../../lib/clinic'
+import { lockRecord, orIlike, listClinicStaffOptions, logAssignmentChange, todayISO, shiftDay, type ClinicStaffOption } from '../../lib/clinic'
 import { normalizePhone } from '../../lib/phone'
 import LockBadge, { LockedBanner } from '../../components/clinic/LockBadge'
 import MedicalHistoryPanel from '../../components/clinic/MedicalHistoryPanel'
@@ -507,21 +507,29 @@ const VISIT_SELECT = `
   services:clinic_visit_services(id, service_id, service_name, price, service:clinic_services(requires_doctor))
 `
 
-// Fetch visits hari ini
-async function fetchTodayVisits(): Promise<DokterVisit[]> {
-  const today = new Date().toISOString().slice(0, 10)
-  // Hari ini PLUS tunggakan: visit lama yang masih scheduled/in_progress tetap
-  // tampil (tanpa batas mundur) sampai diselesaikan/dibatalkan — assessment yang
-  // belum diisi tidak boleh "hilang" dari pandangan dokter saat tanggal berganti.
-  const { data, error } = await supabase
-    .from('clinic_visits')
-    .select(VISIT_SELECT)
-    .or(`visit_date.eq.${today},and(visit_date.lt.${today},status.in.(scheduled,in_progress))`)
+// Fetch visits per tanggal terpilih (pola navigator Triase). todayISO() = LOKAL,
+// bukan toISOString (UTC) yang salah tanggal di jam 00-07 WIB.
+async function fetchDokterVisits(selectedDate: string): Promise<DokterVisit[]> {
+  const today = todayISO()
+  let q = supabase.from('clinic_visits').select(VISIT_SELECT)
+  if (selectedDate === today) {
+    // MODE HARI INI — hari ini PLUS tunggakan: visit lama yang masih
+    // scheduled/in_progress tetap tampil (tanpa batas mundur) sampai
+    // diselesaikan/dibatalkan — assessment yang belum diisi tidak boleh
+    // "hilang" dari pandangan dokter saat tanggal berganti.
+    q = q.or(`visit_date.eq.${today},and(visit_date.lt.${today},status.in.(scheduled,in_progress))`)
+  } else {
+    // MODE JELAJAH — satu tanggal spesifik, tanpa filter status (meniru
+    // perilaku hari-ini yang juga menampilkan semua status tanggal tsb).
+    q = q.eq('visit_date', selectedDate)
+  }
+  const { data, error } = await q
     .order('visit_date', { ascending: true })
     .order('visit_time', { ascending: true, nullsFirst: false })
   if (error) throw error
   const rows = (data ?? []) as unknown as DokterVisit[]
-  // Hanya tampilkan visit dengan minimal 1 layanan yang requires_doctor = true.
+  // Hanya tampilkan visit dengan minimal 1 layanan yang requires_doctor = true —
+  // berlaku di SEMUA mode (halaman dokter tidak pernah menampilkan visit terapis).
   return rows.filter(v => v.services?.some(s => s.service?.requires_doctor === true))
 }
 
@@ -655,7 +663,7 @@ function VisitCard({ visit, queue = false, onStatusChange, onOpen, busy, doctorO
     color: s === 'in_progress' ? 'var(--red)' : 'var(--text-secondary)',
   }
 
-  const isStale = visit.visit_date < new Date().toISOString().slice(0, 10)
+  const isStale = visit.visit_date < todayISO()
 
   return (
     <div style={cardStyle}>
@@ -755,6 +763,9 @@ export default function ClinicDokter() {
   const [tab, setTab] = useState<Tab>('jadwal')
 
   const [todayVisits, setTodayVisits] = useState<DokterVisit[]>([])
+  // Tanggal terpilih (pola navigator Triase) — default hari ini (mode normal +
+  // tunggakan); tanggal lain = mode jelajah. Berlaku utk tab Jadwal & Antrian.
+  const [selectedDate, setSelectedDate] = useState(todayISO)
   const [doctorOptions, setDoctorOptions] = useState<ClinicStaffOption[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -817,14 +828,14 @@ export default function ClinicDokter() {
   const loadToday = useCallback(async (showSpinner = true) => {
     if (showSpinner) setLoading(true)
     try {
-      setTodayVisits(await fetchTodayVisits())
+      setTodayVisits(await fetchDokterVisits(selectedDate))
       setError('')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Gagal memuat jadwal')
     } finally {
       if (showSpinner) setLoading(false)
     }
-  }, [])
+  }, [selectedDate])
 
   useEffect(() => { loadToday() }, [loadToday])
 
@@ -1032,10 +1043,11 @@ export default function ClinicDokter() {
     }
   }
 
-  // Statistik ringkas dihitung dari HARI INI saja — tunggakan hari sebelumnya
-  // ikut daftar & antrian (di bawah) tapi tidak membiaskan angka harian.
-  const todayStr = new Date().toISOString().slice(0, 10)
-  const todaysOnly = todayVisits.filter(v => v.visit_date === todayStr)
+  // Statistik ringkas dihitung dari TANGGAL TERPILIH saja — tunggakan hari
+  // sebelumnya ikut daftar & antrian (di bawah) tapi tidak membiaskan angka.
+  // todayISO() = tanggal LOKAL (bukan toISOString/UTC).
+  const todayStr = todayISO()
+  const todaysOnly = todayVisits.filter(v => v.visit_date === selectedDate)
   const counts = {
     total: todaysOnly.length,
     waiting: todaysOnly.filter(v => v.status === 'scheduled').length,
@@ -1052,8 +1064,33 @@ export default function ClinicDokter() {
 
   return (
     <div>
-      <div className="page-header">
-        <h2 className="page-title">Panel EMR</h2>
+      <div className="page-header" style={{ flexWrap: 'wrap', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <h2 className="page-title" style={{ margin: 0 }}>Panel EMR</h2>
+          {/* Navigator tanggal (pola Triase) — hanya relevan utk tab Jadwal &
+              Antrian; tab Riwayat Pasien punya filter tanggalnya sendiri. */}
+          {tab !== 'riwayat' && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+              <button className="btn-secondary" style={{ width: 'auto', padding: '4px 10px', fontSize: 12 }}
+                onClick={() => setSelectedDate(d => shiftDay(d, -1))} aria-label="Hari sebelumnya">
+                <ArrowLeft size={12} style={{ verticalAlign: -2 }} /> Sebelumnya
+              </button>
+              <input type="date" value={selectedDate}
+                onChange={e => e.target.value && setSelectedDate(e.target.value)}
+                style={{ width: 'auto', padding: '4px 8px', fontSize: 13 }} />
+              <button className="btn-secondary" style={{ width: 'auto', padding: '4px 10px', fontSize: 12 }}
+                onClick={() => setSelectedDate(d => shiftDay(d, 1))} aria-label="Hari berikutnya">
+                Berikutnya <ArrowRight size={12} style={{ verticalAlign: -2 }} />
+              </button>
+              {selectedDate !== todayStr && (
+                <button onClick={() => setSelectedDate(todayStr)}
+                  style={{ background: 'none', border: 'none', color: 'var(--red)', fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>
+                  Kembali ke Hari Ini
+                </button>
+              )}
+            </div>
+          )}
+        </div>
         {user?.full_name && (
           <span className="badge" style={{ background: '#EFF6FF', color: '#1D4ED8' }}>{user.full_name}</span>
         )}
@@ -1084,7 +1121,7 @@ export default function ClinicDokter() {
           {loading ? (
             <p style={{ color: 'var(--text-muted)' }}>Memuat data...</p>
           ) : todayVisits.length === 0 ? (
-            <EmptyState>Tidak ada jadwal hari ini</EmptyState>
+            <EmptyState>{selectedDate === todayStr ? 'Tidak ada jadwal hari ini' : `Tidak ada jadwal pada ${fmtDate(selectedDate)}`}</EmptyState>
           ) : todayVisits.map(v => (
             <VisitCard key={v.id} visit={v} onStatusChange={handleStatusChange} onOpen={openVisitModal} busy={busy} doctorOptions={doctorOptions} onAssignDoctor={assignDoctor} />
           ))}
@@ -1094,9 +1131,17 @@ export default function ClinicDokter() {
       {/* TAB 2 — Antrian Aktif */}
       {tab === 'antrian' && (
         <div>
-          <button className="btn-primary" style={{ marginBottom: 16 }} disabled={busy || counts.waiting === 0} onClick={callNext}>
+          {/* Panggil Berikutnya HANYA di mode hari ini — di mode jelajah bisa
+              salah mengubah status visit tanggal lain. */}
+          <button className="btn-primary" style={{ marginBottom: selectedDate === todayStr ? 16 : 4 }}
+            disabled={busy || counts.waiting === 0 || selectedDate !== todayStr} onClick={callNext}>
             Panggil Berikutnya
           </button>
+          {selectedDate !== todayStr && (
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 12px' }}>
+              Kembali ke Hari Ini untuk memanggil antrian.
+            </p>
+          )}
           {loading ? (
             <p style={{ color: 'var(--text-muted)' }}>Memuat data...</p>
           ) : queue.length === 0 ? (
