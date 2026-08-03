@@ -4,7 +4,7 @@ import { fmtRp, fmtDate, fmtTime, fmtDateTime, exportToCSV } from '../../lib/for
 import { supabase } from '../../lib/supabase'
 import { todayISO } from '../../lib/clinic'
 import { useAuth } from '../../context/AuthContext'
-import { listTransactions, getTodaySummary, updateClinicTransaction, type ClinicTransaction } from '../../lib/clinicBilling'
+import { listTransactions, getTodaySummary, updateClinicTransaction, parseHistoricalNotes, type ClinicTransaction } from '../../lib/clinicBilling'
 import ClinicReceiptModal from '../../components/clinic/ClinicReceiptModal'
 import ClinicCloseBillModal from '../../components/clinic/ClinicCloseBillModal'
 import LockBadge from '../../components/clinic/LockBadge'
@@ -163,7 +163,7 @@ export default function ClinicKasir() {
       })
       exportToCSV(all.map(t => ({
         Kode: t.transaction_code,
-        Pasien: t.patient?.full_name ?? '',
+        Pasien: t.patient?.full_name ?? parseHistoricalNotes(t.notes).pasien ?? '',
         Layanan: t.service_name,
         Total: t.total_amount,
         Metode: t.payment_method,
@@ -270,7 +270,8 @@ export default function ClinicKasir() {
               return (
               <tr key={t.id}>
                 <td style={{ fontFamily: 'monospace', fontSize: 11 }}>{t.transaction_code}</td>
-                <td>{t.patient?.full_name || '-'}</td>
+                {/* Fallback transaksi historis (patient_id null): nama dari notes "Pasien: ..." */}
+                <td>{t.patient?.full_name || parseHistoricalNotes(t.notes).pasien || '-'}</td>
                 <td>
                   {t.service_name}
                   {t.visit?.patient_package_id && (

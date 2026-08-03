@@ -33,6 +33,23 @@ export interface ClinicTransaction {
   }) | null
 }
 
+// Transaksi historis (TRX-HIST-*, 2277 baris import) tidak punya patient_id;
+// identitas pasien tersimpan di notes berformat
+// "Pasien: {nama} | Nakes: {jenis} | Staff: {nama} | Note: {catatan}"
+// (sebagian baris hanya subset field). Parser toleran: tiap field diambil per
+// label (case-insensitive), nilai = teks sampai '|' berikutnya; notes yang
+// tidak berpola (transaksi normal) menghasilkan semua field null, tanpa throw.
+export function parseHistoricalNotes(notes: string | null | undefined): {
+  pasien: string | null; nakes: string | null; staff: string | null; note: string | null
+} {
+  const grab = (label: string): string | null => {
+    const m = (notes ?? '').match(new RegExp(`(?:^|\\|)\\s*${label}\\s*:\\s*([^|]*)`, 'i'))
+    const v = m?.[1]?.trim()
+    return v || null
+  }
+  return { pasien: grab('Pasien'), nakes: grab('Nakes'), staff: grab('Staff'), note: grab('Note') }
+}
+
 export interface CreateTransactionPayload {
   visit_id?: string
   patient_id: string

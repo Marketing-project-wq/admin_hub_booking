@@ -2,7 +2,7 @@ import React, { useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 import { fmtRp, fmtDateTime } from '../../lib/format'
-import type { ClinicTransaction } from '../../lib/clinicBilling'
+import { parseHistoricalNotes, type ClinicTransaction } from '../../lib/clinicBilling'
 
 // Kwitansi A4 — layout meniru format kwitansi lama klinik (kop + judul "Kuitansi"
 // di kanan, Info Pasien, tabel Info Tagihan, Catatan + breakdown, footer
@@ -48,6 +48,8 @@ export default function ClinicReceiptModal({ transaction: t, onClose }: {
   const method = (t.payment_method || '').toLowerCase()
   const isCard = method === 'debit' || method === 'kredit'
   const methodLabel = METHOD_LABEL[method] ?? (t.payment_method || '-')
+  // Fallback transaksi historis (patient_id null): nama pasien dari notes "Pasien: ...".
+  const patientName = t.patient?.full_name ?? parseHistoricalNotes(t.notes).pasien ?? '-'
 
   useEffect(() => {
     document.body.classList.add('receipt-print-mode')
@@ -118,7 +120,7 @@ export default function ClinicReceiptModal({ transaction: t, onClose }: {
 
           {/* Info Pasien */}
           <div style={sectionTitle}>Info Pasien</div>
-          <InfoRow label="Nama Pasien" value={t.patient?.full_name ?? '-'} />
+          <InfoRow label="Nama Pasien" value={patientName} />
           <InfoRow label="No. Telepon" value={t.patient?.phone ?? '-'} />
           <InfoRow label="Alamat" value={t.patient?.address || '-'} />
           <InfoRow label="No. RM" value={<span style={{ fontFamily: 'monospace' }}>{t.patient?.patient_code ?? '-'}</span>} />
