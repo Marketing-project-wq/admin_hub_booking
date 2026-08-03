@@ -75,6 +75,9 @@ export default function ClinicReceiptModal({ transaction: t, onClose }: {
           .receipt-sheet {
             width: 100% !important; max-width: none !important; margin: 0 !important;
             padding: 0 !important; border-radius: 0 !important; box-shadow: none !important;
+            /* Area konten A4 = 297mm - 2x14mm margin @page; tanpa override ini
+               minHeight 297mm dari layar akan meluber dan mendorong footer ke hal. 2. */
+            min-height: 269mm !important;
           }
           @page { size: A4; margin: 14mm; }
         }
@@ -90,8 +93,11 @@ export default function ClinicReceiptModal({ transaction: t, onClose }: {
           </button>
         </div>
 
-        {/* Lembar kwitansi — HARDCODE putih/gelap: dokumen resmi tidak ikut tema. */}
-        <div className="receipt-sheet" style={{ background: '#fff', color: INK, width: '100%', padding: '28px 34px', borderRadius: 8, fontSize: 12.5, lineHeight: 1.55, colorScheme: 'light' }}>
+        {/* Lembar kwitansi — HARDCODE putih/gelap: dokumen resmi tidak ikut tema.
+            Flex kolom + minHeight setinggi A4: footer (marginTop:auto) selalu
+            menempel di dasar halaman, di layar maupun print; konten panjang
+            tetap mendorong footer ke bawah konten (tidak pernah overlap). */}
+        <div className="receipt-sheet" style={{ background: '#fff', color: INK, width: '100%', padding: '28px 34px', borderRadius: 8, fontSize: 12.5, lineHeight: 1.55, colorScheme: 'light', display: 'flex', flexDirection: 'column', minHeight: '297mm' }}>
           {/* Kop */}
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 24, borderBottom: `2.5px solid ${INK}`, paddingBottom: 12 }}>
             <div>
@@ -99,7 +105,7 @@ export default function ClinicReceiptModal({ transaction: t, onClose }: {
               <div style={{ fontSize: 11, color: MUTED, marginTop: 8, maxWidth: 320 }}>
                 Jl. Sinabung No.9, RT.8/RW.5, Gunung, Kec. Kby. Baru, Jakarta Selatan
               </div>
-              <div style={{ fontSize: 11, color: MUTED }}>(021) 20FIT-ID</div>
+              <div style={{ fontSize: 11, color: MUTED }}>+62 811 1185 9109</div>
             </div>
             <div style={{ textAlign: 'right', flexShrink: 0 }}>
               <div style={{ fontSize: 24, fontWeight: 800, color: RED, letterSpacing: 0.5 }}>Kuitansi</div>
@@ -140,7 +146,7 @@ export default function ClinicReceiptModal({ transaction: t, onClose }: {
           </table>
 
           {/* Catatan + breakdown */}
-          <div style={{ display: 'flex', gap: 32, marginTop: 16, alignItems: 'flex-start' }}>
+          <div style={{ display: 'flex', gap: 32, marginTop: 16, marginBottom: 28, alignItems: 'flex-start' }}>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 13, fontWeight: 800, color: RED, marginBottom: 4 }}>Catatan</div>
               <div style={{ fontSize: 12, color: MUTED, whiteSpace: 'pre-wrap' }}>{t.notes || '-'}</div>
@@ -162,8 +168,8 @@ export default function ClinicReceiptModal({ transaction: t, onClose }: {
             </div>
           </div>
 
-          {/* Footer */}
-          <div style={{ textAlign: 'center', fontSize: 10.5, color: MUTED, marginTop: 28, borderTop: '1px solid #E5E7EB', paddingTop: 10, lineHeight: 1.6 }}>
+          {/* Footer — marginTop:auto mendorongnya ke dasar sheet (flex kolom) */}
+          <div style={{ textAlign: 'center', fontSize: 10.5, color: MUTED, marginTop: 'auto', borderTop: '1px solid #E5E7EB', paddingTop: 10, lineHeight: 1.6 }}>
             Dokumen digital ini sah diterbitkan oleh 20FIT Sports Clinic dan diproses secara komputerisasi — sah tanpa tanda tangan basah.
           </div>
         </div>
