@@ -7,6 +7,7 @@ interface Voucher {
   id: string; code: string; description: string; discount_type: string; discount_value: number;
   min_booking_amount: number; max_discount_amount: number | null; quota: number; used_count: number;
   valid_from: string; valid_until: string; is_active: boolean; corporation_only: boolean;
+  applies_to: string;   // 'class_booking' | 'package_purchase' | 'both'
 }
 
 type ClassTypeEmbed = { name: string; color: string | null }
@@ -20,10 +21,19 @@ interface ScheduleOption {
   arena_class_types: ClassTypeEmbed | ClassTypeEmbed[] | null
 }
 
+interface PackageOption {
+  id: string
+  name: string
+  sessions: number
+  price: number
+  is_active: boolean
+}
+
 const emptyForm = (): Partial<Voucher> => ({
   code: '', description: '', discount_type: 'percentage', discount_value: 0,
   min_booking_amount: 0, max_discount_amount: null, quota: 1,
   valid_from: '', valid_until: '', is_active: true, corporation_only: false,
+  applies_to: 'class_booking',
 })
 
 // "Senin, 7 Jul 2026 — 08:00-09:00 — Foundation (Elsen)"
@@ -38,6 +48,10 @@ const scheduleLabel = (s: ScheduleOption) => {
   const coach = s.instructor ? ` (${s.instructor})` : ''
   return `${dateLabel} — ${time} — ${cls}${coach}`
 }
+
+// "HYROX Complete — 10 sesi — Rp 1.500.000"
+const packageLabel = (p: PackageOption) =>
+  `${p.name} — ${p.sessions} sesi — Rp ${p.price.toLocaleString('id-ID')}${p.is_active ? '' : ' (nonaktif)'}`
 
 export default function ArenaVouchers() {
   const [data, setData] = useState<Voucher[]>([])
@@ -58,6 +72,13 @@ export default function ArenaVouchers() {
   const [selectedScheduleIds, setSelectedScheduleIds] = useState<Set<string>>(new Set())
   const [scheduleSearch, setScheduleSearch] = useState('')
 
+  // Voucher-per-package feature (restriksi pembelian paket — pola sama dgn jadwal)
+  const [packageCounts, setPackageCounts] = useState<Record<string, number>>({})
+  const [packages, setPackages] = useState<PackageOption[]>([])
+  const [packagesLoading, setPackagesLoading] = useState(false)
+  const [restrictPackage, setRestrictPackage] = useState(false)
+  const [selectedPackageIds, setSelectedPackageIds] = useState<Set<string>>(new Set())
+
   const fetchData = useCallback(async () => {
     setLoading(true)
     const { data: rows, error: err } = await supabase.from('arena_vouchers').select('*').order('created_at', { ascending: false })
@@ -71,6 +92,14 @@ export default function ArenaVouchers() {
       counts[r.voucher_id] = (counts[r.voucher_id] || 0) + 1
     }
     setScheduleCounts(counts)
+
+    // Idem untuk restriksi paket (no rows => berlaku semua paket)
+    const { data: pkgAssignRows } = await supabase.from('arena_voucher_packages').select('voucher_id')
+    const pkgCounts: Record<string, number> = {}
+    for (const r of (pkgAssignRows || []) as { voucher_id: string }[]) {
+      pkgCounts[r.voucher_id] = (pkgCounts[r.voucher_id] || 0) + 1
+    }
+    setPackageCounts(pkgCounts)
     setLoading(false)
   }, [])
 
@@ -98,18 +127,34 @@ export default function ArenaVouchers() {
     setSchedulesLoading(false)
   }, [])
 
+  // Semua paket (termasuk nonaktif — restriksi lama bisa menunjuk paket nonaktif), urut tampilan customer
+  const fetchPackages = useCallback(async () => {
+    setPackagesLoading(true)
+    const { data: rows } = await supabase
+      .from('arena_packages')
+      .select('id, name, sessions, price, is_active')
+      .order('sort_order', { ascending: true })
+      .order('name', { ascending: true })
+    setPackages((rows || []) as PackageOption[])
+    setPackagesLoading(false)
+  }, [])
+
   const openAdd = () => {
     setForm(emptyForm()); setEditId(null); setFormError('')
     setRestrictSchedule(false); setSelectedScheduleIds(new Set()); setScheduleSearch('')
+    setRestrictPackage(false); setSelectedPackageIds(new Set())
     setShowModal(true)
     fetchSchedules()
+    fetchPackages()
   }
 
   const openEdit = async (v: Voucher) => {
-    setForm({ ...v }); setEditId(v.id); setFormError('')
+    setForm({ ...v, applies_to: v.applies_to || 'class_booking' }); setEditId(v.id); setFormError('')
     setScheduleSearch(''); setSelectedScheduleIds(new Set()); setRestrictSchedule(false)
+    setRestrictPackage(false); setSelectedPackageIds(new Set())
     setShowModal(true)
     fetchSchedules()
+    fetchPackages()
     // Load existing assignments — presence of rows => voucher is restricted
     const { data: assignments } = await supabase
       .from('arena_voucher_schedules')
@@ -118,15 +163,41 @@ export default function ArenaVouchers() {
     const ids = (assignments || []).map(a => (a as { schedule_id: string }).schedule_id)
     setSelectedScheduleIds(new Set(ids))
     setRestrictSchedule(ids.length > 0)
+
+    const { data: pkgAssignments } = await supabase
+      .from('arena_voucher_packages')
+      .select('package_id')
+      .eq('voucher_id', v.id)
+    const pkgIds = (pkgAssignments || []).map(a => (a as { package_id: string }).package_id)
+    setSelectedPackageIds(new Set(pkgIds))
+    setRestrictPackage(pkgIds.length > 0)
   }
 
+  // Scope voucher — restriksi jadwal hanya relevan utk booking kelas, restriksi paket utk pembelian paket
+  const appliesTo = form.applies_to || 'class_booking'
+  const scopeClass = appliesTo === 'class_booking' || appliesTo === 'both'
+  const scopePackage = appliesTo === 'package_purchase' || appliesTo === 'both'
+
   // Sync arena_voucher_schedules to the current selection. Returns an error message or null.
+  // Delete jalan terus walau scope tak mencakup kelas — membersihkan restriksi basi saat scope diganti.
   const syncSchedules = async (voucherId: string): Promise<string | null> => {
     const del = await supabase.from('arena_voucher_schedules').delete().eq('voucher_id', voucherId)
     if (del.error) return del.error.message
-    if (restrictSchedule && selectedScheduleIds.size > 0) {
+    if (scopeClass && restrictSchedule && selectedScheduleIds.size > 0) {
       const rows = Array.from(selectedScheduleIds).map(schedule_id => ({ voucher_id: voucherId, schedule_id }))
       const ins = await supabase.from('arena_voucher_schedules').insert(rows)
+      if (ins.error) return ins.error.message
+    }
+    return null
+  }
+
+  // Idem untuk arena_voucher_packages (0 baris = berlaku semua paket)
+  const syncPackages = async (voucherId: string): Promise<string | null> => {
+    const del = await supabase.from('arena_voucher_packages').delete().eq('voucher_id', voucherId)
+    if (del.error) return del.error.message
+    if (scopePackage && restrictPackage && selectedPackageIds.size > 0) {
+      const rows = Array.from(selectedPackageIds).map(package_id => ({ voucher_id: voucherId, package_id }))
+      const ins = await supabase.from('arena_voucher_packages').insert(rows)
       if (ins.error) return ins.error.message
     }
     return null
@@ -138,7 +209,8 @@ export default function ArenaVouchers() {
     if (!form.code) return setFormError('Code wajib diisi')
     if (!form.discount_value || form.discount_value <= 0) return setFormError('Nilai diskon harus > 0')
     if (form.valid_until && form.valid_from && form.valid_until < form.valid_from) return setFormError('Valid Until harus setelah Valid From')
-    if (restrictSchedule && selectedScheduleIds.size === 0) return setFormError('Pilih minimal 1 jadwal, atau matikan pembatasan jadwal')
+    if (scopeClass && restrictSchedule && selectedScheduleIds.size === 0) return setFormError('Pilih minimal 1 jadwal, atau matikan pembatasan jadwal')
+    if (scopePackage && restrictPackage && selectedPackageIds.size === 0) return setFormError('Pilih minimal 1 paket, atau matikan pembatasan paket')
 
     setSaving(true)
     const payload = {
@@ -153,6 +225,7 @@ export default function ArenaVouchers() {
       valid_until: form.valid_until || null,
       is_active: form.is_active ?? true,
       corporation_only: form.corporation_only ?? false,
+      applies_to: appliesTo,
       updated_at: new Date().toISOString(),
     }
 
@@ -171,10 +244,12 @@ export default function ArenaVouchers() {
     }
     if (err) { setSaving(false); setFormError(err.message); return }
 
-    // Sync schedule assignments (backward compatible: no rows => berlaku semua jadwal)
+    // Sync schedule/package assignments (backward compatible: no rows => berlaku semua)
     if (voucherId) {
       const syncErr = await syncSchedules(voucherId)
       if (syncErr) { setSaving(false); setFormError(`Voucher tersimpan, tapi gagal menyimpan jadwal: ${syncErr}`); fetchData(); return }
+      const pkgSyncErr = await syncPackages(voucherId)
+      if (pkgSyncErr) { setSaving(false); setFormError(`Voucher tersimpan, tapi gagal menyimpan paket: ${pkgSyncErr}`); fetchData(); return }
     }
 
     setSaving(false)
@@ -189,6 +264,14 @@ export default function ArenaVouchers() {
 
   const toggleSchedule = (id: string, checked: boolean) => {
     setSelectedScheduleIds(prev => {
+      const next = new Set(prev)
+      if (checked) next.add(id); else next.delete(id)
+      return next
+    })
+  }
+
+  const togglePackage = (id: string, checked: boolean) => {
+    setSelectedPackageIds(prev => {
       const next = new Set(prev)
       if (checked) next.add(id); else next.delete(id)
       return next
@@ -259,6 +342,10 @@ export default function ArenaVouchers() {
               <tr><td colSpan={11} className="empty-state">{search ? 'Tidak ada hasil' : 'Tidak ada voucher'}</td></tr>
             ) : displayData.map(v => {
               const count = scheduleCounts[v.id] || 0
+              const pkgCount = packageCounts[v.id] || 0
+              const scope = v.applies_to || 'class_booking'
+              const rowScopeClass = scope === 'class_booking' || scope === 'both'
+              const rowScopePackage = scope === 'package_purchase' || scope === 'both'
               return (
               <tr key={v.id}>
                 <td style={{ fontFamily: 'monospace', fontWeight: 700 }}>{v.code}</td>
@@ -269,11 +356,18 @@ export default function ArenaVouchers() {
                 <td style={{ textAlign: 'center' }}>{v.used_count}</td>
                 <td>{fmtDate(v.valid_until)}</td>
                 <td style={{ textAlign: 'center' }}>
-                  {count > 0 ? (
-                    <span className="badge badge-pending">{count} Jadwal</span>
-                  ) : (
-                    <span className="badge" style={{ background: 'var(--bg-page)', color: 'var(--text-muted)', border: '1px solid var(--border)' }}>Semua Jadwal</span>
-                  )}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'center' }}>
+                    {rowScopeClass && (count > 0 ? (
+                      <span className="badge badge-pending">Kelas · {count} Jadwal</span>
+                    ) : (
+                      <span className="badge" style={{ background: 'var(--bg-page)', color: 'var(--text-muted)', border: '1px solid var(--border)' }}>Kelas · Semua Jadwal</span>
+                    ))}
+                    {rowScopePackage && (pkgCount > 0 ? (
+                      <span className="badge badge-pending">Paket · {pkgCount} Paket</span>
+                    ) : (
+                      <span className="badge" style={{ background: 'var(--bg-page)', color: 'var(--text-muted)', border: '1px solid var(--border)' }}>Paket · Semua Paket</span>
+                    ))}
+                  </div>
                 </td>
                 <td>
                   <span className={`badge ${v.is_active ? 'badge-confirmed' : 'badge-cancelled'}`}>
@@ -369,7 +463,28 @@ export default function ArenaVouchers() {
                 </label>
               </div>
 
-              {/* Jadwal Berlaku */}
+              {/* Scope voucher — menentukan seksi restriksi mana yang relevan */}
+              <div style={{ borderTop: '1px solid var(--border)', paddingTop: 16, marginBottom: 16 }}>
+                <label style={{ fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>
+                  Berlaku Untuk *
+                </label>
+                <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+                  {([['class_booking', 'Booking Kelas'], ['package_purchase', 'Pembelian Paket'], ['both', 'Keduanya']] as const).map(([val, lbl]) => (
+                    <label key={val} style={{ display: 'flex', gap: 6, alignItems: 'center', cursor: 'pointer', fontSize: 14 }}>
+                      <input type="radio" name="applies_to" value={val} checked={appliesTo === val} onChange={() => setForm(p => ({ ...p, applies_to: val }))} />
+                      {lbl}
+                    </label>
+                  ))}
+                </div>
+                <small style={{ color: 'var(--text-muted)', fontSize: 11, marginTop: 6, display: 'block' }}>
+                  {appliesTo === 'class_booking' && 'Voucher hanya bisa dipakai saat booking kelas/slot (perilaku lama).'}
+                  {appliesTo === 'package_purchase' && 'Voucher hanya bisa dipakai saat pembelian paket di halaman checkout paket.'}
+                  {appliesTo === 'both' && 'Voucher bisa dipakai di booking kelas DAN pembelian paket (kuota digabung).'}
+                </small>
+              </div>
+
+              {/* Jadwal Berlaku — hanya relevan bila scope mencakup booking kelas */}
+              {scopeClass && (
               <div style={{ borderTop: '1px solid var(--border)', paddingTop: 16, marginBottom: 16 }}>
                 <label className="toggle" style={{ fontSize: 14 }}>
                   <span className={`toggle-track ${restrictSchedule ? 'on' : ''}`}><span className="toggle-thumb" /></span>
@@ -430,6 +545,57 @@ export default function ArenaVouchers() {
                   </div>
                 )}
               </div>
+              )}
+
+              {/* Paket Berlaku — hanya relevan bila scope mencakup pembelian paket */}
+              {scopePackage && (
+              <div style={{ borderTop: '1px solid var(--border)', paddingTop: 16, marginBottom: 16 }}>
+                <label className="toggle" style={{ fontSize: 14 }}>
+                  <span className={`toggle-track ${restrictPackage ? 'on' : ''}`}><span className="toggle-thumb" /></span>
+                  <input type="checkbox" checked={restrictPackage} onChange={e => setRestrictPackage(e.target.checked)} style={{ display: 'none' }} />
+                  <strong>Batasi ke paket tertentu</strong>
+                </label>
+                <small style={{ color: 'var(--text-muted)', fontSize: 11, marginTop: 6, display: 'block' }}>
+                  {restrictPackage
+                    ? 'Voucher hanya berlaku untuk paket yang dipilih di bawah.'
+                    : 'Voucher berlaku untuk SEMUA paket (default).'}
+                </small>
+
+                {restrictPackage && (
+                  <div style={{ marginTop: 12 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                      <label style={{ fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)' }}>
+                        Pilih Paket — {selectedPackageIds.size} dipilih
+                      </label>
+                      {selectedPackageIds.size > 0 && (
+                        <button type="button" className="btn-text" style={{ fontSize: 12 }} onClick={() => setSelectedPackageIds(new Set())}>
+                          Kosongkan
+                        </button>
+                      )}
+                    </div>
+                    <div style={{ maxHeight: 240, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 6 }}>
+                      {packagesLoading ? (
+                        <div style={{ padding: 16, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>Memuat paket...</div>
+                      ) : packages.length === 0 ? (
+                        <div style={{ padding: 16, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>Tidak ada paket</div>
+                      ) : packages.map(p => (
+                        <label
+                          key={p.id}
+                          style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '8px 12px', borderBottom: '1px solid var(--border)', cursor: 'pointer', fontSize: 13, opacity: p.is_active ? 1 : 0.6 }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedPackageIds.has(p.id)}
+                            onChange={e => togglePackage(p.id, e.target.checked)}
+                          />
+                          <span>{packageLabel(p)}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+              )}
 
               <div className="modal-footer">
                 <button type="button" className="btn-secondary" onClick={() => setShowModal(false)}>Batal</button>
