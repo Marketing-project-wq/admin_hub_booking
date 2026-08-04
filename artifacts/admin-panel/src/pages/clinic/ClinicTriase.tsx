@@ -8,10 +8,9 @@ import { useIsMobile } from '../../hooks/use-mobile'
 import {
   getScreeningByVisit, upsertScreening,
   getConsentsByVisit, upsertConsent,
-  lockRecord, listClinicStaffOptions, logAssignmentChange, todayISO, shiftDay,
+  logRecordEdit, listClinicStaffOptions, logAssignmentChange, todayISO, shiftDay,
   type ClinicConsent, type ClinicVitalSigns, type ClinicStaffOption,
 } from '../../lib/clinic'
-import LockBadge, { LockedBanner } from '../../components/clinic/LockBadge'
 import MedicalHistoryPanel from '../../components/clinic/MedicalHistoryPanel'
 
 // ─── Narrow shapes used by the screening/consent forms ───────────────────────────
@@ -492,14 +491,15 @@ function intensityColor(v: number): string {
   return '#DC2626'
 }
 
-function ScreeningTab({ visit, patient, onToast, onSaved, isLocked, recordId, lockedAt, lockedBy, onUnlocked, onRelocked, defaultServices }: {
+function ScreeningTab({ visit, patient, onToast, onSaved, defaultServices }: {
   visit: VisitRef; patient: PatientInfo | null; onToast: (m: string) => void; onSaved?: () => void
-  isLocked: boolean; recordId: string | null; lockedAt: string | null; lockedBy: string | null
-  onUnlocked: () => void; onRelocked: () => void; defaultServices?: string[]
+  defaultServices?: string[]
 }) {
   const { hasPermission, user } = useAuth()
   const navigate = useNavigate()
   const [form, setForm] = useState<ScreeningForm>(emptyScreening())
+  // id record tersimpan — penanda re-edit untuk audit log 'edit' (form ini tanpa lock)
+  const [existingId, setExistingId] = useState<string | null>(null)
   const [loaded, setLoaded] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -515,6 +515,7 @@ function ScreeningTab({ visit, patient, onToast, onSaved, isLocked, recordId, lo
     getScreeningByVisit(visit.id).then(async data => {
       if (!active) return
       if (data) {
+        setExistingId(data.id)
         setForm({
           selected_services: data.selected_services ?? [],
           chief_complaint: data.chief_complaint ?? '',
@@ -628,8 +629,12 @@ function ScreeningTab({ visit, patient, onToast, onSaved, isLocked, recordId, lo
         physical_activity_level: form.physical_activity_level || null,
         physical_activity_type: form.physical_activity_type || null,
       })
-      const saved = await getScreeningByVisit(visit.id)
-      if (saved?.id && user) await lockRecord('clinic_screenings', saved.id, user.full_name)
+      // Re-edit record yang sudah ada → catat jejak ringan (tanpa alasan, tanpa friksi)
+      if (existingId && user) await logRecordEdit('clinic_screenings', existingId, user.full_name, user.role)
+      if (!existingId) {
+        const saved = await getScreeningByVisit(visit.id)
+        setExistingId(saved?.id ?? null)
+      }
       localStorage.removeItem(draftKey)
       onToast('Screening tersimpan')
       onSaved?.()
@@ -643,15 +648,6 @@ function ScreeningTab({ visit, patient, onToast, onSaved, isLocked, recordId, lo
   return (
     <div>
       {error && <p style={{ color: 'var(--red)', fontSize: 13, marginBottom: 12 }}>{error}</p>}
-
-      {recordId && (
-        <div style={{ marginBottom: 12 }}>
-          <LockBadge isLocked={isLocked} lockedAt={lockedAt} lockedBy={lockedBy} recordId={recordId} table="clinic_screenings" onUnlocked={onUnlocked} onRelocked={onRelocked} />
-        </div>
-      )}
-      {isLocked && <LockedBanner />}
-
-      <fieldset disabled={isLocked} style={{ border: 'none', padding: 0, margin: 0 }}>
 
       {/* Section A — Identitas */}
       <Collapsible title="A. Identitas Pasien" defaultOpen>
@@ -810,28 +806,22 @@ function ScreeningTab({ visit, patient, onToast, onSaved, isLocked, recordId, lo
         </Collapsible>
       )}
 
-      </fieldset>
-
       {/* Sticky footer */}
-      {!isLocked && (
-        <div style={{
-          position: 'sticky', bottom: 0, display: 'flex', justifyContent: 'flex-end', gap: 8,
-          padding: '12px 0 4px', marginTop: 16, background: 'var(--bg-card, #fff)', borderTop: '1px solid var(--border, #E5E7EB)',
-        }}>
-          <button className="btn-primary" style={{ width: 'auto', padding: '8px 16px' }} onClick={handleSave} disabled={saving}>
-            {saving ? 'Menyimpan...' : 'Simpan Screening'}
-          </button>
-        </div>
-      )}
+      <div style={{
+        position: 'sticky', bottom: 0, display: 'flex', justifyContent: 'flex-end', gap: 8,
+        padding: '12px 0 4px', marginTop: 16, background: 'var(--bg-card, #fff)', borderTop: '1px solid var(--border, #E5E7EB)',
+      }}>
+        <button className="btn-primary" style={{ width: 'auto', padding: '8px 16px' }} onClick={handleSave} disabled={saving}>
+          {saving ? 'Menyimpan...' : 'Simpan Screening'}
+        </button>
+      </div>
     </div>
   )
 }
 
 // ─── Consent ────────────────────────────────────────────────────────────────────
-function ConsentTab({ visit, onToast, onSaved, isLocked, recordId, lockedAt, lockedBy, onUnlocked, onRelocked }: {
+function ConsentTab({ visit, onToast, onSaved }: {
   visit: VisitRef; onToast: (m: string) => void; onSaved?: () => void
-  isLocked: boolean; recordId: string | null; lockedAt: string | null; lockedBy: string | null
-  onUnlocked: () => void; onRelocked: () => void
 }) {
   const { hasPermission, user } = useAuth()
   const [services, setServices] = useState<string[]>([])
@@ -890,8 +880,10 @@ function ConsentTab({ visit, onToast, onSaved, isLocked, recordId, lockedAt, loc
           is_agreed: true, signature_data: signature, signed_by_name: name.trim(), signed_at: signedAt,
         })
       }
+      // Re-edit consent yang sudah ada → catat jejak ringan per record (tanpa alasan)
+      if (user) { for (const c of consents) await logRecordEdit('clinic_consents', c.id, user.full_name, user.role) }
       const saved = await getConsentsByVisit(visit.id)
-      if (user) { for (const c of saved) await lockRecord('clinic_consents', c.id, user.full_name) }
+      setConsents(saved)
       onToast('Semua consent tersimpan')
       onSaved?.()
     } catch (err) {
@@ -918,13 +910,6 @@ function ConsentTab({ visit, onToast, onSaved, isLocked, recordId, lockedAt, loc
               Dengan menandatangani di bawah ini, saya menyatakan telah membaca dan menyetujui seluruh persetujuan di atas.
             </p>
 
-            {recordId && (
-              <div style={{ marginBottom: 12 }}>
-                <LockBadge isLocked={isLocked} lockedAt={lockedAt} lockedBy={lockedBy} recordId={recordId} table="clinic_consents" onUnlocked={onUnlocked} onRelocked={onRelocked} />
-              </div>
-            )}
-            {isLocked && <LockedBanner />}
-
             {existingSigned && !reSigning ? (
               <div>
                 <div style={{ fontSize: 13, color: 'var(--green)', fontWeight: 600, marginBottom: 8 }}>
@@ -933,20 +918,18 @@ function ConsentTab({ visit, onToast, onSaved, isLocked, recordId, lockedAt, loc
                 {existingSigned.signature_data && (
                   <img src={existingSigned.signature_data} alt="signature" style={{ display: 'block', marginBottom: 12, border: '2px solid var(--green)', borderRadius: 8, background: '#fff', maxWidth: 300 }} />
                 )}
-                {!isLocked && (
-                  <button type="button" className="btn-secondary" style={{ width: 'auto', padding: '6px 12px' }} onClick={() => { setReSigning(true); padRef.current?.clear() }}>Tanda Tangan Ulang</button>
-                )}
+                <button type="button" className="btn-secondary" style={{ width: 'auto', padding: '6px 12px' }} onClick={() => { setReSigning(true); padRef.current?.clear() }}>Tanda Tangan Ulang</button>
               </div>
             ) : (
               <>
                 <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, marginBottom: 12, cursor: 'pointer' }}>
-                  <input type="checkbox" checked={agreed} onChange={e => setAgreed(e.target.checked)} disabled={isLocked} style={{ width: 'auto', accentColor: '#065F46' }} />
+                  <input type="checkbox" checked={agreed} onChange={e => setAgreed(e.target.checked)} style={{ width: 'auto', accentColor: '#065F46' }} />
                   Saya telah membaca dan menyetujui seluruh persetujuan di atas
                 </label>
 
                 <div className="form-group">
                   <label>Tanda Tangan</label>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-start', pointerEvents: isLocked ? 'none' : 'auto', opacity: isLocked ? 0.6 : 1 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-start' }}>
                     <SignaturePad ref={padRef} initial={reSigning ? null : (existingSigned?.signature_data ?? null)} />
                     <button type="button" className="btn-secondary" style={{ width: 'auto', padding: '6px 12px' }} onClick={() => padRef.current?.clear()}>Clear</button>
                   </div>
@@ -954,7 +937,7 @@ function ConsentTab({ visit, onToast, onSaved, isLocked, recordId, lockedAt, loc
 
                 <div className="form-group">
                   <label>Nama Penandatangan</label>
-                  <input type="text" value={name} onChange={e => setName(e.target.value)} disabled={isLocked} />
+                  <input type="text" value={name} onChange={e => setName(e.target.value)} />
                 </div>
               </>
             )}
@@ -964,7 +947,7 @@ function ConsentTab({ visit, onToast, onSaved, isLocked, recordId, lockedAt, loc
             position: 'sticky', bottom: 0, display: 'flex', justifyContent: 'flex-end', gap: 8,
             padding: '12px 0 4px', background: 'var(--bg-card, #fff)', borderTop: '1px solid var(--border, #E5E7EB)',
           }}>
-            {(!existingSigned || reSigning) && !isLocked && (
+            {(!existingSigned || reSigning) && (
               <button className="btn-primary" style={{ width: 'auto', padding: '8px 16px' }} onClick={handleSaveAll} disabled={saving}>
                 {saving ? 'Menyimpan...' : 'Simpan Semua Consent'}
               </button>
@@ -1085,8 +1068,6 @@ interface TherapistAssessment {
   notes: string
 }
 
-interface LockInfo { id: string; isLocked: boolean; lockedAt: string | null; lockedBy: string | null }
-interface LockRow { id: string; visit_id: string; is_locked: boolean | null; locked_at: string | null; locked_by: string | null }
 
 const TRIASE_SELECT = `
   id, visit_code, visit_date, visit_time, status, assigned_therapist_id,
@@ -1129,8 +1110,6 @@ export default function ClinicTriase() {
   const [loading, setLoading] = useState(true)
   const [screeningStatus, setScreeningStatus] = useState<Record<string, boolean>>({})
   const [consentStatus, setConsentStatus] = useState<Record<string, boolean>>({})
-  const [screeningInfo, setScreeningInfo] = useState<Record<string, LockInfo>>({})
-  const [consentInfo, setConsentInfo] = useState<Record<string, LockInfo>>({})
   const [selectedVisit, setSelectedVisit] = useState<TriaseVisit | null>(null)
   const [modalTab, setModalTab] = useState<ModalTab>('screening')
   const [showModal, setShowModal] = useState(false)
@@ -1220,41 +1199,20 @@ export default function ClinicTriase() {
       const ids = rows.map(v => v.id)
       if (ids.length > 0) {
         const [scrRes, conRes] = await Promise.all([
-          supabase.from('clinic_screenings').select('id, visit_id, is_locked, locked_at, locked_by').in('visit_id', ids),
-          supabase.from('clinic_consents').select('id, visit_id, is_locked, locked_at, locked_by').in('visit_id', ids),
+          supabase.from('clinic_screenings').select('visit_id').in('visit_id', ids),
+          supabase.from('clinic_consents').select('visit_id').in('visit_id', ids),
         ])
         const scrMap: Record<string, boolean> = {}
         const conMap: Record<string, boolean> = {}
-        const scrInfo: Record<string, LockInfo> = {}
-        const conInfo: Record<string, LockInfo> = {}
         ids.forEach(id => { scrMap[id] = false; conMap[id] = false })
-
-        ;(scrRes.data as LockRow[] | null ?? []).forEach(s => {
-          scrMap[s.visit_id] = true
-          scrInfo[s.visit_id] = { id: s.id, isLocked: !!s.is_locked, lockedAt: s.locked_at, lockedBy: s.locked_by }
-        })
-
-        const conByVisit: Record<string, LockRow[]> = {}
-        ;(conRes.data as LockRow[] | null ?? []).forEach(c => {
-          conMap[c.visit_id] = true
-          if (!conByVisit[c.visit_id]) conByVisit[c.visit_id] = []
-          conByVisit[c.visit_id].push(c)
-        })
-        Object.entries(conByVisit).forEach(([vid, rowsForVisit]) => {
-          const allLocked = rowsForVisit.length > 0 && rowsForVisit.every(r => !!r.is_locked)
-          const first = rowsForVisit[0]
-          conInfo[vid] = { id: first.id, isLocked: allLocked, lockedAt: first.locked_at, lockedBy: first.locked_by }
-        })
+        ;((scrRes.data as { visit_id: string }[] | null) ?? []).forEach(s => { scrMap[s.visit_id] = true })
+        ;((conRes.data as { visit_id: string }[] | null) ?? []).forEach(c => { conMap[c.visit_id] = true })
 
         setScreeningStatus(scrMap)
         setConsentStatus(conMap)
-        setScreeningInfo(scrInfo)
-        setConsentInfo(conInfo)
       } else {
         setScreeningStatus({})
         setConsentStatus({})
-        setScreeningInfo({})
-        setConsentInfo({})
       }
     } catch (e) {
       console.error(e)
@@ -1633,12 +1591,6 @@ export default function ClinicTriase() {
                   patient={selectedVisit.patient}
                   onToast={showToastMsg}
                   onSaved={handleScreeningSaved}
-                  isLocked={screeningInfo[selectedVisit.id]?.isLocked ?? false}
-                  recordId={screeningInfo[selectedVisit.id]?.id ?? null}
-                  lockedAt={screeningInfo[selectedVisit.id]?.lockedAt ?? null}
-                  lockedBy={screeningInfo[selectedVisit.id]?.lockedBy ?? null}
-                  onUnlocked={() => fetchVisits(false)}
-                  onRelocked={() => fetchVisits(false)}
                   defaultServices={selectedVisit.services.map(s => s.service_name)}
                 />
               )}
@@ -1648,12 +1600,6 @@ export default function ClinicTriase() {
                   visit={visitRef}
                   onToast={showToastMsg}
                   onSaved={handleConsentSaved}
-                  isLocked={consentInfo[selectedVisit.id]?.isLocked ?? false}
-                  recordId={consentInfo[selectedVisit.id]?.id ?? null}
-                  lockedAt={consentInfo[selectedVisit.id]?.lockedAt ?? null}
-                  lockedBy={consentInfo[selectedVisit.id]?.lockedBy ?? null}
-                  onUnlocked={() => fetchVisits(false)}
-                  onRelocked={() => fetchVisits(false)}
                 />
               )}
               {modalTab === 'riwayat' && canViewHistory && (

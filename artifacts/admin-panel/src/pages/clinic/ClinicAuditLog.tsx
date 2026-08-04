@@ -20,6 +20,7 @@ function ActionBadge({ action }: { action: string }) {
   const map: Record<string, { label: string; style: React.CSSProperties }> = {
     unlock: { label: 'Dibuka', style: { background: '#FEF3C7', color: '#92400E' } },
     relock: { label: 'Dikunci', style: { background: '#D1FAE5', color: '#065F46' } },
+    edit: { label: 'Diedit', style: { background: '#EDE9FE', color: '#5B21B6' } },
     reassign: { label: 'Reassign', style: { background: '#DBEAFE', color: '#1D4ED8' } },
     edit_transaction: { label: 'Edit Transaksi', style: { background: '#FEE2E2', color: '#991B1B' } },
   }

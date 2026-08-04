@@ -1783,6 +1783,25 @@ export async function relockRecord(
   })
 }
 
+// Jejak ringan untuk form Triase tanpa lock (screening/consent): catat siapa yang
+// mengedit ulang record yang sudah ada — tanpa alasan wajib, tanpa friksi UI.
+// Gagal insert tidak menggagalkan save (pola sama dengan audit di unlock/relock).
+export async function logRecordEdit(
+  table: LockableTable,
+  recordId: string,
+  performedBy: string,
+  performedByRole: string,
+): Promise<void> {
+  await supabase.from('clinic_audit_logs').insert({
+    action: 'edit',
+    record_type: table,
+    record_id: recordId,
+    performed_by: performedBy,
+    performed_by_role: performedByRole,
+    metadata: { table },
+  })
+}
+
 export async function listAuditLogs(params: {
   recordType?: string
   recordId?: string
