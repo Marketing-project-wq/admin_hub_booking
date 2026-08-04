@@ -30,6 +30,7 @@ const UNIT_MENUS: Record<string, MenuItem[]> = {
     { label: '— Master Data',  path: null,                        divider: true },
     { label: 'Units',          path: '/arena/master/units' },
     { label: 'Class Types',    path: '/arena/master/class-types' },
+    { label: 'Packages',       path: '/arena/master/packages' },
     { label: 'Schedules',      path: '/arena/master/schedules' },
     { label: 'Coaches',        path: '/arena/master/coaches' },
     { label: 'Add-ons',        path: '/arena/master/addons' },
