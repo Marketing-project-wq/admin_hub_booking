@@ -22,6 +22,7 @@ interface ClassEvent {
   end_time: string
   instructor: string | null
   is_cancelled: boolean
+  cancelled_reason: string | null
   quota: number
   // PostgREST returns the to-one embed as an object (older versions: an array)
   arena_class_types: ClassTypeEmbed | ClassTypeEmbed[] | null
@@ -102,13 +103,12 @@ export default function ArenaCalendar() {
       supabase
         .from('arena_class_schedules')
         .select(`
-          id, schedule_date, start_time, end_time, instructor, is_cancelled, quota,
+          id, schedule_date, start_time, end_time, instructor, is_cancelled, cancelled_reason, quota,
           arena_class_types ( name, color ),
           arena_class_bookings ( id, booking_code, full_name, phone, status )
         `)
         .gte('schedule_date', first)
         .lte('schedule_date', last)
-        .eq('is_cancelled', false)
         .order('start_time', { ascending: true }),
       supabase
         .from('arena_bookings')
@@ -129,7 +129,12 @@ export default function ArenaCalendar() {
 
   const classByDate = useMemo(() => {
     const m: Record<string, ClassEvent[]> = {}
-    for (const s of schedules) (m[s.schedule_date] ||= []).push(s)
+    // Jadwal cancelled disembunyikan KECUALI masih punya booking aktif — kondisi
+    // "berbahaya" (peserta sudah bayar tapi jadwalnya dibatalkan) harus terlihat.
+    for (const s of schedules) {
+      if (s.is_cancelled && activeParts(s).length === 0) continue
+      ;(m[s.schedule_date] ||= []).push(s)
+    }
     for (const k in m) m[k].sort((a, b) => a.start_time.localeCompare(b.start_time))
     return m
   }, [schedules])
@@ -224,6 +229,28 @@ export default function ArenaCalendar() {
                     const color = ct?.color || DEFAULT_CLASS_COLOR
                     const name = ct?.name || 'Kelas'
                     const count = activeParts(s).length
+                    // Kondisi berbahaya: jadwal DIBATALKAN tapi masih ada booking aktif menempel
+                    if (s.is_cancelled) {
+                      return (
+                        <button
+                          key={s.id}
+                          onClick={() => setSelectedClass(s)}
+                          title={`DIBATALKAN${s.cancelled_reason ? ` (${s.cancelled_reason})` : ''} — masih ada ${count} booking aktif menempel! ${fmtTime(s.start_time)} ${name}`}
+                          style={{
+                            background: 'repeating-linear-gradient(45deg, #6B7280, #6B7280 6px, #4B5563 6px, #4B5563 12px)',
+                            color: '#fff', border: '1px solid #B91C1C', borderRadius: 4,
+                            padding: '3px 6px', fontSize: 11, cursor: 'pointer', display: 'flex', gap: 4,
+                            alignItems: 'center', width: '100%', fontFamily: 'inherit', lineHeight: 1.3,
+                          }}
+                        >
+                          <span style={{ flexShrink: 0 }}>⚠</span>
+                          <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'left', textDecoration: 'line-through' }}>
+                            {fmtTime(s.start_time)} {name}
+                          </span>
+                          <span style={{ background: '#B91C1C', borderRadius: 8, padding: '0 5px', fontWeight: 700, fontSize: 10 }}>{count}</span>
+                        </button>
+                      )
+                    }
                     return (
                       <button
                         key={s.id}
@@ -288,6 +315,16 @@ export default function ArenaCalendar() {
                 <button onClick={() => setSelectedClass(null)} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--text-muted)' }}><X size={18} /></button>
               </div>
 
+              {selectedClass.is_cancelled && (
+                <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, padding: '10px 14px', marginBottom: 14 }}>
+                  <p style={{ margin: 0, fontSize: 13, color: '#991B1B', lineHeight: 1.6 }}>
+                    <strong>⚠ Jadwal ini sudah DIBATALKAN</strong>
+                    {selectedClass.cancelled_reason ? ` (alasan: ${selectedClass.cancelled_reason})` : ''} tapi masih
+                    ada {activeParts(selectedClass).length} booking aktif menempel — peserta sudah booking/bayar dan
+                    belum dipindahkan. Tindak lanjuti lewat halaman Class Bookings (pindah jadwal) atau proses refund.
+                  </p>
+                </div>
+              )}
               <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
                 <span className="badge badge-confirmed">{confirmedCount} confirmed</span>
                 <span className="badge badge-pending">{pendingCount} pending</span>

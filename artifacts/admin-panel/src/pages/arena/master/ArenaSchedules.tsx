@@ -34,6 +34,13 @@ const emptyBulk = () => ({
 const todayStr = () => new Date().toISOString().slice(0, 10)
 const next7Str = () => new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
 
+// Kandidat jadwal tujuan untuk opsi "pindahkan dulu, baru batalkan"
+interface MoveTarget {
+  id: string; schedule_date: string; start_time: string; end_time: string;
+  instructor: string; quota: number; confirmed: number;
+  class_type?: { name: string; color: string } | null;
+}
+
 export default function ArenaSchedules() {
   const { user } = useAuth()
   const [data, setData] = useState<Schedule[]>([])
@@ -53,6 +60,22 @@ export default function ArenaSchedules() {
   const [confirmCancel, setConfirmCancel] = useState<Schedule | null>(null)
   const [cancelReason, setCancelReason] = useState('')
   const [confirmDelete, setConfirmDelete] = useState<Schedule | null>(null)
+
+  // Guard cancel: jumlah booking confirmed di-fetch FRESH saat modal dibuka
+  // (booked_count dari list bisa basi). null = masih memeriksa.
+  const [cancelConfirmedCount, setCancelConfirmedCount] = useState<number | null>(null)
+  const [ackCancel, setAckCancel] = useState(false)
+  const [cancelBusy, setCancelBusy] = useState(false)
+  const [cancelError, setCancelError] = useState('')
+  // Opsi "pindahkan dulu, baru batalkan" (pola RescheduleModal, versi massal)
+  const [moveMode, setMoveMode] = useState(false)
+  const [moveTargets, setMoveTargets] = useState<MoveTarget[]>([])
+  const [moveTargetsLoading, setMoveTargetsLoading] = useState(false)
+  const [moveTargetId, setMoveTargetId] = useState<string | null>(null)
+  // Guard bulk cancel: daftar jadwal terpilih yang masih punya booking confirmed
+  const [bulkAffected, setBulkAffected] = useState<{ s: Schedule; count: number }[]>([])
+  const [ackBulk, setAckBulk] = useState(false)
+  const [bulkChecking, setBulkChecking] = useState(false)
 
   // Filters
   const [dateFrom, setDateFrom] = useState(todayStr)
@@ -173,17 +196,112 @@ export default function ArenaSchedules() {
     setShowModal(false); fetchData()
   }
 
-  const handleToggleCancel = async (s: Schedule) => {
-    if (s.is_cancelled) {
-      await supabase.from('arena_class_schedules').update({
-        is_cancelled: false, cancelled_reason: null, updated_at: new Date().toISOString(),
-      }).eq('id', s.id)
-    } else {
-      await supabase.from('arena_class_schedules').update({
-        is_cancelled: true, cancelled_reason: cancelReason || null, updated_at: new Date().toISOString(),
-      }).eq('id', s.id)
+  // Buka modal cancel/reaktivasi + fetch FRESH jumlah booking confirmed (guard)
+  const openCancelModal = async (s: Schedule) => {
+    setConfirmCancel(s); setCancelReason(''); setCancelError('')
+    setAckCancel(false); setMoveMode(false); setMoveTargetId(null); setMoveTargets([])
+    if (s.is_cancelled) { setCancelConfirmedCount(0); return }   // arah reaktivasi — tanpa guard
+    setCancelConfirmedCount(null)
+    const { count } = await supabase
+      .from('arena_class_bookings')
+      .select('id', { count: 'exact', head: true })
+      .eq('schedule_id', s.id)
+      .eq('status', 'confirmed')
+    setCancelConfirmedCount(count ?? 0)
+  }
+
+  const closeCancelModal = () => {
+    setConfirmCancel(null); setCancelReason(''); setCancelError('')
+    setAckCancel(false); setMoveMode(false); setMoveTargetId(null); setMoveTargets([])
+    setCancelConfirmedCount(null)
+  }
+
+  // Jadwal tujuan pemindahan: aktif, mendatang, bukan jadwal ini (pola RescheduleModal)
+  const fetchMoveTargets = async (current: Schedule) => {
+    setMoveTargetsLoading(true)
+    const { data: rows } = await supabase
+      .from('arena_class_schedules')
+      .select('id, schedule_date, start_time, end_time, instructor, quota, class_type:arena_class_types(name, color)')
+      .eq('is_cancelled', false)
+      .gte('schedule_date', todayStr())
+      .neq('id', current.id)
+      .order('schedule_date', { ascending: true })
+      .order('start_time', { ascending: true })
+    const targets = (rows || []) as unknown as MoveTarget[]
+    const ids = targets.map(t => t.id)
+    const counts: Record<string, number> = {}
+    if (ids.length > 0) {
+      const { data: bookings } = await supabase
+        .from('arena_class_bookings')
+        .select('schedule_id')
+        .in('schedule_id', ids)
+        .eq('status', 'confirmed')
+      for (const b of (bookings || [])) counts[b.schedule_id] = (counts[b.schedule_id] || 0) + 1
     }
-    setConfirmCancel(null); setCancelReason(''); fetchData()
+    setMoveTargets(targets.map(t => ({ ...t, confirmed: counts[t.id] || 0 })))
+    setMoveTargetsLoading(false)
+  }
+
+  const handleToggleCancel = async (s: Schedule) => {
+    setCancelBusy(true); setCancelError('')
+    try {
+      const { error: err } = s.is_cancelled
+        ? await supabase.from('arena_class_schedules').update({
+            is_cancelled: false, cancelled_reason: null, updated_at: new Date().toISOString(),
+          }).eq('id', s.id)
+        : await supabase.from('arena_class_schedules').update({
+            is_cancelled: true, cancelled_reason: cancelReason || null, updated_at: new Date().toISOString(),
+          }).eq('id', s.id)
+      if (err) throw err
+      closeCancelModal(); fetchData()
+    } catch (err) {
+      setCancelError(err instanceof Error ? err.message : 'Gagal memproses')
+    } finally {
+      setCancelBusy(false)
+    }
+  }
+
+  // Pindahkan SEMUA booking confirmed ke jadwal tujuan, LALU batalkan jadwal.
+  // Urutan aman: kalau pemindahan gagal, jadwal tidak jadi dibatalkan.
+  const handleMoveAndCancel = async () => {
+    if (!confirmCancel || !moveTargetId) return
+    setCancelBusy(true); setCancelError('')
+    try {
+      const { error: mvErr } = await supabase
+        .from('arena_class_bookings')
+        .update({ schedule_id: moveTargetId, updated_at: new Date().toISOString() })
+        .eq('schedule_id', confirmCancel.id)
+        .eq('status', 'confirmed')
+      if (mvErr) throw mvErr
+      const { error: cErr } = await supabase.from('arena_class_schedules').update({
+        is_cancelled: true, cancelled_reason: cancelReason || null, updated_at: new Date().toISOString(),
+      }).eq('id', confirmCancel.id)
+      if (cErr) throw new Error(`Peserta sudah dipindahkan, tapi jadwal gagal dibatalkan: ${cErr.message}. Coba Cancel lagi.`)
+      closeCancelModal(); fetchData()
+    } catch (err) {
+      setCancelError(err instanceof Error ? err.message : 'Gagal memindahkan peserta')
+    } finally {
+      setCancelBusy(false)
+    }
+  }
+
+  // Guard bulk: cek booking confirmed semua jadwal terpilih sebelum konfirmasi
+  const openBulkConfirm = async () => {
+    setBulkChecking(true); setAckBulk(false)
+    const ids = Array.from(selected)
+    const { data: bookings } = await supabase
+      .from('arena_class_bookings')
+      .select('schedule_id')
+      .in('schedule_id', ids)
+      .eq('status', 'confirmed')
+    const counts: Record<string, number> = {}
+    for (const b of (bookings || [])) counts[b.schedule_id] = (counts[b.schedule_id] || 0) + 1
+    const affected = data
+      .filter(s => selected.has(s.id) && (counts[s.id] || 0) > 0)
+      .map(s => ({ s, count: counts[s.id] || 0 }))
+    setBulkAffected(affected)
+    setBulkChecking(false)
+    setShowBulkConfirm(true)
   }
 
   const handleDelete = async (s: Schedule) => {
@@ -386,7 +504,7 @@ export default function ArenaSchedules() {
                     </td>
                     <td style={{ whiteSpace: 'nowrap' }}>
                       <button className="action-btn detail" onClick={() => openEdit(s)}>Edit</button>
-                      <button className="action-btn" onClick={() => { setConfirmCancel(s); setCancelReason('') }}>
+                      <button className="action-btn" onClick={() => openCancelModal(s)}>
                         {s.is_cancelled ? 'Aktifkan' : 'Cancel'}
                       </button>
                       {booked === 0 && (
@@ -410,8 +528,8 @@ export default function ArenaSchedules() {
           boxShadow: '0 4px 20px rgba(0,0,0,0.25)', zIndex: 100, whiteSpace: 'nowrap',
         }}>
           <span style={{ fontSize: 14 }}><strong>{selected.size}</strong> jadwal dipilih</span>
-          <button className="btn-danger" style={{ padding: '8px 16px', fontSize: 13 }} onClick={() => setShowBulkConfirm(true)}>
-            Cancel Semua
+          <button className="btn-danger" style={{ padding: '8px 16px', fontSize: 13 }} onClick={openBulkConfirm} disabled={bulkChecking}>
+            {bulkChecking ? 'Memeriksa booking...' : 'Cancel Semua'}
           </button>
           <button
             style={{
@@ -592,31 +710,124 @@ export default function ArenaSchedules() {
         </div>
       )}
 
-      {/* Cancel confirmation with reason input */}
-      {confirmCancel && (
+      {/* Cancel confirmation with reason input + guard booking confirmed */}
+      {confirmCancel && (() => {
+        const cnt = cancelConfirmedCount
+        const hasConfirmed = !confirmCancel.is_cancelled && (cnt ?? 0) > 0
+        const eligibleTargets = moveTargets.filter(t => t.quota - t.confirmed >= (cnt ?? 0))
+        return (
         <div className="modal-overlay">
-          <div className="modal-box" style={{ maxWidth: 420 }}>
+          <div className="modal-box" style={{ maxWidth: hasConfirmed && moveMode ? 640 : 460 }}>
             <h3 className="modal-title">{confirmCancel.is_cancelled ? 'Reaktivasi Jadwal' : 'Cancel Jadwal'}</h3>
             <p style={{ color: 'var(--text-muted)', margin: '0 0 16px' }}>
               {confirmCancel.is_cancelled
                 ? `Aktifkan kembali jadwal ${fmtDate(confirmCancel.schedule_date)}?`
-                : `Batalkan jadwal ${fmtDate(confirmCancel.schedule_date)}?`}
+                : `Batalkan jadwal ${fmtDate(confirmCancel.schedule_date)} ${fmtTime(confirmCancel.start_time)}?`}
             </p>
+
+            {cancelError && <p style={{ color: 'var(--red)', fontSize: 13, marginBottom: 12 }}>{cancelError}</p>}
+
+            {!confirmCancel.is_cancelled && cnt === null && (
+              <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16 }}>Memeriksa booking confirmed...</p>
+            )}
+
+            {hasConfirmed && (
+              <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, padding: '12px 14px', marginBottom: 16 }}>
+                <p style={{ margin: 0, fontSize: 13, color: '#991B1B', lineHeight: 1.6 }}>
+                  <strong>⚠ Jadwal ini masih punya {cnt} peserta confirmed</strong> yang sudah booking/bayar.
+                  Membatalkan jadwal <strong>TIDAK</strong> memindahkan atau memberi tahu mereka — booking
+                  tetap ada tapi hilang dari tampilan Kalender, dan uang yang sudah masuk tidak otomatis
+                  di-refund. Pindahkan peserta ke jadwal lain dulu, atau lanjutkan hanya jika benar-benar yakin.
+                </p>
+              </div>
+            )}
+
             {!confirmCancel.is_cancelled && (
               <div className="form-group">
                 <label>Alasan Pembatalan</label>
                 <input type="text" value={cancelReason} onChange={e => setCancelReason(e.target.value)} placeholder="Opsional..." />
               </div>
             )}
+
+            {hasConfirmed && (
+              <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12, marginBottom: 4 }}>
+                <label style={{ display: 'flex', gap: 8, alignItems: 'center', cursor: 'pointer', fontSize: 14, fontWeight: 600 }}>
+                  <input
+                    type="checkbox"
+                    checked={moveMode}
+                    onChange={e => {
+                      setMoveMode(e.target.checked); setMoveTargetId(null)
+                      if (e.target.checked && moveTargets.length === 0) fetchMoveTargets(confirmCancel)
+                    }}
+                    style={{ width: 'auto' }}
+                  />
+                  Pindahkan {cnt} peserta ke jadwal lain dulu (direkomendasikan)
+                </label>
+
+                {moveMode && (
+                  <div style={{ marginTop: 10 }}>
+                    {moveTargetsLoading ? (
+                      <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Memuat jadwal tujuan...</p>
+                    ) : eligibleTargets.length === 0 ? (
+                      <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+                        Tidak ada jadwal aktif mendatang dengan sisa kuota ≥ {cnt}.
+                      </p>
+                    ) : (
+                      <div style={{ maxHeight: 260, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 6 }}>
+                        {eligibleTargets.map(t => {
+                          const sisa = t.quota - t.confirmed
+                          return (
+                            <label key={t.id} style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '8px 12px', borderBottom: '1px solid var(--border)', cursor: 'pointer', fontSize: 13 }}>
+                              <input type="radio" name="move-target" checked={moveTargetId === t.id} onChange={() => setMoveTargetId(t.id)} style={{ width: 'auto', accentColor: 'var(--red)' }} />
+                              {t.class_type?.color && <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 999, background: t.class_type.color, flexShrink: 0 }} />}
+                              <span style={{ flex: 1 }}>
+                                {fmtDate(t.schedule_date)} — {fmtTime(t.start_time)}–{fmtTime(t.end_time)} — {t.class_type?.name || 'Kelas'} ({t.instructor})
+                              </span>
+                              <span style={{ color: sisa <= 3 ? 'var(--red)' : 'var(--text-muted)', fontWeight: 600, whiteSpace: 'nowrap' }}>{sisa} slot</span>
+                            </label>
+                          )
+                        })}
+                      </div>
+                    )}
+                    <small style={{ color: 'var(--text-muted)', fontSize: 11, marginTop: 6, display: 'block' }}>
+                      Hanya jadwal dengan sisa kuota ≥ {cnt} yang ditampilkan. Peserta TIDAK menerima notifikasi otomatis — kabari manual bila perlu.
+                    </small>
+                  </div>
+                )}
+
+                {!moveMode && (
+                  <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', cursor: 'pointer', fontSize: 13, marginTop: 10, color: '#991B1B' }}>
+                    <input type="checkbox" checked={ackCancel} onChange={e => setAckCancel(e.target.checked)} style={{ width: 'auto', marginTop: 2 }} />
+                    Saya mengerti {cnt} peserta confirmed akan tetap menempel di jadwal yang dibatalkan dan harus ditangani manual.
+                  </label>
+                )}
+              </div>
+            )}
+
             <div className="modal-footer">
-              <button className="btn-secondary" onClick={() => { setConfirmCancel(null); setCancelReason('') }}>Batal</button>
-              <button className={confirmCancel.is_cancelled ? 'btn-primary' : 'btn-danger'} onClick={() => handleToggleCancel(confirmCancel)}>
-                Konfirmasi
-              </button>
+              <button className="btn-secondary" onClick={closeCancelModal} disabled={cancelBusy}>Batal</button>
+              {hasConfirmed && moveMode ? (
+                <button
+                  className="btn-danger"
+                  onClick={handleMoveAndCancel}
+                  disabled={cancelBusy || !moveTargetId}
+                >
+                  {cancelBusy ? 'Memproses...' : `Pindahkan ${cnt} Peserta & Batalkan`}
+                </button>
+              ) : (
+                <button
+                  className={confirmCancel.is_cancelled ? 'btn-primary' : 'btn-danger'}
+                  onClick={() => handleToggleCancel(confirmCancel)}
+                  disabled={cancelBusy || cnt === null || (hasConfirmed && !ackCancel)}
+                >
+                  {cancelBusy ? 'Memproses...' : 'Konfirmasi'}
+                </button>
+              )}
             </div>
           </div>
         </div>
-      )}
+        )
+      })()}
 
       {confirmDelete && (
         <ConfirmModal
@@ -628,7 +839,7 @@ export default function ArenaSchedules() {
         />
       )}
 
-      {showBulkConfirm && (
+      {showBulkConfirm && bulkAffected.length === 0 && (
         <ConfirmModal
           title="Cancel Jadwal"
           message={`Batalkan ${selected.size} jadwal yang dipilih? Tindakan ini tidak bisa dibatalkan.`}
@@ -637,6 +848,41 @@ export default function ArenaSchedules() {
           danger
           loading={bulkLoading}
         />
+      )}
+
+      {/* Bulk cancel dengan jadwal terdampak (masih ada booking confirmed) */}
+      {showBulkConfirm && bulkAffected.length > 0 && (
+        <div className="modal-overlay">
+          <div className="modal-box" style={{ maxWidth: 520 }}>
+            <h3 className="modal-title">Cancel {selected.size} Jadwal</h3>
+            <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, padding: '12px 14px', marginBottom: 12 }}>
+              <p style={{ margin: 0, fontSize: 13, color: '#991B1B', lineHeight: 1.6 }}>
+                <strong>⚠ {bulkAffected.length} dari {selected.size} jadwal masih punya total{' '}
+                {bulkAffected.reduce((n, a) => n + a.count, 0)} peserta confirmed</strong> yang sudah
+                booking/bayar. Membatalkan TIDAK memindahkan atau memberi tahu mereka. Untuk memindahkan
+                peserta, batalkan jadwal tersebut satu per satu lewat tombol Cancel di barisnya.
+              </p>
+            </div>
+            <div style={{ maxHeight: 200, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 6, marginBottom: 12 }}>
+              {bulkAffected.map(({ s, count }) => (
+                <div key={s.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '8px 12px', borderBottom: '1px solid var(--border)', fontSize: 13 }}>
+                  <span>{fmtDate(s.schedule_date)} — {fmtTime(s.start_time)} — {s.class_type?.name || 'Kelas'}</span>
+                  <span style={{ color: 'var(--red)', fontWeight: 700, whiteSpace: 'nowrap' }}>{count} confirmed</span>
+                </div>
+              ))}
+            </div>
+            <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', cursor: 'pointer', fontSize: 13, color: '#991B1B', marginBottom: 4 }}>
+              <input type="checkbox" checked={ackBulk} onChange={e => setAckBulk(e.target.checked)} style={{ width: 'auto', marginTop: 2 }} />
+              Saya mengerti peserta confirmed di jadwal-jadwal tersebut akan tetap menempel dan harus ditangani manual.
+            </label>
+            <div className="modal-footer">
+              <button className="btn-secondary" onClick={() => setShowBulkConfirm(false)} disabled={bulkLoading}>Batal</button>
+              <button className="btn-danger" onClick={handleBulkCancel} disabled={bulkLoading || !ackBulk}>
+                {bulkLoading ? 'Memproses...' : `Batalkan ${selected.size} Jadwal`}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
