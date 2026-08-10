@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
 import { fmtDateTime } from '../../lib/format'
+import MedicalResumeModal from './MedicalResumeModal'
+import { getPatient, type ClinicPatient } from '../../lib/clinic'
 
 // Riwayat Rekam Medis pasien — komponen display MURNI READ-ONLY (tidak ada satu
 // pun kontrol tulis). Dipakai tab "Riwayat Rekam Medis" di modal EMR ClinicDokter
@@ -33,6 +35,11 @@ export default function MedicalHistoryPanel({ patientId, currentVisitId }: {
 }) {
   const [history, setHistory] = useState<MedicalHistoryRow[]>([])
   const [loading, setLoading] = useState(false)
+  // Resume Medis lengkap (tombol "Lihat Detail" per kunjungan). Pasien di-fetch
+  // penuh sekali lalu di-cache; resumeVisitId sekaligus jadi penanda modal terbuka.
+  const [resumePatient, setResumePatient] = useState<ClinicPatient | null>(null)
+  const [resumeVisitId, setResumeVisitId] = useState<string | null>(null)
+  const [resumeLoadingId, setResumeLoadingId] = useState<string | null>(null)
 
   useEffect(() => {
     if (!patientId) { setHistory([]); return }
@@ -83,6 +90,20 @@ export default function MedicalHistoryPanel({ patientId, currentVisitId }: {
     fetchHistory()
   }, [patientId, currentVisitId])
 
+  const openResume = async (visitId: string) => {
+    if (!patientId) return
+    setResumeLoadingId(visitId)
+    try {
+      const p = resumePatient ?? await getPatient(patientId)
+      setResumePatient(p)
+      setResumeVisitId(visitId)
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setResumeLoadingId(null)
+    }
+  }
+
   return (
     <div style={{ padding: '16px 0' }}>
       {loading ? (
@@ -114,9 +135,19 @@ export default function MedicalHistoryPanel({ patientId, currentVisitId }: {
                     {h.visit_time && ` · ${h.visit_time.slice(0, 5)}`}
                   </div>
                 </div>
-                {h.assessment?.handled_by && (
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{h.assessment.handled_by}</div>
-                )}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  {h.assessment?.handled_by && (
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{h.assessment.handled_by}</div>
+                  )}
+                  <button
+                    className="btn-secondary"
+                    onClick={() => openResume(h.visit_id)}
+                    disabled={resumeLoadingId === h.visit_id}
+                    style={{ width: 'auto', padding: '4px 12px', fontSize: 11, whiteSpace: 'nowrap' }}
+                  >
+                    {resumeLoadingId === h.visit_id ? 'Memuat…' : 'Lihat Detail'}
+                  </button>
+                </div>
               </div>
 
               <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -184,6 +215,14 @@ export default function MedicalHistoryPanel({ patientId, currentVisitId }: {
             </div>
           ))}
         </div>
+      )}
+
+      {resumePatient && resumeVisitId && (
+        <MedicalResumeModal
+          patient={resumePatient}
+          initialVisitId={resumeVisitId}
+          onClose={() => setResumeVisitId(null)}
+        />
       )}
     </div>
   )

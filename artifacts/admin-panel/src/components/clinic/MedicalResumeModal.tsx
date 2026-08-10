@@ -43,8 +43,9 @@ function ageFromDob(dob: string | null): string {
 
 const GENDER_LABEL: Record<string, string> = { male: 'Laki-laki', female: 'Perempuan' }
 
-export default function MedicalResumeModal({ patient, onClose }: {
+export default function MedicalResumeModal({ patient, initialVisitId, onClose }: {
   patient: ClinicPatient
+  initialVisitId?: string
   onClose: () => void
 }) {
   const [list, setList] = useState<DoctorAssessmentListItem[] | null>(null)
@@ -81,10 +82,16 @@ export default function MedicalResumeModal({ patient, onClose }: {
     listDoctorAssessments(patient.id)
       .then(rows => {
         setList(rows)
-        if (rows.length > 0) setSelectedId(rows[0].assessment_id)
+        if (rows.length > 0) {
+          // Kalau dibuka dari kunjungan tertentu (tombol "Lihat Detail" di
+          // Riwayat Rekam Medis), preselect assessment kunjungan itu; kalau tidak
+          // ada assessment dokter utk kunjungan tsb, fallback ke yang terbaru.
+          const match = initialVisitId ? rows.find(r => r.visit_id === initialVisitId) : undefined
+          setSelectedId((match ?? rows[0]).assessment_id)
+        }
       })
       .catch(e => setError(e instanceof Error ? e.message : 'Gagal memuat daftar assessment'))
-  }, [patient.id])
+  }, [patient.id, initialVisitId])
 
   useEffect(() => {
     if (!selectedId) { setBundle(null); return }
