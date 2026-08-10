@@ -144,10 +144,12 @@ export default function Sidebar({ currentUnit, open, onClose }: SidebarProps) {
 
             // Admin: menu operasional dasar (Kasir, Visits, Bookings, Slots,
             // Kalender) + Patients bila punya permission can_manage_patients
-            // (pola sama dengan cek can_manage_users di atas).
+            // + EMR/Panel Dokter bila punya permission can_emr (admin yang juga
+            // dokter, mis. dr. Adrian). Pola sama dengan cek can_manage_users.
             if (role === 'admin' && m.path &&
                 !(['/clinic/kasir', '/clinic/visits', '/clinic/bookings', '/clinic/slots', '/clinic/calendar'].includes(m.path)) &&
-                !(m.path === '/clinic/patients' && user?.permissions?.can_manage_patients === true)) return null
+                !(m.path === '/clinic/patients' && user?.permissions?.can_manage_patients === true) &&
+                !(m.path === '/clinic/dokter' && user?.permissions?.can_emr === true)) return null
           }
 
           if (m.divider) {

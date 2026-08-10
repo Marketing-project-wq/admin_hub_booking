@@ -1418,9 +1418,11 @@ export interface ClinicUser {
 }
 
 export async function listClinicUsers(): Promise<ClinicUser[]> {
-  // admin_users punya RLS SELECT hardcoded `false` — select langsung dari client anon
-  // selalu 0 baris. Pakai RPC SECURITY DEFINER list_clinic_users() (kolom aman, tanpa hash).
-  const { data, error } = await supabase.rpc('list_clinic_users')
+  const { data, error } = await supabase
+    .from('admin_users')
+    .select('id, email, full_name, role, unit, permissions, is_active, last_login_at, created_at')
+    .eq('unit', 'clinic')
+    .order('full_name')
   if (error) throw error
   return (data ?? []) as ClinicUser[]
 }
@@ -1441,13 +1443,12 @@ export async function createClinicUser(u: {
 }
 
 export async function updateClinicUserPermissions(id: string, permissions: Record<string, boolean>): Promise<void> {
-  // admin_users tanpa policy UPDATE — update langsung 0 baris. Pakai RPC SECURITY DEFINER.
-  const { error } = await supabase.rpc('update_admin_user_permissions', { p_id: id, p_permissions: permissions })
+  const { error } = await supabase.from('admin_users').update({ permissions }).eq('id', id)
   if (error) throw error
 }
 
 export async function toggleClinicUserActive(id: string, active: boolean): Promise<void> {
-  const { error } = await supabase.rpc('set_admin_user_active', { p_id: id, p_active: active })
+  const { error } = await supabase.from('admin_users').update({ is_active: active }).eq('id', id)
   if (error) throw error
 }
 

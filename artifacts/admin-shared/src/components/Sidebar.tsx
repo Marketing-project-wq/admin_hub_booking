@@ -118,13 +118,9 @@ export default function Sidebar({ currentUnit, open, onClose }: SidebarProps) {
             // Therapist hanya bisa akses menu Triase
             if (role === 'therapist' && m.path !== '/clinic/triase') return null
 
-            // Admin (kasir) hanya bisa akses Kasir, Visits, Bookings, Slots.
-            // Admin yang juga dokter (izin can_emr) boleh akses Panel Dokter (EMR).
-            if (role === 'admin' && m.path) {
-              const adminPaths = ['/clinic/kasir', '/clinic/visits', '/clinic/bookings', '/clinic/slots']
-              if (user?.permissions?.can_emr === true) adminPaths.push('/clinic/dokter')
-              if (!adminPaths.includes(m.path)) return null
-            }
+            // Admin (kasir) hanya bisa akses Kasir dan Visits
+            if (role === 'admin' && m.path &&
+                !(['/clinic/kasir', '/clinic/visits', '/clinic/bookings', '/clinic/slots'].includes(m.path))) return null
           }
 
           if (m.divider) {
