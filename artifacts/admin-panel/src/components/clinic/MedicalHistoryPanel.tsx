@@ -146,54 +146,56 @@ export default function MedicalHistoryPanel({ patientId, currentVisitId }: {
                   </div>
                 )}
 
-                {/* Assessment dokter */}
-                {h.assessment && (
-                  <div style={{ background: 'var(--bg-elevated)', borderRadius: 8, padding: '10px 12px' }}>
-                    <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 8 }}>Kesimpulan Dokter</div>
-
-                    {h.assessment.diagnosis && (() => {
-                      const d = h.assessment.diagnosis
-                      const txt = typeof d === 'string'
-                        ? d
-                        : [d.text, (d.icd10_codes ?? []).map(c => c.code).join(', ')].filter(Boolean).join(' — ')
-                      return txt ? (
-                        <div style={{ marginBottom: 6 }}>
-                          <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--red)' }}>Diagnosis: </span>
-                          <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{txt}</span>
-                        </div>
-                      ) : null
-                    })()}
-                    {h.assessment.assessment && (
-                      <div style={{ marginBottom: 6 }}>
-                        <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)' }}>Assessment: </span>
-                        <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{h.assessment.assessment}</span>
+                {/* Kesimpulan Dokter — tiap bagian jadi blok berlabel sendiri,
+                    nilai di baris baru, whiteSpace pre-wrap supaya baris/enter
+                    tersimpan tampil rapi (bukan satu paragraf padat). */}
+                {h.assessment && (() => {
+                  const a = h.assessment!
+                  const diagTxt = !a.diagnosis
+                    ? ''
+                    : typeof a.diagnosis === 'string'
+                      ? a.diagnosis
+                      : [a.diagnosis.text, (a.diagnosis.icd10_codes ?? []).map(c => c.code).join(', ')].filter(Boolean).join(' — ')
+                  const planTxt = !a.plan
+                    ? ''
+                    : typeof a.plan === 'string'
+                      ? a.plan
+                      : [a.plan.treatment, a.plan.education_followup].filter(Boolean).join('\n\n')
+                  const assessmentTxt = a.assessment ?? ''
+                  if (!diagTxt && !assessmentTxt && !planTxt) return null
+                  return (
+                    <div style={{ background: 'var(--bg-elevated)', borderRadius: 8, padding: '12px 14px' }}>
+                      <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 10 }}>Kesimpulan Dokter</div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                        {diagTxt && <AssessmentField label="Diagnosis" value={diagTxt} accent />}
+                        {assessmentTxt && <AssessmentField label="Assessment" value={assessmentTxt} />}
+                        {planTxt && <AssessmentField label="Plan" value={planTxt} />}
                       </div>
-                    )}
-                    {h.assessment.plan && (() => {
-                      const p = h.assessment.plan
-                      const txt = typeof p === 'string'
-                        ? p
-                        : [p.treatment, p.education_followup].filter(Boolean).join(' — ')
-                      return txt ? (
-                        <div>
-                          <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)' }}>Plan: </span>
-                          <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{txt}</span>
+                      {a.updated_at && (
+                        <div style={{ marginTop: 12, paddingTop: 8, borderTop: '1px solid var(--border)', fontSize: 11, color: 'var(--text-muted)' }}>
+                          Disimpan {fmtDateTime(a.updated_at)}
+                          {(a.handled_by || a.locked_by) && ` · oleh ${a.handled_by || a.locked_by}`}
                         </div>
-                      ) : null
-                    })()}
-                    {h.assessment.updated_at && (
-                      <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--border)', fontSize: 11, color: 'var(--text-muted)' }}>
-                        Disimpan {fmtDateTime(h.assessment.updated_at)}
-                        {(h.assessment.handled_by || h.assessment.locked_by) && ` · oleh ${h.assessment.handled_by || h.assessment.locked_by}`}
-                      </div>
-                    )}
-                  </div>
-                )}
+                      )}
+                    </div>
+                  )
+                })()}
               </div>
             </div>
           ))}
         </div>
       )}
+    </div>
+  )
+}
+
+// Satu bagian Kesimpulan (Diagnosis / Assessment / Plan): label kecil di atas,
+// nilai di bawahnya dengan pre-wrap supaya multi-baris terbaca rapi.
+function AssessmentField({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
+  return (
+    <div>
+      <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', color: accent ? 'var(--red)' : 'var(--text-muted)', marginBottom: 3 }}>{label}</div>
+      <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.65, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{value}</div>
     </div>
   )
 }
