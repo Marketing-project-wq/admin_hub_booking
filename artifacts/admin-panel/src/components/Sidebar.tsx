@@ -143,13 +143,14 @@ export default function Sidebar({ currentUnit, open, onClose }: SidebarProps) {
             if (role === 'therapist' && m.path !== '/clinic/triase') return null
 
             // Admin: menu operasional dasar (Kasir, Visits, Bookings, Slots,
-            // Kalender) + Patients bila punya permission can_manage_patients
-            // + EMR/Panel Dokter bila punya permission can_emr (admin yang juga
-            // dokter, mis. dr. Adrian). Pola sama dengan cek can_manage_users.
+            // Kalender) + Patients bila can_manage_patients + EMR/Panel Dokter DAN
+            // Triase bila can_emr (admin yang juga dokter, mis. dr. Adrian —
+            // berfungsi penuh sebagai dokter: triase + EMR).
             if (role === 'admin' && m.path &&
                 !(['/clinic/kasir', '/clinic/visits', '/clinic/bookings', '/clinic/slots', '/clinic/calendar'].includes(m.path)) &&
                 !(m.path === '/clinic/patients' && user?.permissions?.can_manage_patients === true) &&
-                !(m.path === '/clinic/dokter' && user?.permissions?.can_emr === true)) return null
+                !(m.path === '/clinic/dokter' && user?.permissions?.can_emr === true) &&
+                !(m.path === '/clinic/triase' && user?.permissions?.can_emr === true)) return null
           }
 
           if (m.divider) {
