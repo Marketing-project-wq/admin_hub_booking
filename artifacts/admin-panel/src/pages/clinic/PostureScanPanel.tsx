@@ -379,7 +379,7 @@ function LevelGuide() {
   )
 }
 
-export default function PostureScanPanel({ visitId, patientId }: { visitId: string; patientId: string }) {
+export default function PostureScanPanel({ visitId, patientId, gender }: { visitId: string; patientId: string; gender?: string | null }) {
   const [scans, setScans] = useState<Partial<Record<ViewKey, Scan>>>({})
   const [busy, setBusy] = useState<Partial<Record<ViewKey, string>>>({})
   const [err, setErr] = useState<Partial<Record<ViewKey, string>>>({})
@@ -870,6 +870,14 @@ export default function PostureScanPanel({ visitId, patientId }: { visitId: stri
                 </>
               ) : (
                 <div style={{ border: '1px dashed var(--border-strong)', borderRadius: 8, padding: 20, textAlign: 'center' }}>
+                  {/* Mockup anatomi tubuh default — tampil sampai foto postur diisi.
+                      depan→front, belakang→back; gender dari pasien (fallback male). */}
+                  <img
+                    src={`/images/body-diagram/${v.key === 'depan' ? 'front' : 'back'}-${gender === 'female' ? 'female' : 'male'}.jpeg`}
+                    alt={`Panduan anatomi ${v.label}`}
+                    onError={e => { e.currentTarget.style.display = 'none' }}
+                    style={{ height: 150, width: 'auto', maxWidth: '100%', objectFit: 'contain', opacity: 0.65, display: 'block', margin: '0 auto 12px' }}
+                  />
                   {fileInput(v.key, '+ Pilih foto')}
                   <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '8px 0 0' }}>JPG/PNG/WebP, maks 5 MB</p>
                 </div>
