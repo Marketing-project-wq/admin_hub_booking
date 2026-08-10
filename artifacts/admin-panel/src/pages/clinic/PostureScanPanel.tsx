@@ -711,10 +711,13 @@ export default function PostureScanPanel({ visitId, patientId, gender }: { visit
     }
   }
 
-  const fileInput = (view: ViewKey, label: string) => (
+  // capture=true → buka KAMERA device langsung (mobile: kamera belakang) via atribut
+  // capture; hasil jepretan lewat pipeline onPick yang sama (deteksi AI + anotasi).
+  // Desktop tanpa kamera: atribut capture diabaikan browser → jatuh ke file picker.
+  const fileInput = (view: ViewKey, label: string, capture?: boolean) => (
     <label className="btn-secondary" style={{ width: 'auto', padding: '8px 14px', cursor: 'pointer', display: 'inline-block' }}>
       {label}
-      <input type="file" accept="image/*" style={{ display: 'none' }}
+      <input type="file" accept="image/*" capture={capture ? 'environment' : undefined} style={{ display: 'none' }}
         onChange={e => { onPick(view, e.target.files?.[0] ?? null); e.target.value = '' }} />
     </label>
   )
@@ -820,6 +823,7 @@ export default function PostureScanPanel({ visitId, patientId, gender }: { visit
                           onClick={() => setConfirming(c => ({ ...c, [v.key]: false }))}>Batal</button>
                       </>
                     )}
+                    {!scan.isDiagram && fileInput(v.key, '📷 Kamera', true)}
                     {fileInput(v.key, scan.saved ? 'Scan ulang' : 'Ganti foto')}
                     <button type="button" className="btn-secondary"
                       onClick={() => {
@@ -928,13 +932,14 @@ export default function PostureScanPanel({ visitId, patientId, gender }: { visit
                     style={{ height: 150, width: 'auto', maxWidth: '100%', objectFit: 'contain', opacity: 0.65, display: 'block', margin: '0 auto 12px' }}
                   />
                   <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap', alignItems: 'center' }}>
+                    {fileInput(v.key, '📷 Foto Postur', true)}
                     {fileInput(v.key, '+ Pilih foto')}
                     <button type="button" className="btn-secondary" style={{ width: 'auto', padding: '8px 14px' }}
                       onClick={() => useDiagram(v.key)} disabled={!!status}>
                       Anotasi di diagram
                     </button>
                   </div>
-                  <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '8px 0 0' }}>Upload foto pasien untuk analisa AI, atau tandai garis langsung di diagram anatomi (JPG/PNG/WebP, maks 5 MB).</p>
+                  <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '8px 0 0' }}>Foto Postur = buka kamera langsung (lalu analisa AI otomatis). Pilih foto = dari galeri/file. Atau tandai garis di diagram anatomi. (JPG/PNG/WebP, maks 5 MB)</p>
                 </div>
               )}
 

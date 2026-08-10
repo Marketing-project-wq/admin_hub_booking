@@ -149,6 +149,21 @@ export default function MedicalResumeModal({ patient, initialVisitId, onClose }:
       <span style={{ flex: 1 }}>: {value ?? '-'}</span>
     </div>
   )
+  // Baris untuk teks panjang berbutir (mis. Rencana Terapi yang ditulis "a - b - c"):
+  // pecah per baris baru & pemisah " - " jadi daftar rapi; 1 item tampil biasa.
+  const ListRow = ({ label, value }: { label: string; value: string | null | undefined }) => {
+    const items = (value ?? '').split(/\r?\n|\s+[-–]\s+/).map(s => s.trim()).filter(Boolean)
+    return (
+      <div style={{ display: 'flex', gap: 8, padding: '1.5px 0', alignItems: 'flex-start' }}>
+        <span style={lbl}>{label}</span>
+        <span style={{ flex: 1 }}>
+          {items.length === 0 ? ': -'
+            : items.length === 1 ? `: ${items[0]}`
+            : <ul style={{ margin: 0, paddingLeft: 18 }}>{items.map((it, i) => <li key={i} style={{ marginBottom: 2 }}>{it}</li>)}</ul>}
+        </span>
+      </div>
+    )
+  }
 
   const sel = list?.find(l => l.assessment_id === selectedId)
 
@@ -324,8 +339,8 @@ export default function MedicalResumeModal({ patient, initialVisitId, onClose }:
             {/* P */}
             <div style={h}>Plan</div>
             <Row label="Layanan / Tindakan" value={bundle.services.map(s => s.service_name).join(', ') || '-'} />
-            <Row label="Rencana Terapi" value={plan?.treatment || '-'} />
-            <Row label="Edukasi & Follow-up" value={plan?.education_followup || '-'} />
+            <ListRow label="Rencana Terapi" value={plan?.treatment} />
+            <ListRow label="Edukasi & Follow-up" value={plan?.education_followup} />
             <Row label="Status Pulang" value={plan?.discharge_status || '-'} />
 
             {/* TTD */}
