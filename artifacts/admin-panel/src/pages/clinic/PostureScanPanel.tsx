@@ -97,6 +97,9 @@ interface Scan {
   h: number
   saved: boolean
   file?: File               // file asli menunggu upload
+  // true = base image diagram anatomi (bukan foto pasien): tanpa MediaPipe/auto-sudut,
+  // hanya anotasi manual. Ditandai persist lewat landmarks kosong + angles null.
+  isDiagram?: boolean
 }
 
 function loadImage(src: string): Promise<HTMLImageElement> {
@@ -399,14 +402,16 @@ export default function PostureScanPanel({ visitId, patientId, gender }: { visit
       try {
         const { data } = await supabase
           .from('clinic_posture_scans')
-          .select('id, view, created_at, angles, visit:clinic_visits(visit_date)')
+          .select('id, view, created_at, angles, landmarks, visit:clinic_visits(visit_date)')
           .eq('patient_id', patientId)
           .order('created_at', { ascending: true })
         if (cancelled) return
-        setTrend(((data ?? []) as unknown as { id: string; view: ViewKey; created_at: string; angles: PoseAngles; visit: { visit_date: string } | null }[]).map(r => ({
-          id: r.id, view: r.view, created_at: r.created_at,
-          visit_date: r.visit?.visit_date ?? null, angles: r.angles,
-        })))
+        setTrend(((data ?? []) as unknown as { id: string; view: ViewKey; created_at: string; angles: PoseAngles; landmarks: PoseLandmark[] | null; visit: { visit_date: string } | null }[])
+          .filter(r => Array.isArray(r.landmarks) && r.landmarks.length > 0)   // diagram anatomi (tanpa landmark) tidak masuk tren sudut
+          .map(r => ({
+            id: r.id, view: r.view, created_at: r.created_at,
+            visit_date: r.visit?.visit_date ?? null, angles: r.angles,
+          })))
       } catch {
         if (!cancelled) setTrend([])
       }
@@ -559,15 +564,16 @@ export default function PostureScanPanel({ visitId, patientId, gender }: { visit
           .eq('visit_id', visitId)
           .order('created_at', { ascending: false })
         const next: Partial<Record<ViewKey, Scan>> = {}
-        for (const row of (data ?? []) as { id: string; view: ViewKey; image_path: string; landmarks: PoseLandmark[]; angles: PoseAngles; annotations: unknown }[]) {
+        for (const row of (data ?? []) as { id: string; view: ViewKey; image_path: string; landmarks: PoseLandmark[] | null; angles: PoseAngles | null; annotations: unknown }[]) {
           if (next[row.view]) continue // sudah ada yang lebih baru (order desc)
           const { data: signed } = await supabase.storage.from(BUCKET).createSignedUrl(row.image_path, SIGNED_TTL)
           if (!signed?.signedUrl) continue
           next[row.view] = {
             id: row.id, imageUrl: signed.signedUrl,
-            landmarks: row.landmarks ?? [], angles: row.angles,
+            landmarks: row.landmarks ?? [],
+            angles: row.angles ?? { shoulder_tilt_deg: 0, hip_tilt_deg: 0, lateral_deviation_deg: 0 },
             annotations: parseAnnotations(row.annotations),
-            w: 0, h: 0, saved: true,
+            w: 0, h: 0, saved: true, isDiagram: (row.landmarks?.length ?? 0) === 0,
           }
         }
         if (!cancelled) setScans(next)
@@ -622,6 +628,38 @@ export default function PostureScanPanel({ visitId, patientId, gender }: { visit
     }
   }
 
+  // Pakai diagram anatomi sebagai kanvas anotasi (saat belum ada foto pasien).
+  // Dokter/fisio bisa langsung tandai garis/titik di gambar body-anatomy. Bukan foto
+  // asli → tanpa MediaPipe, landmarks kosong, tanpa auto-sudut; hanya anotasi manual.
+  const useDiagram = async (view: ViewKey) => {
+    setErrFor(view, '')
+    setBusyFor(view, 'Memuat diagram anatomi…')
+    try {
+      const src = `/images/body-diagram/${view === 'depan' ? 'front' : 'back'}-${gender === 'female' ? 'female' : 'male'}.jpeg`
+      const res = await fetch(src)
+      if (!res.ok) throw new Error('Diagram anatomi tidak tersedia')
+      const blob = await res.blob()
+      const file = new File([blob], `anatomy-${view}.jpeg`, { type: blob.type || 'image/jpeg' })
+      const url = URL.createObjectURL(file)
+      const img = await loadImage(url)
+      setScans(s => ({
+        ...s,
+        [view]: {
+          imageUrl: url, landmarks: [],
+          angles: { shoulder_tilt_deg: 0, hip_tilt_deg: 0, lateral_deviation_deg: 0 },
+          annotations: emptyAnnotations(), w: img.naturalWidth, h: img.naturalHeight,
+          saved: false, file, isDiagram: true,
+        },
+      }))
+      setAnnoMode(m => ({ ...m, [view]: true }))   // langsung masuk mode anotasi
+      setAnnoDirty(d => ({ ...d, [view]: false }))
+    } catch (e) {
+      setErrFor(view, e instanceof Error ? e.message : 'Gagal memuat diagram anatomi')
+    } finally {
+      setBusyFor(view, undefined)
+    }
+  }
+
   const onSave = async (view: ViewKey) => {
     const scan = scans[view]
     if (!scan || !scan.file || scan.saved) return
@@ -640,17 +678,22 @@ export default function PostureScanPanel({ visitId, patientId, gender }: { visit
       // Insert baris + ambil kembali landmarks/angles tersimpan (verifikasi round-trip jsonb).
       const ins = await supabase.from('clinic_posture_scans').insert({
         visit_id: visitId, patient_id: patientId, view,
-        image_path: path, landmarks: scan.landmarks, angles: scan.angles,
+        image_path: path,
+        // Diagram anatomi: tanpa landmark & tanpa sudut (penanda persist supaya tidak
+        // masuk tren sudut / ringkasan resume). Foto asli: simpan landmarks + angles.
+        landmarks: scan.isDiagram ? [] : scan.landmarks,
+        angles: scan.isDiagram ? null : scan.angles,
         annotations: scan.annotations,   // anotasi preview ikut tersimpan bersama Simpan utama
       }).select('id, image_path, landmarks, angles, annotations').single()
       if (ins.error) throw ins.error
-      const row = ins.data as { id: string; image_path: string; landmarks: PoseLandmark[]; angles: PoseAngles; annotations: unknown }
+      const row = ins.data as { id: string; image_path: string; landmarks: PoseLandmark[] | null; angles: PoseAngles | null; annotations: unknown }
       const { data: signed } = await supabase.storage.from(BUCKET).createSignedUrl(row.image_path, SIGNED_TTL)
       URL.revokeObjectURL(scan.imageUrl)
       // Render ulang MURNI dari data tersimpan (foto Storage + landmarks/angles dari DB).
+      const savedIsDiagram = (row.landmarks?.length ?? 0) === 0
       setScans(s => ({
         ...s,
-        [view]: { id: row.id, imageUrl: signed?.signedUrl ?? scan.imageUrl, landmarks: row.landmarks ?? [], angles: row.angles, annotations: parseAnnotations(row.annotations), w: 0, h: 0, saved: true },
+        [view]: { id: row.id, imageUrl: signed?.signedUrl ?? scan.imageUrl, landmarks: row.landmarks ?? [], angles: row.angles ?? { shoulder_tilt_deg: 0, hip_tilt_deg: 0, lateral_deviation_deg: 0 }, annotations: parseAnnotations(row.annotations), w: 0, h: 0, saved: true, isDiagram: savedIsDiagram },
       }))
       setAnnoDirty(d => ({ ...d, [view]: false }))
       setTrendRefresh(n => n + 1)   // scan baru tersimpan → muat ulang tabel tren
@@ -717,8 +760,8 @@ export default function PostureScanPanel({ visitId, patientId, gender }: { visit
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
                 <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{v.label}</span>
                 {scan && (scan.saved
-                  ? <span className="badge" style={{ background: 'rgba(16,185,129,0.15)', color: 'var(--green)' }}>Tersimpan</span>
-                  : <span className="badge" style={{ background: 'rgba(245,158,11,0.15)', color: 'var(--amber)' }}>Preview — belum disimpan</span>)}
+                  ? <span className="badge" style={{ background: 'rgba(16,185,129,0.15)', color: 'var(--green)' }}>{scan.isDiagram ? 'Diagram · tersimpan' : 'Tersimpan'}</span>
+                  : <span className="badge" style={{ background: 'rgba(245,158,11,0.15)', color: 'var(--amber)' }}>{scan.isDiagram ? 'Diagram · belum disimpan' : 'Preview — belum disimpan'}</span>)}
               </div>
               <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '0 0 10px', lineHeight: 1.4 }}>{v.instruksi}</p>
 
@@ -737,18 +780,24 @@ export default function PostureScanPanel({ visitId, patientId, gender }: { visit
                         onLineClick={l => setLineDraft({ view: v.key, line: { ...l }, isNew: false })} />
                     )}
                   </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 8, fontSize: 12 }}>
-                    <AngleRow color="#ef4444" label="Kemiringan bahu" deg={scan.angles.shoulder_tilt_deg} />
-                    <AngleRow color="#3b82f6" label="Kemiringan pinggul" deg={scan.angles.hip_tilt_deg} />
-                    <AngleRow color="#22c55e" label="Deviasi lateral (tegak)" deg={scan.angles.lateral_deviation_deg} />
-                    {conf != null && (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2 }}>
-                        <span style={{ width: 12, height: 3, background: 'var(--text-muted)', borderRadius: 2, flexShrink: 0 }} />
-                        <span style={{ color: 'var(--text-secondary)', flex: 1 }}>Keyakinan deteksi</span>
-                        <span style={{ fontWeight: 700, fontFamily: 'monospace', color: low ? 'var(--red)' : 'var(--text-primary)' }}>{Math.round(conf * 100)}%</span>
-                      </div>
-                    )}
-                  </div>
+                  {!scan.isDiagram ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 8, fontSize: 12 }}>
+                      <AngleRow color="#ef4444" label="Kemiringan bahu" deg={scan.angles.shoulder_tilt_deg} />
+                      <AngleRow color="#3b82f6" label="Kemiringan pinggul" deg={scan.angles.hip_tilt_deg} />
+                      <AngleRow color="#22c55e" label="Deviasi lateral (tegak)" deg={scan.angles.lateral_deviation_deg} />
+                      {conf != null && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2 }}>
+                          <span style={{ width: 12, height: 3, background: 'var(--text-muted)', borderRadius: 2, flexShrink: 0 }} />
+                          <span style={{ color: 'var(--text-secondary)', flex: 1 }}>Keyakinan deteksi</span>
+                          <span style={{ fontWeight: 700, fontFamily: 'monospace', color: low ? 'var(--red)' : 'var(--text-primary)' }}>{Math.round(conf * 100)}%</span>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '8px 0 0', lineHeight: 1.5 }}>
+                      Diagram anatomi (tanpa foto pasien) — aktifkan <strong>Anotasi</strong> lalu <strong>Hubungkan Garis</strong> untuk menandai garis/titik manual, lalu <strong>Simpan</strong>.
+                    </p>
+                  )}
 
                   {low && (
                     <p style={{ fontSize: 12, color: 'var(--text-primary)', background: 'rgba(245,158,11,0.12)', borderLeft: '3px solid #f59e0b', borderRadius: 6, padding: '8px 10px', margin: '8px 0 0', lineHeight: 1.4 }}>
@@ -821,7 +870,7 @@ export default function PostureScanPanel({ visitId, patientId, gender }: { visit
                   {/* Daftar Garis — selalu terlihat; jalur sembunyikan/hapus TANPA Mode Anotasi */}
                   <div style={{ marginTop: 10 }}>
                     <label style={{ display: 'block', fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Daftar Garis</label>
-                    {AUTO_LINES.map(al => {
+                    {!scan.isDiagram && AUTO_LINES.map(al => {
                       const lineHidden = scan.annotations.hidden_auto_lines.includes(al.key)
                       const deg = al.key === 'shoulder' ? scan.angles.shoulder_tilt_deg
                         : al.key === 'hip' ? scan.angles.hip_tilt_deg
@@ -878,8 +927,14 @@ export default function PostureScanPanel({ visitId, patientId, gender }: { visit
                     onError={e => { e.currentTarget.style.display = 'none' }}
                     style={{ height: 150, width: 'auto', maxWidth: '100%', objectFit: 'contain', opacity: 0.65, display: 'block', margin: '0 auto 12px' }}
                   />
-                  {fileInput(v.key, '+ Pilih foto')}
-                  <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '8px 0 0' }}>JPG/PNG/WebP, maks 5 MB</p>
+                  <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap', alignItems: 'center' }}>
+                    {fileInput(v.key, '+ Pilih foto')}
+                    <button type="button" className="btn-secondary" style={{ width: 'auto', padding: '8px 14px' }}
+                      onClick={() => useDiagram(v.key)} disabled={!!status}>
+                      Anotasi di diagram
+                    </button>
+                  </div>
+                  <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '8px 0 0' }}>Upload foto pasien untuk analisa AI, atau tandai garis langsung di diagram anatomi (JPG/PNG/WebP, maks 5 MB).</p>
                 </div>
               )}
 

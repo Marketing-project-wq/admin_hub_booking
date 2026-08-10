@@ -1670,14 +1670,17 @@ export async function getMedicalResumeBundle(assessmentId: string): Promise<Medi
   if (row.visit_id) {
     const [scr, scans] = await Promise.all([
       supabase.from('clinic_screenings').select('vital_signs').eq('visit_id', row.visit_id).maybeSingle(),
-      supabase.from('clinic_posture_scans').select('view, angles, annotations').eq('visit_id', row.visit_id).order('created_at', { ascending: true }),
+      supabase.from('clinic_posture_scans').select('view, angles, annotations, landmarks').eq('visit_id', row.visit_id).order('created_at', { ascending: true }),
     ])
     screeningVitals = (scr.data as { vital_signs: ClinicVitalSigns } | null)?.vital_signs ?? null
-    postureScans = ((scans.data ?? []) as any[]).map(s => ({
-      view: s.view,
-      angles: s.angles ?? {},
-      general_note: s.annotations?.general_note ?? '',
-    }))
+    postureScans = ((scans.data ?? []) as any[])
+      // Diagram anotasi (tanpa landmark) tidak masuk ringkasan sudut resume.
+      .filter(s => Array.isArray(s.landmarks) && s.landmarks.length > 0)
+      .map(s => ({
+        view: s.view,
+        angles: s.angles ?? {},
+        general_note: s.annotations?.general_note ?? '',
+      }))
   }
 
   return {
