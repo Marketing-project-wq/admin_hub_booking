@@ -12,6 +12,7 @@ import {
   type ClinicConsent, type ClinicVitalSigns, type ClinicStaffOption,
 } from '../../lib/clinic'
 import MedicalHistoryPanel from '../../components/clinic/MedicalHistoryPanel'
+import PostureScanPanel from './PostureScanPanel'
 
 // ─── Narrow shapes used by the screening/consent forms ───────────────────────────
 interface PatientInfo {
@@ -680,6 +681,12 @@ function ScreeningTab({ visit, patient, onToast, onSaved, defaultServices }: {
           <VitalField label="Berat Badan (kg)"><input type="number" step="0.1" placeholder="70" value={form.vital_signs.weight ?? ''} onChange={e => setVital('weight', vnum(e.target.value))} style={VITAL_INPUT_STYLE} /></VitalField>
           <VitalField label="Tinggi Badan (cm)"><input type="number" placeholder="170" value={form.vital_signs.height ?? ''} onChange={e => setVital('height', vnum(e.target.value))} style={VITAL_INPUT_STYLE} /></VitalField>
         </div>
+      </Collapsible>
+
+      {/* Section Postur — fisio isi foto & scan postur di sini; tersimpan ke
+          clinic_posture_scans (visit sama) sehingga dokter lihat di EMR. */}
+      <Collapsible title="POSTUR" defaultOpen>
+        <PostureScanPanel visitId={visit.id} patientId={visit.patient_id ?? ''} gender={patient?.gender ?? null} />
       </Collapsible>
 
       {/* Section B — Layanan */}

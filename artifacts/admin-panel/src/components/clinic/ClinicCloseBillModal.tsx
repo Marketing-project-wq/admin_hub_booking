@@ -7,6 +7,7 @@ import { type ClinicTransaction } from '../../lib/clinicBilling'
 import {
   listPackages, listPatientActivePackages,
   listServices, listClinicStaffOptions, logAssignmentChange,
+  getScreeningByVisit, getConsentsByVisit,
   type ClinicPackage, type ClinicPatientPackage, type ClinicStaffOption, type AssignmentChange,
 } from '../../lib/clinic'
 
@@ -45,6 +46,13 @@ export default function ClinicCloseBillModal({
   const [notes, setNotes] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+
+  // ── Guard kelengkapan klinis sebelum Close Bill ──────────────────────────────
+  // Wajib: Screening + Consent (semua visit) + Assessment Dokter (khusus layanan
+  // requires_doctor). Kalau belum lengkap → tombol Close Bill dikunci dan bagian
+  // yang belum diisi ditandai. Fail-open kalau cek gagal (jangan jebak kasir).
+  const [checkingCompleteness, setCheckingCompleteness] = useState(true)
+  const [missingSections, setMissingSections] = useState<string[]>([])
 
   // Terapis & dokter penanggung jawab — Close Bill adalah penentu final assignment
   // kunjungan ini. Otomatis terisi dari assigned_*_id yang sudah ada. Yang boleh
@@ -110,6 +118,43 @@ export default function ClinicCloseBillModal({
       })
   }, [visitId])
 
+  // Cek kelengkapan Screening / Consent / Assessment untuk visit ini.
+  useEffect(() => {
+    let active = true
+    setCheckingCompleteness(true)
+    ;(async () => {
+      try {
+        const serviceIds = services.map(s => s.service_id).filter(Boolean)
+        const [scr, con, asmtRes, svcRes] = await Promise.all([
+          getScreeningByVisit(visitId),
+          getConsentsByVisit(visitId),
+          supabase.from('clinic_assessments').select('assessment_type').eq('visit_id', visitId),
+          serviceIds.length
+            ? supabase.from('clinic_services').select('id, requires_doctor').in('id', serviceIds)
+            : Promise.resolve({ data: [] as { id: string; requires_doctor: boolean | null }[] }),
+        ])
+        const assessmentRows = (asmtRes.data ?? []) as { assessment_type: string | null }[]
+        // Assessment dokter = baris bertipe 'doctor' (baris legacy tanpa tipe juga dihitung).
+        const hasDoctorAssessment = assessmentRows.some(a => a.assessment_type === 'doctor' || a.assessment_type == null)
+        const requiresDoctor = ((svcRes.data ?? []) as { requires_doctor: boolean | null }[]).some(s => s.requires_doctor === true)
+
+        const miss: string[] = []
+        if (!scr) miss.push('Screening')
+        if (con.length === 0) miss.push('Consent')
+        if (requiresDoctor && !hasDoctorAssessment) miss.push('Assessment Dokter')
+        if (active) setMissingSections(miss)
+      } catch (e) {
+        // Fail-open: jangan jebak kasir kalau cek gagal (mis. jaringan) — cukup log.
+        console.error('[CloseBill] cek kelengkapan gagal:', e)
+        if (active) setMissingSections([])
+      } finally {
+        if (active) setCheckingCompleteness(false)
+      }
+    })()
+    return () => { active = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visitId])
+
   // Kategorisasi layanan berdasarkan package_category dari database.
   const isPerformanceService = (name: string) => serviceCategoryMap[name] === 'performance'
   const isMedicService = (name: string) => serviceCategoryMap[name] === 'medic'
@@ -166,6 +211,7 @@ export default function ClinicCloseBillModal({
 
   const handleConfirm = async () => {
     setError('')
+    if (missingSections.length > 0) { setError(`Lengkapi dulu: ${missingSections.join(', ')}`); return }
     if (needsMethod && !method) { setError('Pilih metode pembayaran.'); return }
     setSaving(true)
     try {
@@ -363,6 +409,18 @@ export default function ClinicCloseBillModal({
         </div>
 
         {error && <p style={{ color: 'var(--red)', fontSize: 13, marginBottom: 12 }}>{error}</p>}
+
+        {/* Guard kelengkapan klinis — blokir Close Bill sampai bagian wajib terisi */}
+        {!checkingCompleteness && missingSections.length > 0 && (
+          <div style={{ padding: '12px 14px', borderRadius: 10, background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.4)', marginBottom: 16 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--red)', marginBottom: 4 }}>
+              Belum bisa Close Bill
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+              Bagian ini belum diisi: <strong>{missingSections.join(', ')}</strong>. Lengkapi dulu di Triase/EMR sebelum menutup tagihan.
+            </div>
+          </div>
+        )}
 
         {/* Visit header */}
         <div style={{ background: 'var(--bg-elevated)', borderRadius: 10, padding: 14, marginBottom: 16 }}>
@@ -760,8 +818,13 @@ export default function ClinicCloseBillModal({
 
         <div className="modal-footer">
           <button className="btn-secondary" onClick={onClose}>Batal</button>
-          <button className="btn-primary" onClick={handleConfirm} disabled={saving || (needsMethod && !method)}>
-            {saving ? 'Memproses...' : <>{paidOnline ? 'Konfirmasi & Selesai' : voucherFullyCovers ? 'Konfirmasi Voucher & Selesai' : 'Konfirmasi Pembayaran'} <ArrowRight size={14} style={{ verticalAlign: -2 }} /></>}
+          <button
+            className="btn-primary"
+            onClick={handleConfirm}
+            disabled={saving || checkingCompleteness || missingSections.length > 0 || (needsMethod && !method)}
+            title={missingSections.length > 0 ? `Lengkapi dulu: ${missingSections.join(', ')}` : undefined}
+          >
+            {saving ? 'Memproses...' : checkingCompleteness ? 'Memeriksa kelengkapan…' : <>{paidOnline ? 'Konfirmasi & Selesai' : voucherFullyCovers ? 'Konfirmasi Voucher & Selesai' : 'Konfirmasi Pembayaran'} <ArrowRight size={14} style={{ verticalAlign: -2 }} /></>}
           </button>
         </div>
       </div>

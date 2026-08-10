@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
 import { fmtDateTime } from '../../lib/format'
+import MedicalResumeModal from './MedicalResumeModal'
+import { getPatient, type ClinicPatient } from '../../lib/clinic'
 
 // Riwayat Rekam Medis pasien — komponen display MURNI READ-ONLY (tidak ada satu
 // pun kontrol tulis). Dipakai tab "Riwayat Rekam Medis" di modal EMR ClinicDokter
@@ -33,6 +35,11 @@ export default function MedicalHistoryPanel({ patientId, currentVisitId }: {
 }) {
   const [history, setHistory] = useState<MedicalHistoryRow[]>([])
   const [loading, setLoading] = useState(false)
+  // Resume Medis lengkap (tombol "Lihat Detail" per kunjungan). Pasien di-fetch
+  // penuh sekali lalu di-cache; resumeVisitId sekaligus jadi penanda modal terbuka.
+  const [resumePatient, setResumePatient] = useState<ClinicPatient | null>(null)
+  const [resumeVisitId, setResumeVisitId] = useState<string | null>(null)
+  const [resumeLoadingId, setResumeLoadingId] = useState<string | null>(null)
 
   useEffect(() => {
     if (!patientId) { setHistory([]); return }
@@ -83,6 +90,20 @@ export default function MedicalHistoryPanel({ patientId, currentVisitId }: {
     fetchHistory()
   }, [patientId, currentVisitId])
 
+  const openResume = async (visitId: string) => {
+    if (!patientId) return
+    setResumeLoadingId(visitId)
+    try {
+      const p = resumePatient ?? await getPatient(patientId)
+      setResumePatient(p)
+      setResumeVisitId(visitId)
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setResumeLoadingId(null)
+    }
+  }
+
   return (
     <div style={{ padding: '16px 0' }}>
       {loading ? (
@@ -114,9 +135,19 @@ export default function MedicalHistoryPanel({ patientId, currentVisitId }: {
                     {h.visit_time && ` · ${h.visit_time.slice(0, 5)}`}
                   </div>
                 </div>
-                {h.assessment?.handled_by && (
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{h.assessment.handled_by}</div>
-                )}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  {h.assessment?.handled_by && (
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{h.assessment.handled_by}</div>
+                  )}
+                  <button
+                    className="btn-secondary"
+                    onClick={() => openResume(h.visit_id)}
+                    disabled={resumeLoadingId === h.visit_id}
+                    style={{ width: 'auto', padding: '4px 12px', fontSize: 11, whiteSpace: 'nowrap' }}
+                  >
+                    {resumeLoadingId === h.visit_id ? 'Memuat…' : 'Lihat Detail'}
+                  </button>
+                </div>
               </div>
 
               <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -146,54 +177,64 @@ export default function MedicalHistoryPanel({ patientId, currentVisitId }: {
                   </div>
                 )}
 
-                {/* Assessment dokter */}
-                {h.assessment && (
-                  <div style={{ background: 'var(--bg-elevated)', borderRadius: 8, padding: '10px 12px' }}>
-                    <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 8 }}>Kesimpulan Dokter</div>
-
-                    {h.assessment.diagnosis && (() => {
-                      const d = h.assessment.diagnosis
-                      const txt = typeof d === 'string'
-                        ? d
-                        : [d.text, (d.icd10_codes ?? []).map(c => c.code).join(', ')].filter(Boolean).join(' — ')
-                      return txt ? (
-                        <div style={{ marginBottom: 6 }}>
-                          <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--red)' }}>Diagnosis: </span>
-                          <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{txt}</span>
-                        </div>
-                      ) : null
-                    })()}
-                    {h.assessment.assessment && (
-                      <div style={{ marginBottom: 6 }}>
-                        <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)' }}>Assessment: </span>
-                        <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{h.assessment.assessment}</span>
+                {/* Kesimpulan Dokter — tiap bagian jadi blok berlabel sendiri,
+                    nilai di baris baru, whiteSpace pre-wrap supaya baris/enter
+                    tersimpan tampil rapi (bukan satu paragraf padat). */}
+                {h.assessment && (() => {
+                  const a = h.assessment!
+                  const diagTxt = !a.diagnosis
+                    ? ''
+                    : typeof a.diagnosis === 'string'
+                      ? a.diagnosis
+                      : [a.diagnosis.text, (a.diagnosis.icd10_codes ?? []).map(c => c.code).join(', ')].filter(Boolean).join(' — ')
+                  const planTxt = !a.plan
+                    ? ''
+                    : typeof a.plan === 'string'
+                      ? a.plan
+                      : [a.plan.treatment, a.plan.education_followup].filter(Boolean).join('\n\n')
+                  const assessmentTxt = a.assessment ?? ''
+                  if (!diagTxt && !assessmentTxt && !planTxt) return null
+                  return (
+                    <div style={{ background: 'var(--bg-elevated)', borderRadius: 8, padding: '12px 14px' }}>
+                      <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 10 }}>Kesimpulan Dokter</div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                        {diagTxt && <AssessmentField label="Diagnosis" value={diagTxt} accent />}
+                        {assessmentTxt && <AssessmentField label="Assessment" value={assessmentTxt} />}
+                        {planTxt && <AssessmentField label="Plan" value={planTxt} />}
                       </div>
-                    )}
-                    {h.assessment.plan && (() => {
-                      const p = h.assessment.plan
-                      const txt = typeof p === 'string'
-                        ? p
-                        : [p.treatment, p.education_followup].filter(Boolean).join(' — ')
-                      return txt ? (
-                        <div>
-                          <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)' }}>Plan: </span>
-                          <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{txt}</span>
+                      {a.updated_at && (
+                        <div style={{ marginTop: 12, paddingTop: 8, borderTop: '1px solid var(--border)', fontSize: 11, color: 'var(--text-muted)' }}>
+                          Disimpan {fmtDateTime(a.updated_at)}
+                          {(a.handled_by || a.locked_by) && ` · oleh ${a.handled_by || a.locked_by}`}
                         </div>
-                      ) : null
-                    })()}
-                    {h.assessment.updated_at && (
-                      <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--border)', fontSize: 11, color: 'var(--text-muted)' }}>
-                        Disimpan {fmtDateTime(h.assessment.updated_at)}
-                        {(h.assessment.handled_by || h.assessment.locked_by) && ` · oleh ${h.assessment.handled_by || h.assessment.locked_by}`}
-                      </div>
-                    )}
-                  </div>
-                )}
+                      )}
+                    </div>
+                  )
+                })()}
               </div>
             </div>
           ))}
         </div>
       )}
+
+      {resumePatient && resumeVisitId && (
+        <MedicalResumeModal
+          patient={resumePatient}
+          initialVisitId={resumeVisitId}
+          onClose={() => setResumeVisitId(null)}
+        />
+      )}
+    </div>
+  )
+}
+
+// Satu bagian Kesimpulan (Diagnosis / Assessment / Plan): label kecil di atas,
+// nilai di bawahnya dengan pre-wrap supaya multi-baris terbaca rapi.
+function AssessmentField({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
+  return (
+    <div>
+      <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', color: accent ? 'var(--red)' : 'var(--text-muted)', marginBottom: 3 }}>{label}</div>
+      <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.65, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{value}</div>
     </div>
   )
 }

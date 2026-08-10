@@ -1510,7 +1510,7 @@ export default function ClinicDokter() {
                         </span>
                         {showPosturePanel && selectedVisit && (
                           <div style={{ marginTop: 14 }}>
-                            <PostureScanPanel visitId={selectedVisit.id} patientId={selectedVisit.patient?.id ?? ''} />
+                            <PostureScanPanel visitId={selectedVisit.id} patientId={selectedVisit.patient?.id ?? ''} gender={selectedVisit.patient?.gender ?? null} />
                           </div>
                         )}
                       </EmrBlock>
