@@ -12,6 +12,7 @@ const PERMISSION_KEYS: { key: string; label: string }[] = [
   { key: 'can_screening', label: 'Isi screening' },
   { key: 'can_consent', label: 'Isi consent' },
   { key: 'can_assessment', label: 'Isi assessment' },
+  { key: 'can_emr', label: 'Panel Dokter (EMR)' },
   { key: 'can_payment', label: 'Input payment' },
   { key: 'can_manage_slots', label: 'Kelola slot' },
   { key: 'can_manage_patients', label: 'Kelola data pasien' },
@@ -28,7 +29,7 @@ function presetFor(role: string): Record<string, boolean> {
   if (role === 'dokter') return allPerms(true)
   if (role === 'therapist') return { ...allPerms(false), can_checkin: true, can_screening: true, can_consent: true, can_assessment: true }
   if (role === 'registrasi') return { ...allPerms(false), can_checkin: true, can_screening: true, can_consent: true, can_payment: true, can_manage_patients: true }
-  if (role === 'admin') return Object.fromEntries(PERMISSION_KEYS.map(p => [p.key, p.key !== 'can_manage_users']))
+  if (role === 'admin') return Object.fromEntries(PERMISSION_KEYS.map(p => [p.key, p.key !== 'can_manage_users' && p.key !== 'can_emr']))
   return allPerms(false)
 }
 
