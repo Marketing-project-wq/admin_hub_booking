@@ -1874,8 +1874,11 @@ export interface ClinicPackage {
   package_price: number
   retail_price: number
   discount_percent: number
+  requires_referral: boolean
   is_active: boolean
 }
+
+export type ClinicPackagePayload = Omit<ClinicPackage, 'id'>
 
 export interface ClinicPatientPackage {
   id: string
@@ -1901,6 +1904,35 @@ export async function listPackages(): Promise<ClinicPackage[]> {
     .order('sessions')
   if (error) throw error
   return (data ?? []) as ClinicPackage[]
+}
+
+// Fetch semua paket (termasuk nonaktif) — untuk halaman master Package
+export async function listPackagesAll(): Promise<ClinicPackage[]> {
+  const { data, error } = await supabase
+    .from('clinic_packages')
+    .select('*')
+    .order('category')
+    .order('sessions')
+  if (error) throw error
+  return (data ?? []) as ClinicPackage[]
+}
+
+// Tambah paket baru
+export async function createPackage(p: ClinicPackagePayload): Promise<void> {
+  const { error } = await supabase.from('clinic_packages').insert(p)
+  if (error) throw error
+}
+
+// Ubah paket
+export async function updatePackage(id: string, p: Partial<ClinicPackagePayload>): Promise<void> {
+  const { error } = await supabase.from('clinic_packages').update(p).eq('id', id)
+  if (error) throw error
+}
+
+// Aktifkan / nonaktifkan paket
+export async function togglePackageActive(id: string, active: boolean): Promise<void> {
+  const { error } = await supabase.from('clinic_packages').update({ is_active: active }).eq('id', id)
+  if (error) throw error
 }
 
 // Fetch paket milik pasien (default hanya yang aktif)

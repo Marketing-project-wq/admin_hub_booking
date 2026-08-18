@@ -51,6 +51,7 @@ const UNIT_MENUS: Record<string, MenuItem[]> = {
     { label: 'Users',     path: '/clinic/users' },
     { label: '— Master',  path: null,                divider: true },
     { label: 'Services',  path: '/clinic/services' },
+    { label: 'Package',   path: '/clinic/packages' },
     { label: 'Slots',     path: '/clinic/slots' },
     { label: 'Reports',   path: '/clinic/reports' },
     { label: 'Audit Log', path: '/clinic/audit' },
