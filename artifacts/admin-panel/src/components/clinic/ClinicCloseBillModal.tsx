@@ -74,7 +74,8 @@ export default function ClinicCloseBillModal({
   const [patientPackages, setPatientPackages] = useState<ClinicPatientPackage[]>([])
   const [serviceCategoryMap, setServiceCategoryMap] = useState<Record<string, string>>({})
   const [buyingPackage, setBuyingPackage] = useState(false)
-  const [selectedNewPackageId, setSelectedNewPackageId] = useState('')
+  // Multiselect: 1 pasien bisa beli >1 paket sekaligus dalam satu Close Bill.
+  const [selectedNewPackageIds, setSelectedNewPackageIds] = useState<string[]>([])
   const [packageNotes, setPackageNotes] = useState('')
 
   // Jadwalkan kunjungan berikutnya (opsional)
@@ -190,10 +191,12 @@ export default function ClinicCloseBillModal({
   const payableServices = uncoveredServices.filter(s => s !== voucherService)
 
   const visitSubtotal = payableServices.reduce((sum, s) => sum + (Number(s.price) || 0), 0)
-  const selectedNewPkg = buyingPackage && selectedNewPackageId
-    ? packages.find(p => p.id === selectedNewPackageId) ?? null
-    : null
-  const packageSubtotal = selectedNewPkg ? selectedNewPkg.package_price : 0
+  // Paket yang dipilih untuk dibeli (bisa lebih dari satu). Urutan mengikuti daftar
+  // master `packages` agar rincian biaya tampil rapi & konsisten.
+  const selectedNewPkgs = buyingPackage
+    ? packages.filter(p => selectedNewPackageIds.includes(p.id))
+    : []
+  const packageSubtotal = selectedNewPkgs.reduce((sum, p) => sum + p.package_price, 0)
   // Biaya admin opsional — tidak berlaku untuk pembayaran online (sudah settle di Mayar).
   // Ditambahkan SETELAH max(0, ...) supaya tidak bisa dimakan diskon.
   const adminFee = !paidOnline && addAdminFee ? ADMIN_FEE : 0
@@ -223,7 +226,7 @@ export default function ClinicCloseBillModal({
       }
       const serviceName = [
         services.map(s => s.service_name).join(', ') || null,
-        selectedNewPkg ? `Paket ${selectedNewPkg.name}` : null,
+        selectedNewPkgs.length ? `Paket ${selectedNewPkgs.map(p => p.name).join(', ')}` : null,
       ].filter(Boolean).join(' + ') || '-'
 
       // Booking online (Mayar) → metode 'mayar', total penuh.
@@ -251,7 +254,7 @@ export default function ClinicCloseBillModal({
         usePackageIds.push(activeMedicPackage.id)
       }
 
-      const doPurchase = buyingPackage && !!selectedNewPackageId && !!selectedNewPkg
+      const doPurchase = buyingPackage && selectedNewPkgs.length > 0
 
       // Satu RPC atomik menggantikan createTransaction + lockRecord + completeVisitPayment
       // + usePackageSession(×2) + purchasePatientPackage — semua rollback bersama jika ada
@@ -273,10 +276,16 @@ export default function ClinicCloseBillModal({
         p_cashier_name: cashierName.trim() || null,
         p_locked_by: user?.full_name ?? null,
         p_use_package_ids: usePackageIds,
-        p_purchase_package: doPurchase,
-        p_purchase_package_id: doPurchase ? selectedNewPackageId : null,
-        p_purchase_package_sessions: doPurchase && selectedNewPkg ? selectedNewPkg.sessions : null,
-        p_purchase_package_notes: doPurchase ? (packageNotes.trim() || null) : null,
+        // Multiselect paket → kirim array. Param single lama dibiarkan default
+        // (RPC memprioritaskan p_purchase_packages bila diisi). Catatan dibagikan
+        // ke semua paket yang dibeli di transaksi ini.
+        p_purchase_packages: doPurchase
+          ? selectedNewPkgs.map(p => ({
+              id: p.id,
+              sessions: p.sessions,
+              notes: packageNotes.trim() || null,
+            }))
+          : null,
       })
       if (rpcErr) throw rpcErr
       const trx = trxData as unknown as ClinicTransaction
@@ -473,12 +482,12 @@ export default function ClinicCloseBillModal({
             </div>
           ))}
 
-          {selectedNewPkg && (
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 4, color: 'var(--blue)' }}>
-              <span>{selectedNewPkg.name}</span>
-              <span>{fmtRp(selectedNewPkg.package_price)}</span>
+          {selectedNewPkgs.map(p => (
+            <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 4, color: 'var(--blue)' }}>
+              <span>{p.name}</span>
+              <span>{fmtRp(p.package_price)}</span>
             </div>
-          )}
+          ))}
 
           {discount > 0 && (
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: 'var(--red)', marginBottom: 4 }}>
@@ -523,27 +532,63 @@ export default function ClinicCloseBillModal({
 
           {buyingPackage && (
             <>
+              {/* Multiselect via add-then-chip: pilih paket → masuk daftar; pilih lagi
+                  untuk menambah paket kedua, dst. Paket yang sudah dipilih disaring
+                  dari dropdown agar tidak dobel. */}
               <select
-                value={selectedNewPackageId}
-                onChange={e => setSelectedNewPackageId(e.target.value)}
+                value=""
+                onChange={e => {
+                  const id = e.target.value
+                  if (id && !selectedNewPackageIds.includes(id)) {
+                    setSelectedNewPackageIds(prev => [...prev, id])
+                  }
+                  e.target.value = ''
+                }}
                 style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid #E5E7EB', fontSize: 13, marginBottom: 8 }}
               >
-                <option value="">— Pilih Paket —</option>
-                {[...new Set(packages.map(p => p.category))].map(cat => (
-                  <optgroup key={cat} label={`${cat} Package`}>
-                    {packages.filter(p => p.category === cat).map(p => (
-                      <option key={p.id} value={p.id}>
-                        {p.name} — {fmtRp(p.package_price)} ({p.sessions}x sesi, hemat {p.discount_percent}%)
-                      </option>
-                    ))}
-                  </optgroup>
-                ))}
+                <option value="">— Tambah Paket —</option>
+                {[...new Set(packages.map(p => p.category))].map(cat => {
+                  const opts = packages.filter(p => p.category === cat && !selectedNewPackageIds.includes(p.id))
+                  if (opts.length === 0) return null
+                  return (
+                    <optgroup key={cat} label={`${cat} Package`}>
+                      {opts.map(p => (
+                        <option key={p.id} value={p.id}>
+                          {p.name} — {fmtRp(p.package_price)} ({p.sessions}x sesi, hemat {p.discount_percent}%)
+                        </option>
+                      ))}
+                    </optgroup>
+                  )
+                })}
               </select>
 
-              {selectedNewPkg && (
-                <div style={{ fontSize: 12, color: 'var(--blue)', background: 'rgba(59,130,246,0.1)', padding: '8px 12px', borderRadius: 8, marginBottom: 8 }}>
-                  Harga paket: <strong>{fmtRp(selectedNewPkg.package_price)}</strong> untuk {selectedNewPkg.sessions} sesi
-                  (hemat {fmtRp(selectedNewPkg.retail_price - selectedNewPkg.package_price)})
+              {selectedNewPkgs.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 8 }}>
+                  {selectedNewPkgs.map(p => (
+                    <div key={p.id} style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+                      padding: '8px 12px', borderRadius: 8,
+                      background: 'rgba(59,130,246,0.1)', border: '1px solid rgba(59,130,246,0.25)',
+                    }}>
+                      <div style={{ fontSize: 12, color: 'var(--blue)' }}>
+                        <strong>{p.name}</strong> — {fmtRp(p.package_price)} untuk {p.sessions} sesi
+                        {' '}(hemat {fmtRp(p.retail_price - p.package_price)})
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedNewPackageIds(prev => prev.filter(id => id !== p.id))}
+                        style={{ background: 'none', border: 'none', color: 'var(--red)', cursor: 'pointer', padding: 0, lineHeight: 1, flexShrink: 0 }}
+                        title="Hapus paket"
+                      ><X size={16} /></button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {selectedNewPkgs.length > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--text-secondary)', marginBottom: 8, paddingTop: 4, borderTop: '1px dashed var(--border)' }}>
+                  <span>Subtotal paket ({selectedNewPkgs.length})</span>
+                  <span style={{ fontWeight: 600, color: 'var(--blue)' }}>{fmtRp(packageSubtotal)}</span>
                 </div>
               )}
 
