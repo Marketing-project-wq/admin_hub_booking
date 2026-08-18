@@ -35,6 +35,13 @@ async function getLandmarker(): Promise<PoseLandmarkerT> {
         baseOptions: { modelAssetPath: MODEL_PATH, delegate },
         runningMode: 'IMAGE',
         numPoses: 1,
+        // Ambang deteksi diturunkan dari default 0.5 → lebih toleran pada foto klinik
+        // (jarak, pencahayaan, pakaian, warna latar bervariasi). Klinik SELALU memotret
+        // orang, jadi risiko false-positive minim; yang dihindari = false-negative
+        // "Tubuh tidak terdeteksi" pada foto yang sebenarnya sudah bagus.
+        minPoseDetectionConfidence: 0.25,
+        minPosePresenceConfidence: 0.25,
+        minTrackingConfidence: 0.25,
       })
     // GPU dulu (WebGL), fallback CPU (wasm) kalau WebGL bermasalah.
     try {
@@ -46,10 +53,12 @@ async function getLandmarker(): Promise<PoseLandmarkerT> {
   return landmarkerPromise
 }
 
-/** Deteksi 1 pose pada gambar; kembalikan 33 landmark ternormalisasi (kosong kalau tak terdeteksi). */
-export async function detectPose(img: HTMLImageElement): Promise<PoseLandmark[]> {
+/** Deteksi 1 pose pada gambar; kembalikan 33 landmark ternormalisasi (kosong kalau tak terdeteksi).
+ *  Menerima <canvas>/ImageBitmap selain <img> — pemanggil menormalkan orientasi EXIF & ukuran ke
+ *  kanvas dulu (MediaPipe/WebGL TIDAK menerapkan orientasi EXIF pada HTMLImageElement mentah). */
+export async function detectPose(src: HTMLImageElement | HTMLCanvasElement | ImageBitmap): Promise<PoseLandmark[]> {
   const lm = await getLandmarker()
-  const res = lm.detect(img)
+  const res = lm.detect(src)
   const first = res.landmarks?.[0] ?? []
   return first.map(p => ({ x: p.x, y: p.y, z: p.z, visibility: p.visibility }))
 }

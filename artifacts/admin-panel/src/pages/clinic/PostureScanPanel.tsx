@@ -131,6 +131,48 @@ async function convertHeicToJpeg(file: File): Promise<File> {
   return new File([blob], name, { type: 'image/jpeg' })
 }
 
+// Batas sisi terpanjang gambar untuk deteksi + simpan. Mencegah tekstur GPU raksasa
+// (penyebab gagal-deteksi diam-diam pada foto HP resolusi tinggi) dan menjaga ukuran
+// upload jauh di bawah limit bucket 5 MB. Lebih dari cukup untuk deteksi & tampilan.
+const MAX_DIM = 2000
+
+// Normalkan foto SEBELUM deteksi & simpan. Dua akar masalah "Tubuh tidak terdeteksi"
+// pada foto yang sebenarnya bagus:
+//   1) Orientasi EXIF — foto HP portrait sering tersimpan "menyamping" + tag orientasi.
+//      <img> menampilkannya tegak (CSS image-orientation), TAPI MediaPipe mengunggah
+//      piksel mentah ke WebGL/texImage2D yang TIDAK menerapkan EXIF → model menerima
+//      badan terbaring 90° → gagal deteksi (model dilatih untuk orang tegak).
+//   2) Resolusi sangat tinggi — tekstur besar bisa bikin jalur GPU gagal senyap.
+// createImageBitmap(..., imageOrientation:'from-image') men-decode dengan orientasi EXIF
+// diterapkan → piksel sudah tegak. Kanvas hasil dipakai untuk deteksi, tampilan (via file
+// JPEG baru), dan upload — semuanya tegak & identik, jadi overlay garis pas dengan foto.
+async function normalizeForPose(file: File): Promise<{ file: File; canvas: HTMLCanvasElement; w: number; h: number }> {
+  let bitmap: ImageBitmap
+  try {
+    bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' })
+  } catch {
+    // Fallback (browser lama tanpa opsi imageOrientation): muat via <img> lalu bitmap.
+    const url = URL.createObjectURL(file)
+    try { bitmap = await createImageBitmap(await loadImage(url)) }
+    finally { URL.revokeObjectURL(url) }
+  }
+  const scale = Math.min(1, MAX_DIM / Math.max(bitmap.width, bitmap.height))
+  const w = Math.max(1, Math.round(bitmap.width * scale))
+  const h = Math.max(1, Math.round(bitmap.height * scale))
+  const canvas = document.createElement('canvas')
+  canvas.width = w
+  canvas.height = h
+  const ctx = canvas.getContext('2d')
+  if (!ctx) { bitmap.close?.(); throw new Error('Canvas 2D tidak tersedia di browser ini') }
+  ctx.drawImage(bitmap, 0, 0, w, h)
+  bitmap.close?.()
+  const blob = await new Promise<Blob | null>(res => canvas.toBlob(res, 'image/jpeg', 0.92))
+  if (!blob) throw new Error('Gagal memproses foto (encode JPEG)')
+  const base = file.name.replace(/\.[^.]+$/, '') || 'foto'
+  const out = new File([blob], `${base}.jpg`, { type: 'image/jpeg' })
+  return { file: out, canvas, w, h }
+}
+
 const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n))
 const fmtDeg = (n: number) => `${n > 0 ? '+' : ''}${n.toFixed(1)}°`
 
@@ -604,24 +646,24 @@ export default function PostureScanPanel({ visitId, patientId, gender }: { visit
       }
     }
     setBusyFor(view, 'Memproses foto & mendeteksi postur…')
-    const url = URL.createObjectURL(work)
     try {
-      const img = await loadImage(url)
-      const landmarks = await detectPose(img)
+      // Normalkan orientasi (EXIF) + ukuran DULU → deteksi & simpan pakai gambar tegak
+      // yang SAMA (kanvas). Ini yang menyembuhkan "Tubuh tidak terdeteksi" pada foto bagus.
+      const norm = await normalizeForPose(work)
+      const landmarks = await detectPose(norm.canvas)
       if (landmarks.length === 0) {
-        URL.revokeObjectURL(url)
-        setErrFor(view, 'Tubuh tidak terdeteksi. Pastikan seluruh badan tampak jelas & pencahayaan cukup.')
+        setErrFor(view, 'Tubuh tidak terdeteksi. Pastikan berdiri tegak menghadap/membelakangi kamera, seluruh badan (kepala–kaki) masuk frame, & pencahayaan cukup.')
         return
       }
       // Kalkulasi 3 sudut TIDAK diubah; hanya ditambah detection_confidence (rata-rata visibility).
       const angles: PoseAngles = {
-        ...computeAngles(landmarks, img.naturalWidth, img.naturalHeight),
+        ...computeAngles(landmarks, norm.w, norm.h),
         detection_confidence: Math.round(keyVisibility(landmarks) * 100) / 100,
       }
-      setScans(s => ({ ...s, [view]: { imageUrl: url, landmarks, angles, annotations: emptyAnnotations(), w: img.naturalWidth, h: img.naturalHeight, saved: false, file: work } }))
+      const url = URL.createObjectURL(norm.file)
+      setScans(s => ({ ...s, [view]: { imageUrl: url, landmarks, angles, annotations: emptyAnnotations(), w: norm.w, h: norm.h, saved: false, file: norm.file } }))
       setAnnoDirty(d => ({ ...d, [view]: false }))   // foto baru = anotasi kosong, ikut Simpan utama
     } catch (e) {
-      URL.revokeObjectURL(url)
       setErrFor(view, e instanceof Error ? e.message : 'Gagal memproses foto')
     } finally {
       setBusyFor(view, undefined)
