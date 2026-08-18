@@ -529,7 +529,7 @@ export default function ClinicCloseBillModal({
                 style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid #E5E7EB', fontSize: 13, marginBottom: 8 }}
               >
                 <option value="">— Pilih Paket —</option>
-                {['Performance', 'Medic'].map(cat => (
+                {[...new Set(packages.map(p => p.category))].map(cat => (
                   <optgroup key={cat} label={`${cat} Package`}>
                     {packages.filter(p => p.category === cat).map(p => (
                       <option key={p.id} value={p.id}>
