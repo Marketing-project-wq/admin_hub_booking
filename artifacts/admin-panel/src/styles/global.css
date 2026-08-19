@@ -928,7 +928,13 @@ tr.row-selected { background: var(--red-soft) !important; }
   .main-content { padding: 24px; }
 }
 
-@media (max-width: 768px) {
+/* Drawer + full-width content for everything up to iPad landscape (1024px).
+   iPads (portrait 768–834, base landscape 1024) therefore get the same clean
+   full-bleed layout as phones instead of a cramped fixed-sidebar desktop view;
+   the ≥1025px persistent-sidebar layout is restored lower down. Phone-only
+   single-column stacking is re-scoped to ≤640px in a later block so tablets keep
+   their extra width. */
+@media (max-width: 1024px) {
   /* Drawer must be OPAQUE (it slides over page content) and full-height square. */
   .sidebar {
     transform: translateX(-100%); transition: transform .22s ease; box-shadow: var(--shadow-elevated);
@@ -1483,7 +1489,7 @@ tr.row-selected { background: var(--red-soft) !important; }
    MOBILE OVERRIDES — appended last so they win over the clinic block above
    (equal specificity → later source order wins). Keeps clinic responsive.
    ============================================================================ */
-@media (max-width: 768px) {
+@media (max-width: 1024px) {
   .layout-clinic .main-content { margin-left: 0 !important; padding: 16px !important; }
   .layout-clinic .sidebar { transform: translateX(-100%); }
   .layout-clinic .sidebar.open { transform: translateX(0); }
@@ -1542,7 +1548,7 @@ button.unit-card:hover:not(.disabled):not(:disabled) {
    NOT fixed/sticky like the old frame), its rounded corners never "square off"
    on scroll — they simply scroll with the content like any card.
    ============================================================================ */
-@media (min-width: 769px) {
+@media (min-width: 1025px) {
   .main-content {
     margin: 14px 14px 14px calc(240px + 14px);  /* 240 sidebar + 14 gap */
     border-radius: 26px;
@@ -1573,4 +1579,48 @@ button.unit-card:hover:not(.disabled):not(:disabled) {
 .layout-clinic input:not([type="checkbox"]):not([type="radio"]),
 .layout-clinic select, .layout-clinic textarea {
   box-shadow: var(--input-shadow);
+}
+
+/* ============================================================================
+   TABLET REFINEMENT (iPad) — 641px … 1024px
+   The drawer + full-width content rules above (≤1024px) also drop the layout to
+   a single phone column (stacked header, stacked filters, 1-col forms). On an
+   iPad there is plenty of width for a richer layout, so re-assert multi-column
+   here. This band only ever runs on tablets / small windows; phones (≤640px)
+   keep the fully-stacked layout, desktops (≥1025px) keep the sidebar layout.
+   Appended last so it wins the cascade over the ≤1024px block by source order.
+   ============================================================================ */
+@media (min-width: 641px) and (max-width: 1024px) {
+  /* Comfortable page padding (the ≤1024 block squeezes it to 16px for phones). */
+  .main-content { padding: 24px; }
+  .layout-clinic .main-content { padding: 24px !important; }
+  .layout-clinic .page-container { padding: 24px 28px !important; }
+
+  /* Keep the header + toolbar on one line (they only stack on phones ≤640px). */
+  .page-header,
+  .layout-clinic .page-header { flex-direction: row; align-items: center; }
+  .page-header > div { flex-wrap: wrap; }
+
+  /* Filters stay horizontal and size to content instead of full-width columns. */
+  .filter-bar { flex-direction: row; flex-wrap: wrap; align-items: center; }
+  .filter-bar input, .filter-bar select { width: auto; }
+
+  /* Two-up grids read well at tablet width. */
+  .form-row { grid-template-columns: repeat(2, 1fr); }
+  .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* ============================================================================
+   TOUCH TARGETS — coarse pointers (iPad / touchscreens)
+   Several clinic controls are intentionally compact for mouse use (the inline
+   "Assign dokter…" select, date navigator, action buttons). On touch they are
+   hard to tap, so lift their hit area. `min-height` raises the box without
+   fighting the components' own inline padding, so visuals are preserved.
+   ============================================================================ */
+@media (pointer: coarse) {
+  .layout-clinic select,
+  .layout-clinic input:not([type="checkbox"]):not([type="radio"]),
+  .layout-clinic textarea,
+  .layout-clinic .btn-primary,
+  .layout-clinic .btn-secondary { min-height: 40px; }
 }

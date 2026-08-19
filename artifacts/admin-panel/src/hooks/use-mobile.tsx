@@ -1,8 +1,10 @@
 import * as React from "react"
 
-// 769 so JS agrees with the CSS `max-width: 768px` mobile rules: width 768 = mobile
-// in both (JS uses `< 769`, matchMedia uses `max-width: 768px`).
-const MOBILE_BREAKPOINT = 769
+// 1025 so JS agrees with the CSS drawer rules (`max-width: 1024px`): the sidebar
+// collapses to a drawer and content goes full-width for every device up to and
+// including iPad landscape at 1024px. Above that (≥1025px) the persistent sidebar
+// layout returns. JS uses `< 1025`, matchMedia uses `max-width: 1024px` — same cut.
+const MOBILE_BREAKPOINT = 1025
 
 export function useIsMobile() {
   const [isMobile, setIsMobile] = React.useState<boolean | undefined>(undefined)
