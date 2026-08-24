@@ -301,7 +301,9 @@ export default function ArenaCalendar() {
         const color = ct?.color || DEFAULT_CLASS_COLOR
         return (
           <div className="modal-overlay">
-            <div className="modal-box" style={{ maxWidth: 620 }}>
+            {/* 760px: cukup lebar agar 4 kolom tabel peserta tampil tanpa scroll
+                horizontal (global .data-table ber-min-width 640px + padding modal). */}
+            <div className="modal-box" style={{ maxWidth: 760 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
                   <span style={{ width: 12, height: 12, borderRadius: 3, background: color, display: 'inline-block', marginTop: 5 }} />
@@ -334,7 +336,10 @@ export default function ArenaCalendar() {
               </div>
 
               <div className="table-wrap" style={{ maxHeight: 360, overflowY: 'auto' }}>
-                <table className="data-table">
+                {/* minWidth 0 meng-override min-width 640px global .data-table:
+                    4 kolom ini cukup sempit — biarkan tabel mengikuti lebar modal
+                    supaya kolom Status tidak terpotong / tanpa scroll ke kanan. */}
+                <table className="data-table" style={{ minWidth: 0 }}>
                   <thead>
                     <tr><th>Booking Code</th><th>Nama</th><th>Telp</th><th>Status</th></tr>
                   </thead>
