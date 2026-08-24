@@ -22,6 +22,9 @@ export default function ManualBookingModal({ type, onClose, onRefresh }: Props) 
   const [unitId, setUnitId] = useState(UNIT_ID)
   const [classTypeId, setClassTypeId] = useState('')
   const [scheduleId, setScheduleId] = useState('')
+  // Mode backdate (khusus class): dropdown Jadwal menampilkan jadwal LAMPAU
+  // untuk input booking susulan. Slot booking tidak perlu — tanggalnya bebas.
+  const [showPast, setShowPast] = useState(false)
   const [bookingDate, setBookingDate] = useState('')
   const [startTime, setStartTime] = useState('')
   const [endTime, setEndTime] = useState('')
@@ -81,18 +84,22 @@ export default function ManualBookingModal({ type, onClose, onRefresh }: Props) 
       if (ct) {
         setPrice(bookerType === 'member' ? Number(ct.price_member) : Number(ct.price_guest))
       }
-      supabase.from('arena_class_schedules')
+      const today = new Date().toISOString().slice(0, 10)
+      const base = supabase.from('arena_class_schedules')
         .select('id, schedule_date, start_time, end_time, instructor, quota')
         .eq('class_type_id', classTypeId)
         .eq('is_cancelled', false)
-        .gte('schedule_date', new Date().toISOString().slice(0, 10))
-        .order('schedule_date', { ascending: true })
-        .then(({ data }) => { if (data) setSchedules(data) })
+      // Backdate: jadwal yang SUDAH LEWAT, terbaru dulu, dibatasi 100 supaya
+      // dropdown tetap wajar. Mode normal: hari ini ke depan (perilaku semula).
+      const query = showPast
+        ? base.lt('schedule_date', today).order('schedule_date', { ascending: false }).order('start_time', { ascending: true }).limit(100)
+        : base.gte('schedule_date', today).order('schedule_date', { ascending: true })
+      query.then(({ data }) => { if (data) setSchedules(data) })
     } else {
       setSchedules([])
       setScheduleId('')
     }
-  }, [classTypeId, classTypes, bookerType, type])
+  }, [classTypeId, classTypes, bookerType, type, showPast])
 
   useEffect(() => {
     if (type === 'class' && classTypeId && bookerType) {
@@ -249,13 +256,26 @@ export default function ManualBookingModal({ type, onClose, onRefresh }: Props) 
               <div className="form-group">
                 <label>Jadwal *</label>
                 <select value={scheduleId} onChange={e => setScheduleId(e.target.value)} required disabled={!classTypeId}>
-                  <option value="">Pilih jadwal...</option>
+                  <option value="">{showPast ? 'Pilih jadwal lampau...' : 'Pilih jadwal...'}</option>
                   {schedules.map((s: Record<string, unknown>) => (
                     <option key={s.id as string} value={s.id as string}>
                       {fmtDate(s.schedule_date as string)} {fmtTime(s.start_time as string)}–{fmtTime(s.end_time as string)} | {s.instructor as string} | Quota: {s.quota as number}
                     </option>
                   ))}
                 </select>
+                {/* Toggle backdate — pilihan jadwal di-reset saat ganti mode karena
+                    jadwal terpilih belum tentu ada di daftar mode satunya. */}
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, fontSize: 12, color: 'var(--text-secondary)', cursor: 'pointer', fontWeight: 400 }}>
+                  <input type="checkbox" checked={showPast}
+                    onChange={e => { setShowPast(e.target.checked); setScheduleId('') }}
+                    style={{ width: 'auto', margin: 0 }} />
+                  Backdate — tampilkan jadwal yang sudah lewat
+                </label>
+                {classTypeId && schedules.length === 0 && (
+                  <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '4px 0 0' }}>
+                    {showPast ? 'Tidak ada jadwal lampau untuk kelas ini.' : 'Tidak ada jadwal mendatang untuk kelas ini.'}
+                  </p>
+                )}
               </div>
               <div className="form-row">
                 <div className="form-group">
