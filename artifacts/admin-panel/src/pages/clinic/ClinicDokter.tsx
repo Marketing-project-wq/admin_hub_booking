@@ -507,25 +507,49 @@ const VISIT_SELECT = `
   services:clinic_visit_services(id, service_id, service_name, price, service:clinic_services(requires_doctor))
 `
 
-// Fetch visits per tanggal terpilih (pola navigator Triase). todayISO() = LOKAL,
-// bukan toISOString (UTC) yang salah tanggal di jam 00-07 WIB.
-async function fetchDokterVisits(selectedDate: string): Promise<DokterVisit[]> {
+// Varian utk mode search by nama (pola TRIASE_SELECT_SEARCH di ClinicTriase):
+// !inner agar filter ilike pada kolom embed (patient.full_name) menyaring baris
+// visit-nya, bukan cuma mengosongkan embed.
+const VISIT_SELECT_SEARCH = VISIT_SELECT.replace('patient:clinic_patients(', 'patient:clinic_patients!inner(')
+
+// Fetch visits per tanggal terpilih (pola navigator Triase), atau — bila
+// searchTerm terisi — MODE SEARCH lintas SEMUA tanggal, independen dari
+// selectedDate. todayISO() = LOKAL, bukan toISOString (UTC) yang salah tanggal
+// di jam 00-07 WIB.
+async function fetchDokterVisits(selectedDate: string, searchTerm = ''): Promise<DokterVisit[]> {
   const today = todayISO()
-  let q = supabase.from('clinic_visits').select(VISIT_SELECT)
-  if (selectedDate === today) {
-    // MODE HARI INI — hari ini PLUS tunggakan: visit lama yang masih
-    // scheduled/in_progress tetap tampil (tanpa batas mundur) sampai
-    // diselesaikan/dibatalkan — assessment yang belum diisi tidak boleh
-    // "hilang" dari pandangan dokter saat tanggal berganti.
-    q = q.or(`visit_date.eq.${today},and(visit_date.lt.${today},status.in.(scheduled,in_progress))`)
+  let q
+  if (searchTerm) {
+    // MODE SEARCH — cari pasien lintas semua tanggal (pola fetchVisits Triase).
+    // Completed lama ikut (use-case: "cari kunjungan pasien ini kapan saja");
+    // cancelled/no_show dikecualikan — bukan bahan kerja dokter.
+    const esc = searchTerm.replace(/[\\%_]/g, m => '\\' + m)
+    // Kode visit produksi berprefix VST- atau VIS- (dua-duanya ada di data).
+    if (/^(vst|vis)-/i.test(searchTerm)) {
+      q = supabase.from('clinic_visits').select(VISIT_SELECT).ilike('visit_code', `${esc}%`)
+    } else {
+      q = supabase.from('clinic_visits').select(VISIT_SELECT_SEARCH).ilike('patient.full_name', `%${esc}%`)
+    }
+    q = q.in('status', ['scheduled', 'in_progress', 'completed'])
   } else {
-    // MODE JELAJAH — satu tanggal spesifik, tanpa filter status (meniru
-    // perilaku hari-ini yang juga menampilkan semua status tanggal tsb).
-    q = q.eq('visit_date', selectedDate)
+    q = supabase.from('clinic_visits').select(VISIT_SELECT)
+    if (selectedDate === today) {
+      // MODE HARI INI — hari ini PLUS tunggakan: visit lama yang masih
+      // scheduled/in_progress tetap tampil (tanpa batas mundur) sampai
+      // diselesaikan/dibatalkan — assessment yang belum diisi tidak boleh
+      // "hilang" dari pandangan dokter saat tanggal berganti.
+      q = q.or(`visit_date.eq.${today},and(visit_date.lt.${today},status.in.(scheduled,in_progress))`)
+    } else {
+      // MODE JELAJAH — satu tanggal spesifik, tanpa filter status (meniru
+      // perilaku hari-ini yang juga menampilkan semua status tanggal tsb).
+      q = q.eq('visit_date', selectedDate)
+    }
   }
-  const { data, error } = await q
-    .order('visit_date', { ascending: true })
-    .order('visit_time', { ascending: true, nullsFirst: false })
+  // Search: terbaru dulu + limit 50 (lintas semua tanggal, nama umum bisa
+  // banyak match). Mode tanggal: urutan naik seperti semula.
+  const { data, error } = await (searchTerm
+    ? q.order('visit_date', { ascending: false }).order('visit_time', { ascending: false, nullsFirst: false }).limit(50)
+    : q.order('visit_date', { ascending: true }).order('visit_time', { ascending: true, nullsFirst: false }))
   if (error) throw error
   const rows = (data ?? []) as unknown as DokterVisit[]
   // Hanya tampilkan visit dengan minimal 1 layanan yang requires_doctor = true —
@@ -634,9 +658,11 @@ type Tab = typeof TABS[number]
 const TAB_LABEL: Record<Tab, string> = { jadwal: 'Jadwal Hari Ini', antrian: 'Antrian Aktif', riwayat: 'Riwayat Pasien' }
 
 // ─── Visit card ─────────────────────────────────────────────────────────────────
-function VisitCard({ visit, queue = false, onStatusChange, onOpen, busy, doctorOptions, onAssignDoctor }: {
+function VisitCard({ visit, queue = false, showDate = false, onStatusChange, onOpen, busy, doctorOptions, onAssignDoctor }: {
   visit: DokterVisit
   queue?: boolean
+  /** Mode search lintas tanggal: hasil beda-beda hari → tampilkan tanggal visit di kartu. */
+  showDate?: boolean
   onStatusChange: (id: string, status: string) => void
   onOpen: (visit: DokterVisit) => void
   busy: boolean
@@ -663,13 +689,18 @@ function VisitCard({ visit, queue = false, onStatusChange, onOpen, busy, doctorO
     color: s === 'in_progress' ? 'var(--red)' : 'var(--text-secondary)',
   }
 
-  const isStale = visit.visit_date < todayISO()
+  // "Tertinggal" hanya untuk tunggakan sungguhan (belum selesai) — visit lama yang
+  // sudah completed (mis. muncul via mode search lintas tanggal) bukan tunggakan.
+  const isStale = visit.visit_date < todayISO() && (s === 'scheduled' || s === 'in_progress')
 
   return (
     <div style={cardStyle}>
       {/* Top block: time + patient info (stays a row even on mobile) */}
       <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', flex: isMobile ? 'none' : 1, minWidth: 0 }}>
-        <div style={timeBox}>{visit.visit_time ? fmtTime(visit.visit_time) : '—'}</div>
+        <div style={timeBox}>
+          {showDate && <div style={{ fontSize: 10, fontWeight: 600, marginBottom: 2, whiteSpace: 'nowrap' }}>{fmtDate(visit.visit_date)}</div>}
+          {visit.visit_time ? fmtTime(visit.visit_time) : '—'}
+        </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{visit.patient?.full_name || '-'}</div>
           <div style={{ fontSize: 11, color: 'var(--text-secondary)', fontFamily: 'monospace' }}>{visit.patient?.patient_code || '-'}</div>
@@ -766,6 +797,13 @@ export default function ClinicDokter() {
   // Tanggal terpilih (pola navigator Triase) — default hari ini (mode normal +
   // tunggakan); tanggal lain = mode jelajah. Berlaku utk tab Jadwal & Antrian.
   const [selectedDate, setSelectedDate] = useState(todayISO)
+  // Mode search (mode ketiga, pola ClinicTriase): cari pasien by nama LINTAS
+  // semua tanggal, independen dari selectedDate — selectedDate tidak disentuh,
+  // jadi mengosongkan search otomatis kembali ke mode sebelumnya. Debounce 300ms.
+  const [searchInput, setSearchInput] = useState('')
+  const [search, setSearch] = useState('')
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const searchActive = search.trim() !== ''
   const [doctorOptions, setDoctorOptions] = useState<ClinicStaffOption[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -828,14 +866,14 @@ export default function ClinicDokter() {
   const loadToday = useCallback(async (showSpinner = true) => {
     if (showSpinner) setLoading(true)
     try {
-      setTodayVisits(await fetchDokterVisits(selectedDate))
+      setTodayVisits(await fetchDokterVisits(selectedDate, search.trim()))
       setError('')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Gagal memuat jadwal')
     } finally {
       if (showSpinner) setLoading(false)
     }
-  }, [selectedDate])
+  }, [selectedDate, search])
 
   useEffect(() => { loadToday() }, [loadToday])
 
@@ -1068,8 +1106,11 @@ export default function ClinicDokter() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           <h2 className="page-title" style={{ margin: 0 }}>Panel EMR</h2>
           {/* Navigator tanggal (pola Triase) — hanya relevan utk tab Jadwal &
-              Antrian; tab Riwayat Pasien punya filter tanggalnya sendiri. */}
-          {tab !== 'riwayat' && (
+              Antrian; tab Riwayat Pasien punya filter tanggalnya sendiri.
+              Disembunyikan saat mode search (pencarian lintas tanggal, navigator
+              tidak berpengaruh); selectedDate tidak diubah, jadi mengosongkan
+              search kembali persis ke mode sebelumnya. */}
+          {tab !== 'riwayat' && !searchActive && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
               <button className="btn-secondary" style={{ width: 'auto', padding: '4px 10px', fontSize: 12 }}
                 onClick={() => setSelectedDate(d => shiftDay(d, -1))} aria-label="Hari sebelumnya">
@@ -1089,6 +1130,26 @@ export default function ClinicDokter() {
                 </button>
               )}
             </div>
+          )}
+          {/* Search by nama LINTAS semua tanggal (pola ClinicTriase) — dokter bisa
+              mencari pasien tanpa bergantung pada tanggal terpilih. Tab Riwayat
+              Pasien punya kotak carinya sendiri. */}
+          {tab !== 'riwayat' && (
+            <>
+              <input type="text" placeholder="Cari pasien (nama / kode visit)" value={searchInput}
+                onChange={e => {
+                  const val = e.target.value
+                  setSearchInput(val)
+                  if (searchTimer.current) clearTimeout(searchTimer.current)
+                  searchTimer.current = setTimeout(() => setSearch(val), 300)
+                }}
+                style={{ width: 220, padding: '5px 10px', fontSize: 13 }} />
+              {searchActive && !loading && (
+                <span className="badge" style={{ background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>
+                  Hasil pencarian lintas tanggal · {todayVisits.length} hasil
+                </span>
+              )}
+            </>
           )}
         </div>
         {user?.full_name && (
@@ -1115,15 +1176,20 @@ export default function ClinicDokter() {
       {/* TAB 1 — Jadwal */}
       {tab === 'jadwal' && (
         <div>
-          <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 12 }}>
-            Total: {counts.total} | Menunggu: {counts.waiting} | Berlangsung: {counts.progress} | Selesai: {counts.done}
-          </div>
+          {/* Statistik dihitung dari tanggal terpilih — tidak bermakna di mode
+              search lintas tanggal, jadi disembunyikan (badge header sudah
+              menampilkan jumlah hasil). */}
+          {!searchActive && (
+            <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 12 }}>
+              Total: {counts.total} | Menunggu: {counts.waiting} | Berlangsung: {counts.progress} | Selesai: {counts.done}
+            </div>
+          )}
           {loading ? (
             <p style={{ color: 'var(--text-muted)' }}>Memuat data...</p>
           ) : todayVisits.length === 0 ? (
-            <EmptyState>{selectedDate === todayStr ? 'Tidak ada jadwal hari ini' : `Tidak ada jadwal pada ${fmtDate(selectedDate)}`}</EmptyState>
+            <EmptyState>{searchActive ? `Tidak ada hasil untuk "${search.trim()}"` : selectedDate === todayStr ? 'Tidak ada jadwal hari ini' : `Tidak ada jadwal pada ${fmtDate(selectedDate)}`}</EmptyState>
           ) : todayVisits.map(v => (
-            <VisitCard key={v.id} visit={v} onStatusChange={handleStatusChange} onOpen={openVisitModal} busy={busy} doctorOptions={doctorOptions} onAssignDoctor={assignDoctor} />
+            <VisitCard key={v.id} visit={v} showDate={searchActive} onStatusChange={handleStatusChange} onOpen={openVisitModal} busy={busy} doctorOptions={doctorOptions} onAssignDoctor={assignDoctor} />
           ))}
         </div>
       )}
@@ -1131,13 +1197,17 @@ export default function ClinicDokter() {
       {/* TAB 2 — Antrian Aktif */}
       {tab === 'antrian' && (
         <div>
-          {/* Panggil Berikutnya HANYA di mode hari ini — di mode jelajah bisa
-              salah mengubah status visit tanggal lain. */}
-          <button className="btn-primary" style={{ marginBottom: selectedDate === todayStr ? 16 : 4 }}
-            disabled={busy || counts.waiting === 0 || selectedDate !== todayStr} onClick={callNext}>
+          {/* Panggil Berikutnya HANYA di mode hari ini — di mode jelajah/search
+              bisa salah mengubah status visit tanggal lain. */}
+          <button className="btn-primary" style={{ marginBottom: selectedDate === todayStr && !searchActive ? 16 : 4 }}
+            disabled={busy || counts.waiting === 0 || selectedDate !== todayStr || searchActive} onClick={callNext}>
             Panggil Berikutnya
           </button>
-          {selectedDate !== todayStr && (
+          {searchActive ? (
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 12px' }}>
+              Kosongkan pencarian untuk memanggil antrian.
+            </p>
+          ) : selectedDate !== todayStr && (
             <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 12px' }}>
               Kembali ke Hari Ini untuk memanggil antrian.
             </p>
@@ -1145,9 +1215,9 @@ export default function ClinicDokter() {
           {loading ? (
             <p style={{ color: 'var(--text-muted)' }}>Memuat data...</p>
           ) : queue.length === 0 ? (
-            <EmptyState>Antrian kosong</EmptyState>
+            <EmptyState>{searchActive ? `Tidak ada antrian aktif untuk "${search.trim()}"` : 'Antrian kosong'}</EmptyState>
           ) : queue.map(v => (
-            <VisitCard key={v.id} visit={v} queue onStatusChange={handleStatusChange} onOpen={openVisitModal} busy={busy} doctorOptions={doctorOptions} onAssignDoctor={assignDoctor} />
+            <VisitCard key={v.id} visit={v} queue showDate={searchActive} onStatusChange={handleStatusChange} onOpen={openVisitModal} busy={busy} doctorOptions={doctorOptions} onAssignDoctor={assignDoctor} />
           ))}
         </div>
       )}
