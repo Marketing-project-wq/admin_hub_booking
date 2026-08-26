@@ -1,24 +1,16 @@
 // ───────────────────────────────────────────────────────────────────────────
 // ⚠️  MIRROR dari Supabase Edge Function "create-xendit-payment" (project cpvzwqptzcxnwzfzgrmt, verify_jwt=true).
-// Snapshot untuk git. Repo ini TIDAK auto-deploy edge functions — kalau ada
-// perubahan, WAJIB deploy ulang manual ke Supabase (supabase functions deploy create-xendit-payment,
-// atau Supabase MCP deploy_edge_function). Jangan edit lalu lupa deploy.
+// Snapshot untuk git. WAJIB deploy manual setelah edit:
+//   supabase functions deploy create-xendit-payment --project-ref cpvzwqptzcxnwzfzgrmt
 // ───────────────────────────────────────────────────────────────────────────
 //
-// create-xendit-payment — pembuat pembayaran Xendit untuk SEMUA tipe booking 20FIT.
-// Drop-in pengganti create-mayar-payment: menerima input yang SAMA
-//   { booking_code, name, email, phone, amount, description, redirect_url }
-// dan mengembalikan bentuk yang SAMA { payment_url, payment_id } sehingga frontend
-// cukup mengganti URL fungsi (lihat VITE_PAYMENT_GATEWAY di frontend).
+// Buat Xendit Invoice, lalu simpan invoice_id ke kolom payment_ref di booking table.
+// Polling status dilakukan oleh xendit-check-payment — tidak perlu webhook.
 //
-// Memakai Xendit Invoice API (hosted checkout, redirect) — konsisten dgn ticket.20fit.id
-// (`createInvoice`). `external_id = booking_code` di-echo balik oleh webhook Xendit
-// sehingga xendit-webhook bisa me-routing ke tabel yang benar per prefix.
-//
-// Env yang WAJIB di-set di Supabase (Edge Function secrets):
-//   XENDIT_SECRET_KEY  — mis. xnd_development_... / xnd_production_...
+// Env wajib: XENDIT_SECRET_KEY, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+import { createClient } from "jsr:@supabase/supabase-js@2"
 
 const XENDIT_SECRET_KEY = Deno.env.get("XENDIT_SECRET_KEY")
 
@@ -95,6 +87,37 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: data?.message || data?.error_code || "Gagal membuat payment Xendit", xendit: data }), {
         status: 400, headers: { ...CORS, "Content-Type": "application/json" },
       })
+    }
+
+    // Simpan invoice_id ke payment_ref di booking table supaya xendit-check-payment bisa poll status
+    if (payment_id) {
+      const supabase = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+      )
+
+      const TABLE_MAP: Record<string, string> = {
+        "BK-": "arena_bookings",
+        "CL-": "arena_class_bookings",
+        "GM-": "gym_class_bookings",
+        "PKG-": "arena_package_orders",
+        "CLC-": "clinic_bookings",
+        "MBR-": "gym_membership_orders",
+      }
+      const CODE_FIELD: Record<string, string> = {
+        arena_bookings: "booking_code",
+        arena_class_bookings: "booking_code",
+        gym_class_bookings: "booking_code",
+        arena_package_orders: "order_code",
+        clinic_bookings: "booking_code",
+        gym_membership_orders: "order_code",
+      }
+      const prefix = Object.keys(TABLE_MAP).find(p => booking_code.startsWith(p))
+      const table = prefix ? TABLE_MAP[prefix] : null
+      const field = table ? CODE_FIELD[table] : null
+      if (table && field) {
+        await supabase.from(table).update({ payment_ref: payment_id }).eq(field, booking_code)
+      }
     }
 
     return new Response(JSON.stringify({ payment_url, payment_id }), {
