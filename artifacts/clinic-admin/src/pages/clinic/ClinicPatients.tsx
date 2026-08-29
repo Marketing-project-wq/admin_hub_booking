@@ -173,7 +173,9 @@ export default function ClinicPatients() {
 
       {/* ── Add modal ────────────────────────────────────────────────────────── */}
       {showAdd && (
-        <div className="modal-overlay" onClick={() => setShowAdd(false)}>
+        // No onClick here: an accidental click on the backdrop must not discard
+        // unsaved new-patient form input. Closing goes through the X button only.
+        <div className="modal-overlay">
           <div className="modal-box" style={{ maxWidth: 600 }} onClick={e => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 20 }}>
               <h3 className="modal-title" style={{ margin: 0 }}>Tambah Pasien</h3>
@@ -192,7 +194,9 @@ export default function ClinicPatients() {
 
       {/* ── Detail / edit modal ──────────────────────────────────────────────── */}
       {selected && (
-        <div className="modal-overlay" onClick={closeDetail}>
+        // No onClick here: an accidental click on the backdrop must not discard
+        // unsaved patient edit form input. Closing goes through the X/Tutup buttons only.
+        <div className="modal-overlay">
           <div className="modal-box" style={{ maxWidth: 600 }} onClick={e => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 20 }}>
               <h3 className="modal-title" style={{ margin: 0 }}>{editing ? 'Edit Pasien' : 'Detail Pasien'}</h3>

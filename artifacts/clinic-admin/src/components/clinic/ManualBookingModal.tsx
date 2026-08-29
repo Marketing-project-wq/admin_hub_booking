@@ -122,7 +122,9 @@ export default function ManualBookingModal({ onClose, onSuccess }: Props) {
   const canNext2 = !!serviceId && (!!slotId || !!manualTime)
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    // No onClick here: an accidental click on the backdrop must not discard
+    // unsaved manual booking form input. Closing goes through the X/Batal buttons only.
+    <div className="modal-overlay">
       <div className="modal-box" style={{ maxWidth: 600 }} onClick={e => e.stopPropagation()}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
           <h3 className="modal-title" style={{ margin: 0 }}>Tambah Booking Manual</h3>

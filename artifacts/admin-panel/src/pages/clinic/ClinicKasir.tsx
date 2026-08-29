@@ -458,7 +458,9 @@ function EditTransactionModal({ trx, canEditFinance, performedBy, performedByRol
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    // No onClick here: an accidental click on the backdrop must not discard
+    // unsaved transaction edit input. Closing goes through the X button only.
+    <div className="modal-overlay">
       <div className="modal-box" style={{ maxWidth: 520 }} onClick={e => e.stopPropagation()}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
           <h3 className="modal-title" style={{ margin: 0 }}>Edit Transaksi</h3>

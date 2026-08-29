@@ -96,7 +96,9 @@ export default function WalkInVisitModal({ onClose, onSuccess }: Props) {
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    // No onClick here: an accidental click on the backdrop must not discard
+    // unsaved walk-in visit form input. Closing goes through the X button only.
+    <div className="modal-overlay">
       <div className="modal-box" style={{ maxWidth: 600 }} onClick={e => e.stopPropagation()}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
           <h3 className="modal-title" style={{ margin: 0 }}>Walk-in Baru</h3>

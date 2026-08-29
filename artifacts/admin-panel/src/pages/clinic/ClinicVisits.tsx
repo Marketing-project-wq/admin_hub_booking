@@ -685,7 +685,9 @@ function VisitFormModal({ mode, visit, defaultPatientId, onClose, onSaved }: {
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    // No onClick here: an accidental click on the backdrop must not discard
+    // unsaved visit form input. Closing goes through the X button only.
+    <div className="modal-overlay">
       <div className="modal-box" style={{ maxWidth: 600 }} onClick={e => e.stopPropagation()}>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 20 }}>
           <h3 className="modal-title" style={{ margin: 0 }}>{mode === 'edit' ? 'Edit Kunjungan' : 'Tambah Kunjungan'}</h3>

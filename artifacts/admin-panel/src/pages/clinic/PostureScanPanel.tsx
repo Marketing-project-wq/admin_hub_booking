@@ -952,7 +952,9 @@ export default function PostureScanPanel({ visitId, patientId, gender }: { visit
 
       {/* Dialog titik anotasi — nested modal, pola sama dialog titik body-diagram */}
       {annoDraft && (
-        <div className="modal-overlay" onClick={() => { setAnnoDraft(null); setAnnoDeleteConfirm(false) }}>
+        // No onClick here: an accidental click on the backdrop must not discard
+        // unsaved annotation-point note input. Closing goes through the Batal button only.
+        <div className="modal-overlay">
           <div className="modal-box" style={{ maxWidth: 420 }} onClick={e => e.stopPropagation()}>
             <h3 className="modal-title" style={{ marginTop: 0 }}>{annoDraft.isNew ? 'Tambah Titik Anotasi' : 'Edit Titik Anotasi'}</h3>
             <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 10 }}>
@@ -991,7 +993,9 @@ export default function PostureScanPanel({ visitId, patientId, gender }: { visit
 
       {/* Dialog garis anotasi (Stage 4b) — pola sama dialog titik */}
       {lineDraft && (
-        <div className="modal-overlay" onClick={() => setLineDraft(null)}>
+        // No onClick here: an accidental click on the backdrop must not discard
+        // unsaved annotation-line note input. Closing goes through the Batal button only.
+        <div className="modal-overlay">
           <div className="modal-box" style={{ maxWidth: 420 }} onClick={e => e.stopPropagation()}>
             <h3 className="modal-title" style={{ marginTop: 0 }}>{lineDraft.isNew ? 'Tambah Garis Anotasi' : 'Edit Garis Anotasi'}</h3>
             <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 10 }}>

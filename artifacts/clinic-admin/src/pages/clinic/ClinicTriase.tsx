@@ -1332,7 +1332,9 @@ export default function ClinicTriase() {
 
       {/* Modal */}
       {showModal && selectedVisit && visitRef && (
-        <div className="modal-overlay" onClick={() => setShowModal(false)}>
+        // No onClick here: an accidental click on the backdrop must not discard
+        // unsaved screening/consent/therapist assessment input. Closing goes through the X button only.
+        <div className="modal-overlay">
           <div className="modal-box"
             style={{ maxWidth: 680, width: isMobile ? '95vw' : '100%', maxHeight: '90vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', padding: 0 }}
             onClick={e => e.stopPropagation()}>
