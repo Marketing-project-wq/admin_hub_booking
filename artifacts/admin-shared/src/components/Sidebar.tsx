@@ -36,7 +36,15 @@ const UNIT_MENUS: Record<string, MenuItem[]> = {
     { label: 'Blocked Slots',  path: '/arena/master/blocked',     icon: '◻' },
   ],
   gym: [
-    { label: 'Dashboard', path: '/gym', icon: '◻' },
+    { label: 'Dashboard',        path: '/gym',                     icon: '◻' },
+    { label: 'Class Bookings',   path: '/gym/class-bookings',      icon: '◻' },
+    { label: 'Membership Orders', path: '/gym/membership-orders',  icon: '◻' },
+    { label: 'Members',          path: '/gym/members',             icon: '◻' },
+    { label: '— Master',         path: null,                       divider: true },
+    { label: 'Class Types',      path: '/gym/master/class-types',  icon: '◻' },
+    { label: 'Schedules',        path: '/gym/master/schedules',    icon: '◻' },
+    { label: 'Coaches',          path: '/gym/master/coaches',      icon: '◻' },
+    { label: 'Membership Plans', path: '/gym/master/plans',        icon: '◻' },
   ],
   clinic: [
     { label: 'Dashboard', path: '/clinic',          icon: '◻' },
