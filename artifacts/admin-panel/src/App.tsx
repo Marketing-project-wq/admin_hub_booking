@@ -6,6 +6,7 @@ import ProtectedRoute from './components/ProtectedRoute'
 import Layout from './components/Layout'
 import LandingPage from './pages/LandingPage'
 import LoginPage from './pages/LoginPage'
+import SsoLogin from './pages/SsoLogin'
 import ArenaDashboard from './pages/arena/ArenaDashboard'
 import ArenaCalendar from './pages/arena/ArenaCalendar'
 import ArenaBookings from './pages/arena/ArenaBookings'
@@ -48,6 +49,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<LandingPage />} />
           <Route path="/login/:unit" element={<LoginPage />} />
+          <Route path="/sso" element={<SsoLogin />} />
           <Route
             path="/clinic"
             element={
