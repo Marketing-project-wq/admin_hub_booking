@@ -668,7 +668,9 @@ export default function ClinicBookings() {
       )}
 
       {showManualModal && (
-        <div className="modal-overlay" onClick={resetManualModal}>
+        // No onClick here: an accidental click on the backdrop must not discard
+        // unsaved manual booking input. Closing goes through the X/Batal buttons only.
+        <div className="modal-overlay">
           <div className="modal-box" style={{ maxWidth: 480 }} onClick={e => e.stopPropagation()}>
 
             {manualStep === 1 && (

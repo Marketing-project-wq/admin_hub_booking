@@ -165,7 +165,9 @@ export default function ClinicServices() {
       </div>
 
       {showModal && (
-        <div className="modal-overlay" onClick={() => setShowModal(false)}>
+        // No onClick here: an accidental click on the backdrop must not discard
+        // unsaved service edit input. Closing goes through the X/Tutup buttons only.
+        <div className="modal-overlay">
           <div className="modal-box" style={{ maxWidth: 560 }} onClick={e => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 20 }}>
               <h3 className="modal-title" style={{ margin: 0 }}>{editId ? 'Edit Layanan' : 'Tambah Layanan'}</h3>

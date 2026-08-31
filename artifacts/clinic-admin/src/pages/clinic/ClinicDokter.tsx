@@ -606,7 +606,9 @@ export default function ClinicDokter() {
       {tab === 'riwayat' && <RiwayatTab onOpenVisit={openVisitModal} />}
 
       {showVisitModal && selectedVisit && (
-        <div className="modal-overlay" onClick={() => setShowVisitModal(false)}>
+        // No onClick here: an accidental click on the backdrop must not discard
+        // unsaved Assessment Dokter input. Closing goes through the X/Tutup buttons only.
+        <div className="modal-overlay">
           <div
             className="modal-box"
             style={{ maxWidth: 680, width: '95vw', maxHeight: '90vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', padding: 0 }}

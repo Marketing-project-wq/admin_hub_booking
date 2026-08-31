@@ -132,7 +132,9 @@ export default function ClinicStaff() {
       </div>
 
       {showModal && (
-        <div className="modal-overlay" onClick={() => setShowModal(false)}>
+        // No onClick here: an accidental click on the backdrop must not discard
+        // unsaved staff edit input. Closing goes through the X/Batal buttons only.
+        <div className="modal-overlay">
           <div className="modal-box" style={{ maxWidth: 460 }} onClick={e => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 20 }}>
               <h3 className="modal-title" style={{ margin: 0 }}>{editId ? 'Edit Staff' : 'Tambah Staff'}</h3>

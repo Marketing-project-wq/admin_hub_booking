@@ -151,7 +151,9 @@ function PermissionGrid({ value, onChange }: { value: Record<string, boolean>; o
 
 function ModalShell({ title, onClose, children, maxWidth = 560 }: { title: string; onClose: () => void; children: React.ReactNode; maxWidth?: number }) {
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    // No onClick here: an accidental click on the backdrop must not discard
+    // unsaved user/permissions/password form input. Closing goes through the X/Batal buttons only.
+    <div className="modal-overlay">
       <div className="modal-box" style={{ maxWidth }} onClick={e => e.stopPropagation()}>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 20 }}>
           <h3 className="modal-title" style={{ margin: 0 }}>{title}</h3>

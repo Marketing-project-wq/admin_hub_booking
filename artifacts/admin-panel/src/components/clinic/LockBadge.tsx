@@ -84,7 +84,9 @@ export default function LockBadge({
         </div>
 
         {showUnlockModal && (
-          <div className="modal-overlay" onClick={() => setShowUnlockModal(false)}>
+          // No onClick here: an accidental click on the backdrop must not discard
+          // the unsaved unlock-reason input. Closing goes through the Batal button only.
+          <div className="modal-overlay">
             <div className="modal-box" style={{ maxWidth: 420 }} onClick={e => e.stopPropagation()}>
               <h3 className="modal-title">Buka Kunci Record</h3>
               <p style={{ fontSize: 13, color: '#6B7280', marginBottom: 16 }}>
