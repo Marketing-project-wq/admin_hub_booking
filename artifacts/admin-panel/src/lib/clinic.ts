@@ -1638,6 +1638,22 @@ export async function listDoctorAssessments(patientId: string): Promise<DoctorAs
   }))
 }
 
+// Satu scan postur siap-tampil di Resume Medis: foto (signed URL bucket privat
+// clinic-posture) + landmark ternormalisasi (0..1) untuk menggambar ulang garis
+// bahu/pinggul/plumb + anotasi manual dokter. Parsing toleran-legacy di sini
+// supaya komponen resume tinggal render.
+export interface ResumePostureScan {
+  view: string
+  angles: Record<string, number>
+  general_note: string
+  is_diagram: boolean                        // true = diagram anatomi (tanpa foto/landmark), hanya anotasi manual
+  image_url: string | null                   // signed URL (TTL 1 jam) ke foto di Storage
+  landmarks: { x: number; y: number }[]      // 33 titik MediaPipe ternormalisasi (kosong utk diagram)
+  points: { id: string; x: number; y: number; note: string }[]   // titik anotasi manual (ternormalisasi)
+  lines: { point_a_id: string; point_b_id: string; angle_deg: number; note: string }[]
+  hidden_auto_lines: string[]                // garis otomatis (shoulder/hip/plumb) yang disembunyikan dokter
+}
+
 export interface MedicalResumeBundle {
   // Kolom jsonb dibiarkan unknown — parsing toleran-legacy dilakukan di komponen
   // resume (pola MedicalHistoryPanel), bukan mengimpor tipe SOAP dari ClinicDokter.
@@ -1653,7 +1669,7 @@ export interface MedicalResumeBundle {
   visit: { visit_code: string; visit_date: string | null; visit_time: string | null } | null
   services: { service_name: string; price: number }[]
   screeningVitals: ClinicVitalSigns | null   // sumber vital TERKINI (Triase)
-  postureScans: { view: string; angles: Record<string, number>; general_note: string }[]
+  postureScans: ResumePostureScan[]
 }
 /** Bundle lengkap satu resume: assessment + visit + layanan + vital screening + scan postur. */
 export async function getMedicalResumeBundle(assessmentId: string): Promise<MedicalResumeBundle> {
@@ -1670,17 +1686,42 @@ export async function getMedicalResumeBundle(assessmentId: string): Promise<Medi
   if (row.visit_id) {
     const [scr, scans] = await Promise.all([
       supabase.from('clinic_screenings').select('vital_signs').eq('visit_id', row.visit_id).maybeSingle(),
-      supabase.from('clinic_posture_scans').select('view, angles, annotations, landmarks').eq('visit_id', row.visit_id).order('created_at', { ascending: true }),
+      supabase.from('clinic_posture_scans').select('view, image_path, angles, annotations, landmarks').eq('visit_id', row.visit_id).order('created_at', { ascending: true }),
     ])
     screeningVitals = (scr.data as { vital_signs: ClinicVitalSigns } | null)?.vital_signs ?? null
-    postureScans = ((scans.data ?? []) as any[])
-      // Diagram anotasi (tanpa landmark) tidak masuk ringkasan sudut resume.
-      .filter(s => Array.isArray(s.landmarks) && s.landmarks.length > 0)
-      .map(s => ({
+    // Foto + garis analisis ikut dicetak di resume → butuh signed URL (bucket privat)
+    // + landmark/anotasi untuk digambar ulang. Diagram (tanpa landmark) tetap disertakan:
+    // ia foto anatomi dgn anotasi manual dokter, komponen resume membedakannya via is_diagram.
+    postureScans = await Promise.all(((scans.data ?? []) as any[]).map(async s => {
+      let image_url: string | null = null
+      if (s.image_path) {
+        const { data: signed } = await supabase.storage.from('clinic-posture').createSignedUrl(s.image_path, 3600)
+        image_url = signed?.signedUrl ?? null
+      }
+      const ann = s.annotations && typeof s.annotations === 'object' ? s.annotations : {}
+      const lm = Array.isArray(s.landmarks) ? s.landmarks : []
+      const points = Array.isArray(ann.points)
+        ? ann.points.filter((p: any) => p && typeof p.x === 'number' && typeof p.y === 'number')
+            .map((p: any) => ({ id: typeof p.id === 'string' ? p.id : '', x: p.x, y: p.y, note: typeof p.note === 'string' ? p.note : '' }))
+        : []
+      const pointIds = new Set(points.map((p: any) => p.id))
+      const lines = Array.isArray(ann.lines)
+        ? ann.lines.filter((l: any) => l && pointIds.has(l.point_a_id) && pointIds.has(l.point_b_id))
+            .map((l: any) => ({ point_a_id: l.point_a_id, point_b_id: l.point_b_id, angle_deg: typeof l.angle_deg === 'number' ? l.angle_deg : 0, note: typeof l.note === 'string' ? l.note : '' }))
+        : []
+      const hidden_auto_lines = Array.isArray(ann.hidden_auto_lines)
+        ? ann.hidden_auto_lines.filter((k: any) => k === 'shoulder' || k === 'hip' || k === 'plumb')
+        : []
+      return {
         view: s.view,
         angles: s.angles ?? {},
-        general_note: s.annotations?.general_note ?? '',
-      }))
+        general_note: typeof ann.general_note === 'string' ? ann.general_note : '',
+        is_diagram: lm.length === 0,
+        image_url,
+        landmarks: lm.map((p: any) => ({ x: p.x, y: p.y })),
+        points, lines, hidden_auto_lines,
+      }
+    }))
   }
 
   return {

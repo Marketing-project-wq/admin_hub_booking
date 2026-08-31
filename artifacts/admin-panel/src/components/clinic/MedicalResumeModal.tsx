@@ -4,7 +4,7 @@ import { X } from 'lucide-react'
 import { fmtDate, fmtTime } from '../../lib/format'
 import {
   listDoctorAssessments, getMedicalResumeBundle,
-  type ClinicPatient, type DoctorAssessmentListItem, type MedicalResumeBundle,
+  type ClinicPatient, type DoctorAssessmentListItem, type MedicalResumeBundle, type ResumePostureScan,
 } from '../../lib/clinic'
 
 // Resume Medis — dokumen cetak per assessment dokter. Pola print = ClinicReceiptModal:
@@ -42,6 +42,102 @@ function ageFromDob(dob: string | null): string {
 }
 
 const GENDER_LABEL: Record<string, string> = { male: 'Laki-laki', female: 'Perempuan' }
+
+// ── Foto & analisis postur (read-only, untuk cetak) ──────────────────────────
+// Gambar ulang garis bahu/pinggul/plumb + titik/garis anotasi dokter DI ATAS foto,
+// mengikuti panel Scan Postur tapi tanpa interaksi. viewBox = dimensi asli foto
+// (ditangkap saat <img> load); preserveAspectRatio none aman karena container ikut
+// rasio foto (width 100% + height auto) → skala x=y, lingkaran tetap bulat & garis pas.
+const POSTURE_LM = { LSH: 11, RSH: 12, LHIP: 23, RHIP: 24, LANK: 27, RANK: 28 }
+const fmtDegResume = (n: number) => `${n > 0 ? '+' : ''}${n.toFixed(1)}°`
+// Paksa cetak grafis latar (swatch warna & bg foto) — stroke/fill SVG sudah tercetak default.
+const printExact = { WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } as React.CSSProperties
+
+function PostureShot({ scan, muted, textColor }: { scan: ResumePostureScan; muted: string; textColor: string }) {
+  const [dim, setDim] = useState<{ w: number; h: number } | null>(null)
+  const [failed, setFailed] = useState(false)
+
+  const label = scan.view === 'belakang' ? 'Tampak Belakang' : scan.view === 'depan' ? 'Tampak Depan' : `Tampak ${scan.view}`
+  const lm = scan.landmarks
+  const hasAuto = !scan.is_diagram && lm.length >= 29
+  const hidden = new Set(scan.hidden_auto_lines)
+  const a = scan.angles
+  const idxOf = (id: string) => scan.points.findIndex(p => p.id === id) + 1
+
+  const angleRows = hasAuto
+    ? [
+        { color: '#ef4444', label: 'Kemiringan bahu', deg: a.shoulder_tilt_deg },
+        { color: '#3b82f6', label: 'Kemiringan pinggul', deg: a.hip_tilt_deg },
+        { color: '#22c55e', label: 'Deviasi lateral (plumb)', deg: a.lateral_deviation_deg },
+      ].filter(r => typeof r.deg === 'number')
+    : []
+
+  const noteItems: string[] = []
+  scan.points.forEach((p, i) => { if (p.note) noteItems.push(`Titik ${i + 1}: ${p.note}`) })
+  scan.lines.forEach(l => { noteItems.push(`Garis ${idxOf(l.point_a_id)}–${idxOf(l.point_b_id)}: ${fmtDegResume(l.angle_deg)}${l.note ? ` — ${l.note}` : ''}`) })
+
+  return (
+    <div style={{ breakInside: 'avoid', border: '1px solid #E5E7EB', borderRadius: 8, overflow: 'hidden', background: '#fff' }}>
+      <div style={{ fontWeight: 700, fontSize: 11.5, padding: '6px 8px', borderBottom: '1px solid #E5E7EB', color: textColor }}>{label}</div>
+      <div style={{ position: 'relative', background: '#000', ...printExact }}>
+        {scan.image_url && !failed ? (
+          <img src={scan.image_url} alt={`Postur ${label}`}
+            onLoad={e => setDim({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })}
+            onError={() => setFailed(true)}
+            style={{ width: '100%', display: 'block' }} />
+        ) : (
+          <div style={{ padding: '28px 8px', textAlign: 'center', color: '#9CA3AF', fontSize: 11, background: '#F3F4F6' }}>Foto tidak tersedia</div>
+        )}
+        {dim && (hasAuto || scan.points.length > 0) && (() => {
+          const w = dim.w, h = dim.h, S = Math.max(w, h), sw = S / 260, r = sw * 1.4
+          const P = (i: number) => ({ x: lm[i].x * w, y: lm[i].y * h })
+          const byId = (id: string) => scan.points.find(p => p.id === id)
+          const nodes: React.ReactNode[] = []
+          if (hasAuto) {
+            const lsh = P(POSTURE_LM.LSH), rsh = P(POSTURE_LM.RSH), lhip = P(POSTURE_LM.LHIP), rhip = P(POSTURE_LM.RHIP), lank = P(POSTURE_LM.LANK), rank = P(POSTURE_LM.RANK)
+            const msh = { x: (lsh.x + rsh.x) / 2, y: (lsh.y + rsh.y) / 2 }, mank = { x: (lank.x + rank.x) / 2, y: (lank.y + rank.y) / 2 }
+            if (!hidden.has('shoulder')) nodes.push(<line key="sh" x1={lsh.x} y1={lsh.y} x2={rsh.x} y2={rsh.y} stroke="#ef4444" strokeWidth={sw} />)
+            if (!hidden.has('hip')) nodes.push(<line key="hp" x1={lhip.x} y1={lhip.y} x2={rhip.x} y2={rhip.y} stroke="#3b82f6" strokeWidth={sw} />)
+            if (!hidden.has('plumb')) nodes.push(<line key="pl" x1={msh.x} y1={msh.y} x2={mank.x} y2={mank.y} stroke="#22c55e" strokeWidth={sw} />)
+            ;[lsh, rsh, lhip, rhip, lank, rank].forEach((p, i) => nodes.push(
+              <circle key={`d${i}`} cx={p.x} cy={p.y} r={r} fill="#fff" stroke="#111" strokeWidth={sw * 0.4} />))
+          }
+          scan.lines.forEach((l, i) => {
+            const pa = byId(l.point_a_id), pb = byId(l.point_b_id)
+            if (!pa || !pb) return
+            nodes.push(<line key={`ml${i}`} x1={pa.x * w} y1={pa.y * h} x2={pb.x * w} y2={pb.y * h}
+              stroke="#f97316" strokeWidth={sw} strokeDasharray={`${S / 60} ${S / 90}`} />)
+          })
+          scan.points.forEach((p, i) => {
+            const rr = S / 70
+            nodes.push(<circle key={`mp${i}`} cx={p.x * w} cy={p.y * h} r={rr} fill="#e879f9" stroke="#111" strokeWidth={rr / 4} />)
+            nodes.push(<text key={`mt${i}`} x={p.x * w} y={p.y * h - rr * 1.8} textAnchor="middle"
+              fontSize={S / 28} fontWeight={700} fill="#e879f9" stroke="#000" strokeWidth={S / 340} paintOrder="stroke">{i + 1}</text>)
+          })
+          return (
+            <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none"
+              style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
+              {nodes}
+            </svg>
+          )
+        })()}
+      </div>
+      {(angleRows.length > 0 || noteItems.length > 0 || scan.general_note) && (
+        <div style={{ padding: '6px 8px', fontSize: 11, lineHeight: 1.5 }}>
+          {angleRows.map(row => (
+            <div key={row.label} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ width: 12, height: 3, background: row.color, borderRadius: 2, flexShrink: 0, ...printExact }} />
+              <span style={{ flex: 1, color: muted }}>{row.label}</span>
+              <span style={{ fontFamily: 'monospace', fontWeight: 700, color: textColor }}>{fmtDegResume(row.deg)}</span>
+            </div>
+          ))}
+          {scan.general_note && <div style={{ marginTop: angleRows.length ? 4 : 0, color: textColor }}>Catatan: {scan.general_note}</div>}
+          {noteItems.map((t, i) => <div key={i} style={{ color: muted }}>{t}</div>)}
+        </div>
+      )}
+    </div>
+  )
+}
 
 export default function MedicalResumeModal({ patient, initialVisitId, onClose }: {
   patient: ClinicPatient
@@ -317,14 +413,14 @@ export default function MedicalResumeModal({ patient, initialVisitId, onClose }:
                 </ol>
               </>
             )}
-            {bodyPoints.length === 0 && bundle.postureScans.length > 0 && (
+            {bundle.postureScans.length > 0 && (
               <>
-                <div style={{ fontWeight: 700, margin: '8px 0 2px' }}>Analisis Postur (Scan)</div>
-                {bundle.postureScans.map((s, i) => (
-                  <Row key={i}
-                    label={`Tampak ${s.view.charAt(0).toUpperCase() + s.view.slice(1)}`}
-                    value={`Bahu ${s.angles.shoulder_tilt_deg ?? '-'}° · Pinggul ${s.angles.hip_tilt_deg ?? '-'}° · Deviasi Lateral ${s.angles.lateral_deviation_deg ?? '-'}°${s.general_note ? ` — ${s.general_note}` : ''}`} />
-                ))}
+                <div style={{ fontWeight: 700, margin: '10px 0 4px' }}>Foto &amp; Analisis Postur</div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 300px))', gap: 12, justifyContent: 'start' }}>
+                  {bundle.postureScans.map((s, i) => (
+                    <PostureShot key={i} scan={s} muted="#4B5563" textColor="#111827" />
+                  ))}
+                </div>
               </>
             )}
 
