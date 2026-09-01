@@ -138,7 +138,7 @@ export default function ArenaBookings() {
   const handleExport = async () => {
     const { data: all } = await supabase
       .from('arena_bookings')
-      .select('booking_code, unit:arena_booking_units(name), booking_date, start_time, end_time, full_name, email, phone, customer_type, rent_type, coach_name, price_before_disc, discount, price, status, payment_method, payment_ref, paid_at, notes, created_at')
+      .select('booking_code, unit:arena_booking_units(name), booking_date, start_time, end_time, full_name, email, phone, customer_type, rent_type, price_before_disc, discount, price, status, payment_method, payment_ref, paid_at, notes, created_at')
       .order('created_at', { ascending: false })
     if (all) {
       const flat = all.map((r: Record<string, unknown>) => ({
