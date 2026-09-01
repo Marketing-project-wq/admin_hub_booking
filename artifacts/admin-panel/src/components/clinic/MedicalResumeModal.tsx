@@ -64,11 +64,13 @@ function PostureShot({ scan, muted, textColor }: { scan: ResumePostureScan; mute
   const a = scan.angles
   const idxOf = (id: string) => scan.points.findIndex(p => p.id === id) + 1
 
+  // Label pendek (Bahu/Pinggul/Plumb) — foto resume kecil, biar tiap baris ringkasan
+  // sudut muat 1 baris tanpa wrap (nama sama dengan panel Scan Postur).
   const angleRows = hasAuto
     ? [
-        { color: '#ef4444', label: 'Kemiringan bahu', deg: a.shoulder_tilt_deg },
-        { color: '#3b82f6', label: 'Kemiringan pinggul', deg: a.hip_tilt_deg },
-        { color: '#22c55e', label: 'Deviasi lateral (plumb)', deg: a.lateral_deviation_deg },
+        { color: '#ef4444', label: 'Bahu', deg: a.shoulder_tilt_deg },
+        { color: '#3b82f6', label: 'Pinggul', deg: a.hip_tilt_deg },
+        { color: '#22c55e', label: 'Plumb', deg: a.lateral_deviation_deg },
       ].filter(r => typeof r.deg === 'number')
     : []
 
@@ -415,8 +417,11 @@ export default function MedicalResumeModal({ patient, initialVisitId, onClose }:
             )}
             {bundle.postureScans.length > 0 && (
               <>
-                <div style={{ fontWeight: 700, margin: '10px 0 4px' }}>Foto &amp; Analisis Postur</div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 300px))', gap: 12, justifyContent: 'start' }}>
+                {/* breakAfter avoid: judul menempel ke baris foto (tidak yatim di bawah halaman).
+                    Foto diperkecil (kolom ~120–150px) supaya blok postur muat di sisa halaman —
+                    hemat kertas, tidak lagi loncat ke halaman baru dengan banyak ruang kosong. */}
+                <div style={{ fontWeight: 700, margin: '10px 0 4px', breakAfter: 'avoid' }}>Foto &amp; Analisis Postur</div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 150px))', gap: 10, justifyContent: 'start' }}>
                   {bundle.postureScans.map((s, i) => (
                     <PostureShot key={i} scan={s} muted="#4B5563" textColor="#111827" />
                   ))}
