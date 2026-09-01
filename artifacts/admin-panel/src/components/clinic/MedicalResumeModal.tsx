@@ -81,17 +81,17 @@ function PostureShot({ scan, muted, textColor }: { scan: ResumePostureScan; mute
   return (
     <div style={{ breakInside: 'avoid', border: '1px solid #E5E7EB', borderRadius: 8, overflow: 'hidden', background: '#fff' }}>
       <div style={{ fontWeight: 700, fontSize: 11.5, padding: '6px 8px', borderBottom: '1px solid #E5E7EB', color: textColor }}>{label}</div>
-      {/* Cap TINGGI foto (maxHeight) supaya foto anatomi yang tinggi/lonjong tidak
-          bikin kartu terlalu jangkung → blok postur tetap muat 1 halaman. width:auto
-          jaga rasio; wrapper inline-block shrink-wrap ke foto agar overlay SVG (inset 0,
-          100%) tetap pas menutup foto (bukan lebar kolom). */}
-      <div style={{ textAlign: 'center', background: '#F3F4F6', ...printExact }}>
+      {/* Foto di KIRI, teks (sudut + catatan) di KANAN — teks mengisi ruang samping
+          sehingga foto bisa lebih besar tanpa kartu jadi jangkung. Foto di-cap tinggi
+          (maxHeight) + lebar (maxWidth); wrapper inline-block shrink-wrap ke foto agar
+          overlay SVG (inset 0, 100%) tetap pas menutup foto. */}
+      <div style={{ display: 'flex', gap: 10, padding: 8, alignItems: 'flex-start' }}>
         {scan.image_url && !failed ? (
-          <span style={{ position: 'relative', display: 'inline-block', verticalAlign: 'top', lineHeight: 0, maxWidth: '100%' }}>
+          <span style={{ position: 'relative', display: 'inline-block', verticalAlign: 'top', flexShrink: 0, lineHeight: 0, borderRadius: 4, overflow: 'hidden', background: '#F3F4F6', ...printExact }}>
           <img src={scan.image_url} alt={`Postur ${label}`}
             onLoad={e => setDim({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })}
             onError={() => setFailed(true)}
-            style={{ maxHeight: 180, width: 'auto', maxWidth: '100%', display: 'block' }} />
+            style={{ maxHeight: 240, width: 'auto', maxWidth: 220, display: 'block' }} />
           {dim && (hasAuto || scan.points.length > 0) && (() => {
           const w = dim.w, h = dim.h, S = Math.max(w, h), sw = S / 260, r = sw * 1.4
           const P = (i: number) => ({ x: lm[i].x * w, y: lm[i].y * h })
@@ -127,11 +127,10 @@ function PostureShot({ scan, muted, textColor }: { scan: ResumePostureScan; mute
         })()}
           </span>
         ) : (
-          <div style={{ padding: '28px 8px', textAlign: 'center', color: '#9CA3AF', fontSize: 11, background: '#F3F4F6' }}>Foto tidak tersedia</div>
+          <div style={{ flexShrink: 0, padding: '28px 8px', textAlign: 'center', color: '#9CA3AF', fontSize: 11, background: '#F3F4F6', borderRadius: 4 }}>Foto tidak tersedia</div>
         )}
-      </div>
-      {(angleRows.length > 0 || noteItems.length > 0 || scan.general_note) && (
-        <div style={{ padding: '6px 8px', fontSize: 11, lineHeight: 1.5 }}>
+        {/* Kolom teks di kanan foto */}
+        <div style={{ flex: 1, minWidth: 0, fontSize: 11, lineHeight: 1.5 }}>
           {angleRows.map(row => (
             <div key={row.label} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <span style={{ width: 12, height: 3, background: row.color, borderRadius: 2, flexShrink: 0, ...printExact }} />
@@ -140,9 +139,9 @@ function PostureShot({ scan, muted, textColor }: { scan: ResumePostureScan; mute
             </div>
           ))}
           {scan.general_note && <div style={{ marginTop: angleRows.length ? 4 : 0, color: textColor }}>Catatan: {scan.general_note}</div>}
-          {noteItems.map((t, i) => <div key={i} style={{ color: muted }}>{t}</div>)}
+          {noteItems.map((t, i) => <div key={i} style={{ color: muted, marginTop: 2 }}>{t}</div>)}
         </div>
-      )}
+      </div>
     </div>
   )
 }
@@ -427,7 +426,8 @@ export default function MedicalResumeModal({ patient, initialVisitId, onClose }:
                     Foto diperkecil (kolom ~120–150px) supaya blok postur muat di sisa halaman —
                     hemat kertas, tidak lagi loncat ke halaman baru dengan banyak ruang kosong. */}
                 <div style={{ fontWeight: 700, margin: '10px 0 4px', breakAfter: 'avoid' }}>Foto &amp; Analisis Postur</div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 150px))', gap: 10, justifyContent: 'start' }}>
+                {/* Satu kartu per baris (foto kiri + teks kanan), lebar dibatasi ~540px. */}
+                <div style={{ display: 'grid', gap: 10, maxWidth: 540 }}>
                   {bundle.postureScans.map((s, i) => (
                     <PostureShot key={i} scan={s} muted="#4B5563" textColor="#111827" />
                   ))}
