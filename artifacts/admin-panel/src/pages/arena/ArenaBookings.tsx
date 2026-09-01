@@ -14,7 +14,7 @@ const DEFAULT_UNIT_ID = '6e8f44a7-23d4-4602-90d4-980c63b3acc2'
 const emptyVenueForm = () => ({
   unit_id: DEFAULT_UNIT_ID,
   full_name: '', email: '', phone: '', customer_type: 'corporation',
-  booking_date: '', start_time: '', end_time: '', notes: '',
+  booking_date: '', start_time: '', end_time: '', notes: '', rent_type: 'venue_only',
   price_before_disc: '', discount: '0', paid: false, payment_ref: '',
 })
 
@@ -116,7 +116,7 @@ export default function ArenaBookings() {
       const { error: insertErr } = await supabase.from('arena_bookings').insert({
         booking_code: codeData, unit_id: venueForm.unit_id,
         booking_date: venueForm.booking_date, start_time: venueForm.start_time, end_time: venueForm.end_time,
-        booker_type: 'guest', customer_type: venueForm.customer_type,
+        booker_type: 'guest', customer_type: venueForm.customer_type, rent_type: venueForm.rent_type,
         full_name: venueForm.full_name.trim(), email: venueForm.email?.trim() || 'noemail@20fit.id',
         phone: venueForm.phone?.trim() || '0', notes: venueForm.notes?.trim() || null,
         price_before_disc: priceBeforeDisc, discount, price: priceBeforeDisc - discount,
@@ -327,6 +327,13 @@ export default function ArenaBookings() {
                   <label>Jam Selesai *</label>
                   <input type="time" value={venueForm.end_time} onChange={e => setVenueForm(p => ({ ...p, end_time: e.target.value }))} required />
                 </div>
+              </div>
+              <div className="form-group">
+                <label>Sewa</label>
+                <select value={venueForm.rent_type} onChange={e => setVenueForm(p => ({ ...p, rent_type: e.target.value }))}>
+                  <option value="venue_only">Venue Saja</option>
+                  <option value="with_coach">Dengan Coach</option>
+                </select>
               </div>
               <div className="form-group">
                 <label>Catatan</label>
