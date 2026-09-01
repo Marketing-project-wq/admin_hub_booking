@@ -15,6 +15,7 @@ export default function ManualBookingModal({ type, onClose, onRefresh }: Props) 
   const [units, setUnits] = useState<Record<string, unknown>[]>([])
   const [classTypes, setClassTypes] = useState<Record<string, unknown>[]>([])
   const [schedules, setSchedules] = useState<Record<string, unknown>[]>([])
+  const [coaches, setCoaches] = useState<Record<string, unknown>[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -38,6 +39,9 @@ export default function ManualBookingModal({ type, onClose, onRefresh }: Props) 
   const [price, setPrice] = useState(0)
   const [discount, setDiscount] = useState(0)
   const [paymentMethod, setPaymentMethod] = useState('cash')
+  // Slot (sewa venue): venue saja atau dengan coach (+ pilih coach). Harga tetap diatur manual.
+  const [rentType, setRentType] = useState<'venue_only' | 'with_coach'>('venue_only')
+  const [coachName, setCoachName] = useState('')
 
   const priceFinal = Math.max(0, price - discount)
 
@@ -50,6 +54,10 @@ export default function ManualBookingModal({ type, onClose, onRefresh }: Props) 
           if (data.length === 1) setUnitId(data[0].id as string)
         }
       })
+      // Daftar coach aktif utk pilihan "Dengan Coach".
+      supabase.from('arena_coaches').select('id, name').eq('is_active', true)
+        .order('sort_order', { ascending: true, nullsFirst: false }).order('name')
+        .then(({ data }) => { if (data) setCoaches(data) })
     } else {
       supabase.from('arena_class_types')
         .select('id, name, price_guest, price_member, duration_min, color')
@@ -115,6 +123,7 @@ export default function ManualBookingModal({ type, onClose, onRefresh }: Props) 
 
     try {
       if (type === 'slot') {
+        if (rentType === 'with_coach' && !coachName) throw new Error('Pilih coach untuk sewa "Dengan Coach"')
         const { data: codeData, error: codeErr } = await supabase.rpc('generate_booking_code')
         if (codeErr) throw codeErr
         const { error: insertErr } = await supabase.from('arena_bookings').insert({
@@ -136,6 +145,8 @@ export default function ManualBookingModal({ type, onClose, onRefresh }: Props) 
           status: 'confirmed',
           payment_method: paymentMethod,
           paid_at: new Date().toISOString(),
+          rent_type: rentType,
+          coach_name: rentType === 'with_coach' ? coachName : null,
         })
         if (insertErr) throw insertErr
       } else {
@@ -240,6 +251,27 @@ export default function ManualBookingModal({ type, onClose, onRefresh }: Props) 
                   <label>Jam Selesai *</label>
                   <input type="time" value={endTime} onChange={e => setEndTime(e.target.value)} required />
                 </div>
+              </div>
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Sewa *</label>
+                  <select value={rentType}
+                    onChange={e => { const v = e.target.value as 'venue_only' | 'with_coach'; setRentType(v); if (v === 'venue_only') setCoachName('') }}>
+                    <option value="venue_only">Venue Saja</option>
+                    <option value="with_coach">Dengan Coach</option>
+                  </select>
+                </div>
+                {rentType === 'with_coach' && (
+                  <div className="form-group">
+                    <label>Coach *</label>
+                    <select value={coachName} onChange={e => setCoachName(e.target.value)} required>
+                      <option value="">Pilih coach...</option>
+                      {coaches.map((c: Record<string, unknown>) => (
+                        <option key={c.id as string} value={c.name as string}>{c.name as string}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
               </div>
             </>
           ) : (
