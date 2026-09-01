@@ -81,16 +81,18 @@ function PostureShot({ scan, muted, textColor }: { scan: ResumePostureScan; mute
   return (
     <div style={{ breakInside: 'avoid', border: '1px solid #E5E7EB', borderRadius: 8, overflow: 'hidden', background: '#fff' }}>
       <div style={{ fontWeight: 700, fontSize: 11.5, padding: '6px 8px', borderBottom: '1px solid #E5E7EB', color: textColor }}>{label}</div>
-      <div style={{ position: 'relative', background: '#000', ...printExact }}>
+      {/* Cap TINGGI foto (maxHeight) supaya foto anatomi yang tinggi/lonjong tidak
+          bikin kartu terlalu jangkung → blok postur tetap muat 1 halaman. width:auto
+          jaga rasio; wrapper inline-block shrink-wrap ke foto agar overlay SVG (inset 0,
+          100%) tetap pas menutup foto (bukan lebar kolom). */}
+      <div style={{ textAlign: 'center', background: '#F3F4F6', ...printExact }}>
         {scan.image_url && !failed ? (
+          <span style={{ position: 'relative', display: 'inline-block', verticalAlign: 'top', lineHeight: 0, maxWidth: '100%' }}>
           <img src={scan.image_url} alt={`Postur ${label}`}
             onLoad={e => setDim({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })}
             onError={() => setFailed(true)}
-            style={{ width: '100%', display: 'block' }} />
-        ) : (
-          <div style={{ padding: '28px 8px', textAlign: 'center', color: '#9CA3AF', fontSize: 11, background: '#F3F4F6' }}>Foto tidak tersedia</div>
-        )}
-        {dim && (hasAuto || scan.points.length > 0) && (() => {
+            style={{ maxHeight: 180, width: 'auto', maxWidth: '100%', display: 'block' }} />
+          {dim && (hasAuto || scan.points.length > 0) && (() => {
           const w = dim.w, h = dim.h, S = Math.max(w, h), sw = S / 260, r = sw * 1.4
           const P = (i: number) => ({ x: lm[i].x * w, y: lm[i].y * h })
           const byId = (id: string) => scan.points.find(p => p.id === id)
@@ -123,6 +125,10 @@ function PostureShot({ scan, muted, textColor }: { scan: ResumePostureScan; mute
             </svg>
           )
         })()}
+          </span>
+        ) : (
+          <div style={{ padding: '28px 8px', textAlign: 'center', color: '#9CA3AF', fontSize: 11, background: '#F3F4F6' }}>Foto tidak tersedia</div>
+        )}
       </div>
       {(angleRows.length > 0 || noteItems.length > 0 || scan.general_note) && (
         <div style={{ padding: '6px 8px', fontSize: 11, lineHeight: 1.5 }}>
