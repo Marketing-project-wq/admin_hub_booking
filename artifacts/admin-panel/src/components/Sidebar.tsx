@@ -37,7 +37,9 @@ const UNIT_MENUS: Record<string, MenuItem[]> = {
     { label: 'Blocked Slots',  path: '/arena/master/blocked' },
   ],
   gym: [
-    { label: 'Dashboard', path: '/gym' },
+    { label: 'Dashboard',     path: '/gym' },
+    { label: 'Kelola Jadwal', path: '/gym/schedules' },
+    { label: 'Transaksi',     path: '/gym/class-bookings' },
   ],
   clinic: [
     { label: 'Dashboard', path: '/clinic' },

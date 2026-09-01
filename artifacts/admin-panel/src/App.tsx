@@ -24,6 +24,8 @@ import ArenaUserManagement from './pages/arena/ArenaUserManagement'
 import ArenaAnalytics from './pages/arena/ArenaAnalytics'
 import ArenaApiKeys from './pages/arena/ArenaApiKeys'
 import GymDashboard from './pages/gym/GymDashboard'
+import GymSchedules from './pages/gym/GymSchedules'
+import GymClassBookings from './pages/gym/GymClassBookings'
 import ClinicDashboard from './pages/clinic/ClinicDashboard'
 import ClinicCalendar from './pages/clinic/ClinicCalendar'
 import ClinicBookings from './pages/clinic/ClinicBookings'
@@ -114,6 +116,8 @@ export default function App() {
             }
           >
             <Route index element={<GymDashboard />} />
+            <Route path="schedules" element={<GymSchedules />} />
+            <Route path="class-bookings" element={<GymClassBookings />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />
