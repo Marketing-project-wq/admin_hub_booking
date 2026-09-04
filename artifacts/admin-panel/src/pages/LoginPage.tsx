@@ -4,7 +4,7 @@ import { useNavigate, useParams, Link, Navigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import ThemeToggle from '../components/ThemeToggle'
 
-const UNIT_LABELS: Record<string, string> = { arena: 'Arena', gym: 'Gym', clinic: 'Clinic' }
+const UNIT_LABELS: Record<string, string> = { arena: 'Arena', gym: 'Gym', clinic: 'Clinic', recovery: 'Recovery Center' }
 
 export default function LoginPage() {
   const { unit } = useParams<{ unit: string }>()

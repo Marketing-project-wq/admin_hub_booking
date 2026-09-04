@@ -4,7 +4,7 @@ import { Outlet } from 'react-router-dom'
 import Sidebar from './Sidebar'
 
 interface LayoutProps {
-  currentUnit: 'arena' | 'gym' | 'clinic'
+  currentUnit: 'arena' | 'gym' | 'clinic' | 'recovery'
 }
 
 export default function Layout({ currentUnit }: LayoutProps) {

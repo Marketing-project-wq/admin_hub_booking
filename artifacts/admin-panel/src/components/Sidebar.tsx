@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
 
 interface SidebarProps {
-  currentUnit: 'arena' | 'gym' | 'clinic'
+  currentUnit: 'arena' | 'gym' | 'clinic' | 'recovery'
   open?: boolean
   onClose?: () => void
 }
@@ -40,6 +40,10 @@ const UNIT_MENUS: Record<string, MenuItem[]> = {
     { label: 'Dashboard',     path: '/gym' },
     { label: 'Kelola Jadwal', path: '/gym/schedules' },
     { label: 'Transaksi',     path: '/gym/class-bookings' },
+  ],
+  recovery: [
+    { label: 'Dashboard', path: '/recovery' },
+    { label: 'Booking',   path: '/recovery/bookings' },
   ],
   clinic: [
     { label: 'Dashboard', path: '/clinic' },
@@ -81,7 +85,7 @@ export default function Sidebar({ currentUnit, open, onClose }: SidebarProps) {
   }
 
   const isActive = (path: string) => {
-    if (path === '/arena' || path === '/gym' || path === '/clinic') {
+    if (path === '/arena' || path === '/gym' || path === '/clinic' || path === '/recovery') {
       return location.pathname === path
     }
     return location.pathname.startsWith(path)
@@ -165,7 +169,7 @@ export default function Sidebar({ currentUnit, open, onClose }: SidebarProps) {
             <NavLink
               key={m.path!}
               to={m.path!}
-              end={m.path === '/arena' || m.path === '/gym' || m.path === '/clinic'}
+              end={m.path === '/arena' || m.path === '/gym' || m.path === '/clinic' || m.path === '/recovery'}
               className={() => `menu-item${isActive(m.path!) ? ' active' : ''}`}
               onClick={() => onClose?.()}
             >
@@ -199,6 +203,13 @@ export default function Sidebar({ currentUnit, open, onClose }: SidebarProps) {
               onClick={() => onClose?.()}
             >
               Clinic
+            </Link>
+            <Link
+              to="/recovery"
+              className={`switcher-item${currentUnit === 'recovery' ? ' active' : ''}`}
+              onClick={() => onClose?.()}
+            >
+              Recovery Center
             </Link>
           </div>
         )}

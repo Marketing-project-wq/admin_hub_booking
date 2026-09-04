@@ -21,6 +21,12 @@ const units = [
     desc: 'Physiotherapy & sports medicine',
     disabled: false,
   },
+  {
+    key: 'recovery' as const,
+    title: 'Recovery Center',
+    desc: 'Sport massage, recovery pump & taping',
+    disabled: false,
+  },
 ]
 
 export default function LandingPage() {
