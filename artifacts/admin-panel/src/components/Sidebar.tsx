@@ -54,6 +54,7 @@ const UNIT_MENUS: Record<string, MenuItem[]> = {
     { label: 'EMR',       path: '/clinic/dokter' },
     { label: 'Kasir',     path: '/clinic/kasir' },
     { label: 'Patients',  path: '/clinic/patients' },
+    { label: 'Dokumen',   path: '/clinic/documents' },
     { label: 'Users',     path: '/clinic/users' },
     { label: '— Master',  path: null,                divider: true },
     { label: 'Services',  path: '/clinic/services' },
@@ -154,7 +155,7 @@ export default function Sidebar({ currentUnit, open, onClose }: SidebarProps) {
             // Triase bila can_emr (admin yang juga dokter, mis. dr. Adrian —
             // berfungsi penuh sebagai dokter: triase + EMR).
             if (role === 'admin' && m.path &&
-                !(['/clinic/kasir', '/clinic/visits', '/clinic/bookings', '/clinic/slots', '/clinic/calendar'].includes(m.path)) &&
+                !(['/clinic/kasir', '/clinic/visits', '/clinic/bookings', '/clinic/slots', '/clinic/calendar', '/clinic/documents'].includes(m.path)) &&
                 !(m.path === '/clinic/patients' && user?.permissions?.can_manage_patients === true) &&
                 !(m.path === '/clinic/dokter' && user?.permissions?.can_emr === true) &&
                 !(m.path === '/clinic/triase' && user?.permissions?.can_emr === true)) return null

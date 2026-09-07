@@ -40,6 +40,7 @@ import ClinicPackages from './pages/clinic/ClinicPackages'
 import ClinicReports from './pages/clinic/ClinicReports'
 import ClinicVisitDetail from './pages/clinic/ClinicVisitDetail'
 import ClinicUserManagement from './pages/clinic/ClinicUserManagement'
+import ClinicDocuments from './pages/clinic/ClinicDocuments'
 import ClinicKasir from './pages/clinic/ClinicKasir'
 import ClinicDokter from './pages/clinic/ClinicDokter'
 import ClinicTriase from './pages/clinic/ClinicTriase'
@@ -68,6 +69,7 @@ export default function App() {
             <Route path="visits" element={<ClinicVisits />} />
             <Route path="visits/:id" element={<ClinicVisitDetail />} />
             <Route path="users" element={<ClinicUserManagement />} />
+            <Route path="documents" element={<ClinicDocuments />} />
             <Route path="kasir" element={<ClinicKasir />} />
             <Route path="dokter" element={<ClinicDokter />} />
             <Route path="triase" element={<ClinicTriase />} />

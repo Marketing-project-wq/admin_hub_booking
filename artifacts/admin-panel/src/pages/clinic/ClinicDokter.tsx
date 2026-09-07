@@ -7,6 +7,7 @@ import { lockRecord, orIlike, listClinicStaffOptions, logAssignmentChange, today
 import { normalizePhone } from '../../lib/phone'
 import LockBadge, { LockedBanner } from '../../components/clinic/LockBadge'
 import MedicalHistoryPanel from '../../components/clinic/MedicalHistoryPanel'
+import DocumentsPanel from '../../components/clinic/DocumentsPanel'
 import PostureScanPanel from './PostureScanPanel'
 import { useIsMobile } from '../../hooks/use-mobile'
 
@@ -421,7 +422,7 @@ interface ClinicConsentData {
   signed_by_name: string | null
 }
 
-type ModalTab = 'screening' | 'consent' | 'assessment' | 'riwayat'
+type ModalTab = 'screening' | 'consent' | 'assessment' | 'riwayat' | 'document'
 
 async function fetchScreening(visitId: string): Promise<ClinicScreeningData | null> {
   const { data } = await supabase
@@ -1250,7 +1251,7 @@ export default function ClinicDokter() {
 
             {/* Tab Bar */}
             <div style={{ display: 'flex', flexWrap: 'nowrap', overflowX: 'auto', borderBottom: '2px solid var(--border)', background: 'var(--bg-deep)', flexShrink: 0 }}>
-              {(['screening', 'consent', 'assessment', 'riwayat'] as const).map(t => (
+              {(['screening', 'consent', 'assessment', 'riwayat', 'document'] as const).map(t => (
                 <button
                   key={t}
                   onClick={() => setModalTab(t)}
@@ -1263,7 +1264,7 @@ export default function ClinicDokter() {
                     marginBottom: -2, textTransform: 'capitalize',
                   }}
                 >
-                  {t === 'screening' ? 'Screening' : t === 'consent' ? 'Consent' : t === 'assessment' ? 'Assessment Dokter' : 'Riwayat Rekam Medis'}
+                  {t === 'screening' ? 'Screening' : t === 'consent' ? 'Consent' : t === 'assessment' ? 'Assessment Dokter' : t === 'riwayat' ? 'Riwayat Rekam Medis' : 'Document'}
                 </button>
               ))}
             </div>
@@ -1768,6 +1769,15 @@ export default function ClinicDokter() {
               {/* TAB RIWAYAT - read only */}
               {modalTab === 'riwayat' && selectedVisit && (
                 <MedicalHistoryPanel patientId={selectedVisit.patient?.id ?? null} currentVisitId={selectedVisit.id} />
+              )}
+
+              {/* TAB DOCUMENT - upload & kelola dokumen pasien (PDF/gambar/dll) */}
+              {modalTab === 'document' && selectedVisit && (
+                <DocumentsPanel
+                  patientId={selectedVisit.patient?.id ?? null}
+                  visitId={selectedVisit.id}
+                  uploadedBy={user?.full_name ?? null}
+                />
               )}
             </div>
 
