@@ -100,6 +100,11 @@ interface Scan {
   // true = base image diagram anatomi (bukan foto pasien): tanpa MediaPipe/auto-sudut,
   // hanya anotasi manual. Ditandai persist lewat landmarks kosong + angles null.
   isDiagram?: boolean
+  // true = foto pasien ASLI yang auto-deteksi MediaPipe-nya TIDAK menemukan pose (atau
+  // model gagal jalan). Deteksi = enhancement, BUKAN syarat: foto tetap disimpan &
+  // dianotasi manual. Transient (tak dipersist) — setelah reload muncul sebagai gambar
+  // tanpa-pose generik (landmarks kosong), sama seperti diagram.
+  autoFailed?: boolean
 }
 
 function loadImage(src: string): Promise<HTMLImageElement> {
@@ -129,6 +134,45 @@ async function convertHeicToJpeg(file: File): Promise<File> {
   const blob = (Array.isArray(out) ? out[0] : out) as Blob
   const name = file.name.replace(/\.(heic|heif)$/i, '') + '.jpg'
   return new File([blob], name, { type: 'image/jpeg' })
+}
+
+// Batas bucket clinic-posture = 5 MB. Foto HP modern kerap > 5MB → upload akan DITOLAK
+// storage. Kecilkan gambar (re-encode JPEG, sisi terpanjang ≤ MAX_DIM, turunkan kualitas
+// bertahap) HANYA bila melebihi batas — kalau sudah kecil, biarkan apa adanya supaya tak
+// re-encode tanpa perlu. Orientasi EXIF sudah dibake browser saat drawImage dari <img> yang
+// ter-load (perilaku Chrome/Safari/Firefox modern — sama asumsi yang dipakai deteksi & Overlay).
+const MAX_UPLOAD_BYTES = 4_500_000   // < limit 5MB, sisakan margin
+const MAX_DIM = 2000                 // sisi terpanjang maksimum (px) — cukup untuk analisa postur
+async function downscaleForUpload(file: File): Promise<File> {
+  if (file.size <= MAX_UPLOAD_BYTES) return file   // sudah muat → jangan re-encode
+  const url = URL.createObjectURL(file)
+  try {
+    const img = await loadImage(url)
+    const longest = Math.max(img.naturalWidth, img.naturalHeight) || MAX_DIM
+    const scale = longest > MAX_DIM ? MAX_DIM / longest : 1
+    const w = Math.max(1, Math.round(img.naturalWidth * scale))
+    const h = Math.max(1, Math.round(img.naturalHeight * scale))
+    const canvas = document.createElement('canvas')
+    canvas.width = w
+    canvas.height = h
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return file
+    ctx.drawImage(img, 0, 0, w, h)
+    const name = file.name.replace(/\.[^.]+$/, '') + '.jpg'
+    let last: Blob | null = null
+    for (const q of [0.85, 0.75, 0.65, 0.55]) {
+      const blob = await new Promise<Blob | null>(res => canvas.toBlob(res, 'image/jpeg', q))
+      if (!blob) break
+      last = blob
+      if (blob.size <= MAX_UPLOAD_BYTES) return new File([blob], name, { type: 'image/jpeg' })
+    }
+    // Semua kualitas masih > batas → pakai hasil terkecil (kualitas terendah) sebagai upaya terbaik.
+    return last ? new File([last], name, { type: 'image/jpeg' }) : file
+  } catch {
+    return file   // gagal downscale → pakai file asli; alur upload normal yang menangani error-nya
+  } finally {
+    URL.revokeObjectURL(url)
+  }
 }
 
 const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n))
@@ -603,14 +647,40 @@ export default function PostureScanPanel({ visitId, patientId, gender }: { visit
         return
       }
     }
+    // Foto HP sering > 5MB (batas bucket clinic-posture) → kecilkan SEBELUM deteksi & upload
+    // supaya tidak ditolak storage saat Simpan. No-op untuk foto yang sudah kecil.
+    if (work.size > MAX_UPLOAD_BYTES) {
+      setBusyFor(view, 'Mengecilkan ukuran foto…')
+      work = await downscaleForUpload(work)
+    }
     setBusyFor(view, 'Memproses foto & mendeteksi postur…')
     const url = URL.createObjectURL(work)
     try {
       const img = await loadImage(url)
-      const landmarks = await detectPose(img)
+      // Deteksi pose = ENHANCEMENT (auto-ukur 3 sudut), BUKAN syarat upload. Kalau AI tidak
+      // menemukan tubuh ATAU model/wasm gagal jalan, foto TETAP dipertahankan supaya bisa
+      // disimpan & dianotasi manual — dokter tidak boleh terblokir dari meng-upload foto.
+      let landmarks: PoseLandmark[] = []
+      try {
+        landmarks = await detectPose(img)
+      } catch {
+        landmarks = []   // model/wasm gagal → perlakukan sama seperti tubuh tak terdeteksi
+      }
       if (landmarks.length === 0) {
-        URL.revokeObjectURL(url)
-        setErrFor(view, 'Tubuh tidak terdeteksi. Pastikan seluruh badan tampak jelas & pencahayaan cukup.')
+        // Simpan foto sebagai scan tanpa-pose (landmarks kosong, tanpa auto-sudut) — alur
+        // sama diagram/anotasi manual, tapi ini foto pasien asli (autoFailed). Info non-blok
+        // ditampilkan di kartu; URL TIDAK di-revoke karena foto tetap tampil & bisa disimpan.
+        setScans(s => ({
+          ...s,
+          [view]: {
+            imageUrl: url, landmarks: [],
+            angles: { shoulder_tilt_deg: 0, hip_tilt_deg: 0, lateral_deviation_deg: 0 },
+            annotations: emptyAnnotations(),
+            w: img.naturalWidth, h: img.naturalHeight,
+            saved: false, file: work, isDiagram: false, autoFailed: true,
+          },
+        }))
+        setAnnoDirty(d => ({ ...d, [view]: false }))
         return
       }
       // Kalkulasi 3 sudut TIDAK diubah; hanya ditambah detection_confidence (rata-rata visibility).
@@ -675,14 +745,16 @@ export default function PostureScanPanel({ visitId, patientId, gender }: { visit
         contentType: scan.file.type || 'image/jpeg', upsert: false,
       })
       if (up.error) throw up.error
+      // Simpan landmarks + sudut HANYA bila auto-deteksi menemukan pose. Diagram anatomi
+      // maupun foto yang auto-deteksinya gagal (autoFailed) sama-sama tanpa-pose → landmarks
+      // kosong & angles null (penanda persist supaya tidak masuk tren sudut / ringkasan resume).
+      const hasPose = scan.landmarks.length > 0
       // Insert baris + ambil kembali landmarks/angles tersimpan (verifikasi round-trip jsonb).
       const ins = await supabase.from('clinic_posture_scans').insert({
         visit_id: visitId, patient_id: patientId, view,
         image_path: path,
-        // Diagram anatomi: tanpa landmark & tanpa sudut (penanda persist supaya tidak
-        // masuk tren sudut / ringkasan resume). Foto asli: simpan landmarks + angles.
-        landmarks: scan.isDiagram ? [] : scan.landmarks,
-        angles: scan.isDiagram ? null : scan.angles,
+        landmarks: hasPose ? scan.landmarks : [],
+        angles: hasPose ? scan.angles : null,
         annotations: scan.annotations,   // anotasi preview ikut tersimpan bersama Simpan utama
       }).select('id, image_path, landmarks, angles, annotations').single()
       if (ins.error) throw ins.error
@@ -690,10 +762,13 @@ export default function PostureScanPanel({ visitId, patientId, gender }: { visit
       const { data: signed } = await supabase.storage.from(BUCKET).createSignedUrl(row.image_path, SIGNED_TTL)
       URL.revokeObjectURL(scan.imageUrl)
       // Render ulang MURNI dari data tersimpan (foto Storage + landmarks/angles dari DB).
-      const savedIsDiagram = (row.landmarks?.length ?? 0) === 0
+      // Diagram anatomi vs foto-tanpa-deteksi tak terbedakan di DB (dua-duanya landmarks
+      // kosong) — pertahankan bedanya utk sesi ini dari state sebelum simpan supaya label
+      // & tombol kamera tetap benar sampai modal ditutup.
+      const savedNoPose = (row.landmarks?.length ?? 0) === 0
       setScans(s => ({
         ...s,
-        [view]: { id: row.id, imageUrl: signed?.signedUrl ?? scan.imageUrl, landmarks: row.landmarks ?? [], angles: row.angles ?? { shoulder_tilt_deg: 0, hip_tilt_deg: 0, lateral_deviation_deg: 0 }, annotations: parseAnnotations(row.annotations), w: 0, h: 0, saved: true, isDiagram: savedIsDiagram },
+        [view]: { id: row.id, imageUrl: signed?.signedUrl ?? scan.imageUrl, landmarks: row.landmarks ?? [], angles: row.angles ?? { shoulder_tilt_deg: 0, hip_tilt_deg: 0, lateral_deviation_deg: 0 }, annotations: parseAnnotations(row.annotations), w: 0, h: 0, saved: true, isDiagram: savedNoPose && !!scan.isDiagram, autoFailed: savedNoPose && !scan.isDiagram },
       }))
       setAnnoDirty(d => ({ ...d, [view]: false }))
       setTrendRefresh(n => n + 1)   // scan baru tersimpan → muat ulang tabel tren
@@ -758,13 +833,19 @@ export default function PostureScanPanel({ visitId, patientId, gender }: { visit
           const error = err[v.key]
           const conf = scan?.angles.detection_confidence
           const low = conf != null && conf < VIS_THRESHOLD
+          // hasPose = auto-deteksi menemukan pose (punya landmarks) → tampil sudut & garis
+          // otomatis. Tanpa-pose (diagram ATAU foto autoFailed) → hanya anotasi manual.
+          const hasPose = !!scan && scan.landmarks.length > 0
+          // Foto asli yang auto-deteksinya gagal & belum disimpan → info non-blok: upload
+          // tetap boleh, tinggal Simpan (opsional anotasi manual / foto ulang).
+          const autoFailedPhoto = !!scan && !!scan.autoFailed && !scan.saved
           return (
             <div key={v.key} style={{ border: scan && !scan.saved ? '1.5px dashed #f59e0b' : '1px solid var(--border)', borderRadius: 10, padding: 12, background: 'var(--bg-elevated)' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
                 <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{v.label}</span>
                 {scan && (scan.saved
-                  ? <span className="badge" style={{ background: 'rgba(16,185,129,0.15)', color: 'var(--green)' }}>{scan.isDiagram ? 'Diagram · tersimpan' : 'Tersimpan'}</span>
-                  : <span className="badge" style={{ background: 'rgba(245,158,11,0.15)', color: 'var(--amber)' }}>{scan.isDiagram ? 'Diagram · belum disimpan' : 'Preview — belum disimpan'}</span>)}
+                  ? <span className="badge" style={{ background: 'rgba(16,185,129,0.15)', color: 'var(--green)' }}>{hasPose ? 'Tersimpan' : 'Manual · tersimpan'}</span>
+                  : <span className="badge" style={{ background: 'rgba(245,158,11,0.15)', color: 'var(--amber)' }}>{hasPose ? 'Preview — belum disimpan' : 'Manual · belum disimpan'}</span>)}
               </div>
               <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '0 0 10px', lineHeight: 1.4 }}>{v.instruksi}</p>
 
@@ -783,7 +864,7 @@ export default function PostureScanPanel({ visitId, patientId, gender }: { visit
                         onLineClick={l => setLineDraft({ view: v.key, line: { ...l }, isNew: false })} />
                     )}
                   </div>
-                  {!scan.isDiagram ? (
+                  {hasPose ? (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 8, fontSize: 12 }}>
                       <AngleRow color="#ef4444" label="Kemiringan bahu" deg={scan.angles.shoulder_tilt_deg} />
                       <AngleRow color="#3b82f6" label="Kemiringan pinggul" deg={scan.angles.hip_tilt_deg} />
@@ -798,13 +879,19 @@ export default function PostureScanPanel({ visitId, patientId, gender }: { visit
                     </div>
                   ) : (
                     <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '8px 0 0', lineHeight: 1.5 }}>
-                      Diagram anatomi (tanpa foto pasien) — aktifkan <strong>Anotasi</strong> lalu <strong>Hubungkan Garis</strong> untuk menandai garis/titik manual, lalu <strong>Simpan</strong>.
+                      Tanpa deteksi sudut otomatis — aktifkan <strong>Anotasi</strong> lalu <strong>Hubungkan Garis</strong> untuk menandai garis/titik manual, lalu <strong>Simpan</strong>.
                     </p>
                   )}
 
                   {low && (
                     <p style={{ fontSize: 12, color: 'var(--text-primary)', background: 'rgba(245,158,11,0.12)', borderLeft: '3px solid #f59e0b', borderRadius: 6, padding: '8px 10px', margin: '8px 0 0', lineHeight: 1.4 }}>
                       Deteksi kurang jelas — pastikan pencahayaan cukup dan seluruh tubuh (bahu sampai kaki) terlihat di foto. Disarankan foto ulang.
+                    </p>
+                  )}
+
+                  {autoFailedPhoto && (
+                    <p style={{ fontSize: 12, color: 'var(--text-primary)', background: 'rgba(245,158,11,0.12)', borderLeft: '3px solid #f59e0b', borderRadius: 6, padding: '8px 10px', margin: '8px 0 0', lineHeight: 1.4 }}>
+                      Tubuh tidak terdeteksi otomatis — foto tetap bisa <strong>disimpan</strong>. Bila perlu, tandai garis/titik manual lewat tombol <strong>Anotasi</strong>, atau foto ulang dengan seluruh tubuh &amp; pencahayaan jelas.
                     </p>
                   )}
 
@@ -874,7 +961,7 @@ export default function PostureScanPanel({ visitId, patientId, gender }: { visit
                   {/* Daftar Garis — selalu terlihat; jalur sembunyikan/hapus TANPA Mode Anotasi */}
                   <div style={{ marginTop: 10 }}>
                     <label style={{ display: 'block', fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Daftar Garis</label>
-                    {!scan.isDiagram && AUTO_LINES.map(al => {
+                    {hasPose && AUTO_LINES.map(al => {
                       const lineHidden = scan.annotations.hidden_auto_lines.includes(al.key)
                       const deg = al.key === 'shoulder' ? scan.angles.shoulder_tilt_deg
                         : al.key === 'hip' ? scan.angles.hip_tilt_deg
@@ -939,7 +1026,7 @@ export default function PostureScanPanel({ visitId, patientId, gender }: { visit
                       Anotasi di diagram
                     </button>
                   </div>
-                  <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '8px 0 0' }}>Foto Postur = buka kamera langsung (lalu analisa AI otomatis). Pilih foto = dari galeri/file. Atau tandai garis di diagram anatomi. (JPG/PNG/WebP, maks 5 MB)</p>
+                  <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '8px 0 0' }}>Foto Postur = buka kamera langsung (lalu analisa AI otomatis). Pilih foto = dari galeri/file. Atau tandai garis di diagram anatomi. Kalau AI tidak menemukan tubuh, foto tetap bisa disimpan &amp; dianotasi manual. (JPG/PNG/WebP, maks 5 MB)</p>
                 </div>
               )}
 
