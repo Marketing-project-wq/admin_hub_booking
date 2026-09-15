@@ -44,6 +44,7 @@ const UNIT_MENUS: Record<string, MenuItem[]> = {
   recovery: [
     { label: 'Dashboard', path: '/recovery' },
     { label: 'Booking',   path: '/recovery/bookings' },
+    { label: 'Layanan',   path: '/recovery/services' },
   ],
   clinic: [
     { label: 'Dashboard', path: '/clinic' },

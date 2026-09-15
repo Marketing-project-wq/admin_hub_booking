@@ -28,6 +28,7 @@ import GymSchedules from './pages/gym/GymSchedules'
 import GymClassBookings from './pages/gym/GymClassBookings'
 import RecoveryDashboard from './pages/recovery/RecoveryDashboard'
 import RecoveryBookings from './pages/recovery/RecoveryBookings'
+import RecoveryServices from './pages/recovery/RecoveryServices'
 import ClinicDashboard from './pages/clinic/ClinicDashboard'
 import ClinicCalendar from './pages/clinic/ClinicCalendar'
 import ClinicBookings from './pages/clinic/ClinicBookings'
@@ -134,6 +135,7 @@ export default function App() {
           >
             <Route index element={<RecoveryDashboard />} />
             <Route path="bookings" element={<RecoveryBookings />} />
+            <Route path="services" element={<RecoveryServices />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />
