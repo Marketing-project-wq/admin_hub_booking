@@ -6,7 +6,7 @@ import ConfirmModal from '../../components/recovery/ConfirmModal'
 
 // RECOVERY CENTER — Booking. Daftar clinic_bookings dengan channel='recovery_center'
 // SAJA (isolasi per unit). Layanan di-embed dari clinic_services. Skema ramping:
-// tanpa jadwal/kuota/diskon — booking layanan tunggal + pembayaran.
+// tanpa jadwal/kuota — booking layanan tunggal + pembayaran (+ voucher opsional).
 const CHANNEL = 'recovery_center'
 const PAGE_SIZE = 20
 
@@ -31,38 +31,47 @@ export default function RecoveryBookings() {
 
   const fetchData = useCallback(async () => {
     setLoading(true)
-    let query = supabase
-      .from('clinic_bookings')
-      .select(`
+    // Kolom voucher (price_before_disc/discount/voucher_code) baru ada setelah
+    // migrasi 20260915_recovery_vouchers. Bila belum ter-apply, ulangi query tanpa
+    // kolom voucher agar halaman Booking tetap jalan (kolom Voucher tampil '-').
+    const run = (withVoucher: boolean) => {
+      // sel di-type sebagai string biasa (bukan literal) supaya parser tipe
+      // supabase-js tidak menolak bagian voucher yang kondisional.
+      const sel: string = `
         id, booking_code, full_name, email, phone, notes,
-        price, status, payment_method, payment_ref, channel, paid_at, created_at, updated_at,
+        price,${withVoucher ? ' price_before_disc, discount, voucher_code,' : ''}
+        status, payment_method, payment_ref, channel, paid_at, created_at, updated_at,
         service:clinic_services(name, code, duration_minutes)
-      `, { count: 'exact' })
-      .eq('channel', CHANNEL)
-
-    if (statusFilter !== 'all') query = query.eq('status', statusFilter)
-
-    if (search) {
-      query = query.or(
-        `full_name.ilike.%${search}%,` +
-        `booking_code.ilike.%${search}%,` +
-        `email.ilike.%${search}%,` +
-        `phone.ilike.%${search}%,` +
-        `payment_method.ilike.%${search}%`
-      )
+      `
+      let query = supabase
+        .from('clinic_bookings')
+        .select(sel, { count: 'exact' })
+        .eq('channel', CHANNEL)
+      if (statusFilter !== 'all') query = query.eq('status', statusFilter)
+      if (search) {
+        query = query.or(
+          `full_name.ilike.%${search}%,` +
+          `booking_code.ilike.%${search}%,` +
+          `email.ilike.%${search}%,` +
+          `phone.ilike.%${search}%,` +
+          `payment_method.ilike.%${search}%`
+        )
+      }
+      if (dateFrom) query = query.gte(filterType, dateFrom + 'T00:00:00')
+      if (dateTo) query = query.lte(filterType, dateTo + 'T23:59:59')
+      return query
+        .order('paid_at', { ascending: false, nullsFirst: false })
+        .order('created_at', { ascending: false })
+        .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)
     }
 
-    if (dateFrom) query = query.gte(filterType, dateFrom + 'T00:00:00')
-    if (dateTo) query = query.lte(filterType, dateTo + 'T23:59:59')
-
-    query = query
-      .order('paid_at', { ascending: false, nullsFirst: false })
-      .order('created_at', { ascending: false })
-      .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)
-
-    const { data: rows, count, error: err } = await query
+    const missingCol = (m?: string) => !!m && /does not exist|schema cache|column/i.test(m)
+    let { data: rows, count, error: err } = await run(true)
+    if (err && missingCol(err.message)) {
+      ;({ data: rows, count, error: err } = await run(false))
+    }
     if (err) { setError(err.message); setLoading(false); return }
-    setData((rows || []) as Row[])
+    setData((rows || []) as unknown as Row[])
     setTotal(count || 0)
     setError('')
     setLoading(false)
@@ -94,17 +103,24 @@ export default function RecoveryBookings() {
   }
 
   const handleExport = async () => {
-    const { data: all } = await supabase
-      .from('clinic_bookings')
-      .select(`
+    const runExport = (withVoucher: boolean) => {
+      const sel: string = `
         booking_code, service:clinic_services(name, code),
-        full_name, email, phone, price,
+        full_name, email, phone,${withVoucher ? ' price_before_disc, discount, voucher_code,' : ''} price,
         status, payment_method, payment_ref, paid_at, created_at
-      `)
-      .eq('channel', CHANNEL)
-      .order('paid_at', { ascending: false, nullsFirst: false })
+      `
+      return supabase
+        .from('clinic_bookings')
+        .select(sel)
+        .eq('channel', CHANNEL)
+        .order('paid_at', { ascending: false, nullsFirst: false })
+    }
+    let { data: all, error: exErr } = await runExport(true)
+    if (exErr && /does not exist|schema cache|column/i.test(exErr.message || '')) {
+      ;({ data: all } = await runExport(false))
+    }
     if (all) {
-      const flat = all.map((r: Row) => {
+      const flat = (all as unknown as Row[]).map((r) => {
         const svc = r.service as Row | undefined
         return {
           booking_code: r.booking_code,
@@ -112,6 +128,9 @@ export default function RecoveryBookings() {
           full_name: r.full_name,
           email: r.email,
           phone: r.phone,
+          price_before_disc: r.price_before_disc ?? '',
+          discount: r.discount ?? 0,
+          voucher_code: r.voucher_code || '',
           price: r.price,
           status: r.status,
           payment_method: r.payment_method,
@@ -183,14 +202,14 @@ export default function RecoveryBookings() {
           <thead>
             <tr>
               <th>Booking Code</th><th>Layanan</th><th>Nama</th><th>Email</th><th>Telp</th>
-              <th>Amount</th><th>Status</th><th>Payment</th><th>Jam Bayar</th><th>Aksi</th>
+              <th>Amount</th><th>Voucher</th><th>Status</th><th>Payment</th><th>Jam Bayar</th><th>Aksi</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr className="loading-row"><td colSpan={10}>Memuat data...</td></tr>
+              <tr className="loading-row"><td colSpan={11}>Memuat data...</td></tr>
             ) : data.length === 0 ? (
-              <tr><td colSpan={10} className="empty-state">Tidak ada data</td></tr>
+              <tr><td colSpan={11} className="empty-state">Tidak ada data</td></tr>
             ) : data.map((row: Row) => {
               const s = STATUS_LABEL[row.status as string] || { label: row.status, css: '' }
               const svc = row.service as Row | undefined
@@ -202,6 +221,9 @@ export default function RecoveryBookings() {
                   <td style={{ fontSize: 12, color: 'var(--text-muted)' }}>{(row.email as string) || '-'}</td>
                   <td>{(row.phone as string) || '-'}</td>
                   <td style={{ whiteSpace: 'nowrap', fontWeight: 600 }}>{fmtRp(row.price as number)}</td>
+                  <td>{row.voucher_code
+                    ? <span className="badge badge-pending" style={{ fontFamily: 'monospace' }}>{row.voucher_code as string}</span>
+                    : <span style={{ color: 'var(--text-faint)' }}>-</span>}</td>
                   <td><span className={`badge ${s.css}`}>{s.label}</span></td>
                   <td>{row.payment_method as string || '-'}</td>
                   <td style={{ fontSize: 12, whiteSpace: 'nowrap', color: 'var(--text-muted)' }}>
@@ -253,6 +275,15 @@ export default function RecoveryBookings() {
               <div style={rowStyle}><span style={lbl}>Nama</span><span>{b.full_name as string}</span></div>
               <div style={rowStyle}><span style={lbl}>Email</span><span>{(b.email as string) || '-'}</span></div>
               <div style={rowStyle}><span style={lbl}>Telepon</span><span>{(b.phone as string) || '-'}</span></div>
+              {!!b.price_before_disc && (b.price_before_disc as number) !== (b.price as number) && (
+                <div style={rowStyle}><span style={lbl}>Harga Normal</span><span>{fmtRp(b.price_before_disc as number)}</span></div>
+              )}
+              {!!b.voucher_code && (
+                <div style={rowStyle}><span style={lbl}>Voucher</span><span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{b.voucher_code as string}</span></div>
+              )}
+              {!!b.discount && (b.discount as number) > 0 && (
+                <div style={rowStyle}><span style={lbl}>Diskon</span><span style={{ color: '#16a34a' }}>− {fmtRp(b.discount as number)}</span></div>
+              )}
               <div style={rowStyle}><span style={lbl}>Total Bayar</span><span style={{ fontWeight: 700 }}>{fmtRp(b.price as number)}</span></div>
               <div style={rowStyle}><span style={lbl}>Metode Bayar</span><span>{(b.payment_method as string) || '-'}</span></div>
               <div style={rowStyle}><span style={lbl}>Referensi</span><span style={{ fontFamily: 'monospace', fontSize: 12 }}>{(b.payment_ref as string) || '-'}</span></div>

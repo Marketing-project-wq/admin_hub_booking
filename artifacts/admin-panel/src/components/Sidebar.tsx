@@ -45,6 +45,7 @@ const UNIT_MENUS: Record<string, MenuItem[]> = {
     { label: 'Dashboard', path: '/recovery' },
     { label: 'Booking',   path: '/recovery/bookings' },
     { label: 'Layanan',   path: '/recovery/services' },
+    { label: 'Voucher',   path: '/recovery/vouchers' },
   ],
   clinic: [
     { label: 'Dashboard', path: '/clinic' },
