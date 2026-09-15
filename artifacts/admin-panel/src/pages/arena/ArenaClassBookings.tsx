@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { ArrowLeft, ArrowRight } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { fmtRp, fmtDate, fmtTime, STATUS_LABEL, exportToCSV } from '../../lib/format'
+import { exportClassParticipants } from '../../lib/exportParticipants'
 import BookingDetailModal from '../../components/arena/BookingDetailModal'
 import ManualBookingModal from '../../components/arena/ManualBookingModal'
 import ConfirmModal from '../../components/arena/ConfirmModal'
@@ -26,6 +27,7 @@ export default function ArenaClassBookings() {
   const [confirmCancel, setConfirmCancel] = useState<Record<string, unknown> | null>(null)
   const [confirmConfirm, setConfirmConfirm] = useState<Record<string, unknown> | null>(null)
   const [error, setError] = useState('')
+  const [exportingXlsx, setExportingXlsx] = useState(false)
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const fetchData = useCallback(async () => {
@@ -182,6 +184,18 @@ export default function ArenaClassBookings() {
     }
   }
 
+  const handleExportParticipants = async () => {
+    setExportingXlsx(true)
+    setError('')
+    try {
+      await exportClassParticipants()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Gagal export rekap peserta')
+    } finally {
+      setExportingXlsx(false)
+    }
+  }
+
   const hasFilter = !!(search || statusFilter !== 'all' || dateFrom || dateTo)
   const from = page * PAGE_SIZE + 1
   const to = Math.min((page + 1) * PAGE_SIZE, total)
@@ -192,6 +206,9 @@ export default function ArenaClassBookings() {
         <h2 className="page-title">Class Bookings</h2>
         <div style={{ display: 'flex', gap: 8 }}>
           <button className="btn-secondary" onClick={handleExport}>Export CSV</button>
+          <button className="btn-secondary" onClick={handleExportParticipants} disabled={exportingXlsx}>
+            {exportingXlsx ? 'Menyiapkan…' : 'Export Peserta (Excel)'}
+          </button>
           <button className="btn-primary" onClick={() => setShowManual(true)}>+ Manual Booking</button>
         </div>
       </div>
