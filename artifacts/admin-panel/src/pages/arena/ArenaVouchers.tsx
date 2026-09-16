@@ -8,7 +8,12 @@ interface Voucher {
   min_booking_amount: number; max_discount_amount: number | null; quota: number; used_count: number;
   valid_from: string; valid_until: string; is_active: boolean; corporation_only: boolean;
   applies_to: string;   // 'class_booking' | 'package_purchase' | 'both'
+  location: string | null;          // scope unit: NULL=semua, 'ARENA', 'RECOVERY_CENTER'
+  applicable_slugs: string[] | null; // batasi ke produk Open Arena/Rent/Bundle tertentu (kosong=semua)
 }
+
+// Produk Arena non-kelas (Open Arena, Rent, Bundle) untuk scope voucher per-produk.
+interface ArenaProductOpt { slug: string; name: string }
 
 type ClassTypeEmbed = { name: string; color: string | null }
 interface ScheduleOption {
@@ -79,6 +84,11 @@ export default function ArenaVouchers() {
   const [restrictPackage, setRestrictPackage] = useState(false)
   const [selectedPackageIds, setSelectedPackageIds] = useState<Set<string>>(new Set())
 
+  // Voucher-per-produk (Open Arena / Rent / Bundle) — disimpan di applicable_slugs.
+  const [arenaProducts, setArenaProducts] = useState<ArenaProductOpt[]>([])
+  const [restrictProduct, setRestrictProduct] = useState(false)
+  const [selectedSlugs, setSelectedSlugs] = useState<Set<string>>(new Set())
+
   const fetchData = useCallback(async () => {
     setLoading(true)
     const { data: rows, error: err } = await supabase.from('arena_vouchers').select('*').order('created_at', { ascending: false })
@@ -139,22 +149,38 @@ export default function ArenaVouchers() {
     setPackagesLoading(false)
   }, [])
 
+  // Produk Arena non-kelas (Open Arena daily/month, Rent, Bundle) dari katalog booking.
+  const fetchArenaProducts = useCallback(async () => {
+    const { data: rows } = await supabase
+      .from('booking_products')
+      .select('slug, name, booking_model')
+      .eq('location', 'ARENA')
+      .neq('booking_model', 'class')
+      .order('sort_order', { ascending: true })
+    setArenaProducts(((rows as { slug: string; name: string }[] | null) || []).map(r => ({ slug: r.slug, name: r.name })))
+  }, [])
+
   const openAdd = () => {
     setForm(emptyForm()); setEditId(null); setFormError('')
     setRestrictSchedule(false); setSelectedScheduleIds(new Set()); setScheduleSearch('')
     setRestrictPackage(false); setSelectedPackageIds(new Set())
+    setRestrictProduct(false); setSelectedSlugs(new Set())
     setShowModal(true)
     fetchSchedules()
     fetchPackages()
+    fetchArenaProducts()
   }
 
   const openEdit = async (v: Voucher) => {
     setForm({ ...v, applies_to: v.applies_to || 'class_booking' }); setEditId(v.id); setFormError('')
     setScheduleSearch(''); setSelectedScheduleIds(new Set()); setRestrictSchedule(false)
     setRestrictPackage(false); setSelectedPackageIds(new Set())
+    const initSlugs = new Set(v.applicable_slugs ?? [])
+    setSelectedSlugs(initSlugs); setRestrictProduct(initSlugs.size > 0)
     setShowModal(true)
     fetchSchedules()
     fetchPackages()
+    fetchArenaProducts()
     // Load existing assignments — presence of rows => voucher is restricted
     const { data: assignments } = await supabase
       .from('arena_voucher_schedules')
@@ -211,6 +237,7 @@ export default function ArenaVouchers() {
     if (form.valid_until && form.valid_from && form.valid_until < form.valid_from) return setFormError('Valid Until harus setelah Valid From')
     if (scopeClass && restrictSchedule && selectedScheduleIds.size === 0) return setFormError('Pilih minimal 1 jadwal, atau matikan pembatasan jadwal')
     if (scopePackage && restrictPackage && selectedPackageIds.size === 0) return setFormError('Pilih minimal 1 paket, atau matikan pembatasan paket')
+    if (restrictProduct && selectedSlugs.size === 0) return setFormError('Pilih minimal 1 produk, atau matikan pembatasan produk')
 
     setSaving(true)
     const payload = {
@@ -226,6 +253,10 @@ export default function ArenaVouchers() {
       is_active: form.is_active ?? true,
       corporation_only: form.corporation_only ?? false,
       applies_to: appliesTo,
+      // Scope unit: voucher yang dibuat di hub Arena berlaku untuk Arena. Batasi ke
+      // produk Open Arena/Rent/Bundle tertentu bila dipilih (kosong = semua Arena).
+      location: 'ARENA',
+      applicable_slugs: restrictProduct && selectedSlugs.size > 0 ? Array.from(selectedSlugs) : null,
       updated_at: new Date().toISOString(),
     }
 
@@ -274,6 +305,14 @@ export default function ArenaVouchers() {
     setSelectedPackageIds(prev => {
       const next = new Set(prev)
       if (checked) next.add(id); else next.delete(id)
+      return next
+    })
+  }
+
+  const toggleSlug = (slug: string, checked: boolean) => {
+    setSelectedSlugs(prev => {
+      const next = new Set(prev)
+      if (checked) next.add(slug); else next.delete(slug)
       return next
     })
   }
@@ -596,6 +635,36 @@ export default function ArenaVouchers() {
                 )}
               </div>
               )}
+
+              {/* Produk Berlaku — Open Arena / Rent / Bundle (booking_products). Untuk kelas
+                  gunakan "Batasi ke jadwal" di atas; bagian ini untuk produk non-kelas. */}
+              <div style={{ borderTop: '1px solid var(--border)', paddingTop: 16, marginBottom: 16 }}>
+                <label className="toggle" style={{ fontSize: 14 }}>
+                  <span className={`toggle-track ${restrictProduct ? 'on' : ''}`}><span className="toggle-thumb" /></span>
+                  <input type="checkbox" checked={restrictProduct} onChange={e => setRestrictProduct(e.target.checked)} style={{ display: 'none' }} />
+                  <strong>Batasi ke produk tertentu (Open Arena / Rent / Bundle)</strong>
+                </label>
+                <small style={{ color: 'var(--text-muted)', fontSize: 11, marginTop: 6, display: 'block' }}>
+                  {restrictProduct
+                    ? 'Voucher hanya berlaku untuk produk yang dipilih di bawah.'
+                    : 'Voucher berlaku untuk SEMUA produk Arena (default).'}
+                </small>
+
+                {restrictProduct && (
+                  <div style={{ marginTop: 12 }}>
+                    <div style={{ maxHeight: 200, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 6 }}>
+                      {arenaProducts.length === 0 ? (
+                        <div style={{ padding: 16, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>Tidak ada produk</div>
+                      ) : arenaProducts.map(p => (
+                        <label key={p.slug} style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '8px 12px', borderBottom: '1px solid var(--border)', cursor: 'pointer', fontSize: 13 }}>
+                          <input type="checkbox" checked={selectedSlugs.has(p.slug)} onChange={e => toggleSlug(p.slug, e.target.checked)} />
+                          <span>{p.name}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
 
               <div className="modal-footer">
                 <button type="button" className="btn-secondary" onClick={() => setShowModal(false)}>Batal</button>

@@ -5,16 +5,12 @@ import { useAuth } from '../../context/AuthContext'
 import { fmtRp, fmtDate } from '../../lib/format'
 
 // RECOVERY CENTER — Voucher. CRUD voucher diskon untuk booking.20fit.id/recoverycenter.
-// Memakai tabel voucher platform bersama `public.vouchers` (dipakai halaman booking),
-// DI-SCOPE ke Recovery Center lewat applicable_units berisi 'recovery'. Layanan yang
-// dicakup diambil dari katalog booking_products (location='RECOVERY_CENTER').
 //
-// CATATAN: pencocokan voucher saat checkout dilakukan oleh app booking.20fit.id
-// (repo terpisah) yang membaca tabel `vouchers`. Halaman ini mengelola datanya di
-// tabel yang benar; nilai scope (unit 'recovery' + nama layanan) harus sama dengan
-// yang dicek app booking agar voucher benar-benar terpasang. Unit 'recovery' di-set
-// server-side oleh RPC recovery_voucher_upsert (tabel `vouchers` dikunci ke authenticated,
-// jadi CRUD lewat RPC SECURITY DEFINER yang hanya menyentuh voucher recovery).
+// SUMBER DATA = arena_vouchers — TABEL VOUCHER YANG SAMA yang divalidasi situs
+// booking saat checkout. Voucher Recovery dibedakan lewat kolom location =
+// 'RECOVERY_CENTER'; opsional dibatasi ke produk tertentu lewat applicable_slugs
+// (kosong = semua produk Recovery). Situs booking mengecek location + applicable_slugs
+// (lihat repo arena-booking) sehingga voucher hanya berlaku di tempat yang benar.
 
 interface Voucher {
   id: string
@@ -22,23 +18,25 @@ interface Voucher {
   description: string | null
   discount_type: 'percentage' | 'fixed'
   discount_value: number
-  applicable_units: string[] | null
-  applicable_services: string[] | null
-  min_amount: number | null
-  max_discount: number | null
+  min_booking_amount: number | null
+  max_discount_amount: number | null
   quota: number | null
   used_count: number
   valid_from: string | null
   valid_until: string | null
   is_active: boolean
+  location: string | null
+  applicable_slugs: string[] | null
 }
+
+interface ProductOpt { slug: string; name: string }
 
 interface FormState {
   code: string
   description: string
   discount_type: 'percentage' | 'fixed'
   discount_value: number
-  services: Set<string>       // applicable_services terpilih (nama layanan)
+  slugs: Set<string>          // produk terpilih (slug); kosong/semua = berlaku semua
   min_amount: number
   max_discount: number | null
   quota: number | null
@@ -47,10 +45,13 @@ interface FormState {
   is_active: boolean
 }
 
-const emptyForm = (allServices: string[]): FormState => ({
+const FAR_FUTURE = '2099-12-31'
+const today = () => new Date().toISOString().split('T')[0]
+
+const emptyForm = (): FormState => ({
   code: '', description: '', discount_type: 'percentage', discount_value: 0,
-  services: new Set(allServices),   // default: berlaku untuk semua layanan recovery
-  min_amount: 0, max_discount: null, quota: null, valid_from: '', valid_until: '', is_active: true,
+  slugs: new Set(), min_amount: 0, max_discount: null, quota: null,
+  valid_from: '', valid_until: '', is_active: true,
 })
 
 const discountLabel = (v: Pick<Voucher, 'discount_type' | 'discount_value'>) =>
@@ -59,27 +60,27 @@ const discountLabel = (v: Pick<Voucher, 'discount_type' | 'discount_value'>) =>
 export default function RecoveryVouchers() {
   const { user } = useAuth()
   const [data, setData] = useState<Voucher[]>([])
-  const [serviceOptions, setServiceOptions] = useState<string[]>([])
+  const [products, setProducts] = useState<ProductOpt[]>([])
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [showModal, setShowModal] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
-  const [form, setForm] = useState<FormState>(emptyForm([]))
+  const [form, setForm] = useState<FormState>(emptyForm())
   const [formError, setFormError] = useState('')
   const [saving, setSaving] = useState(false)
 
   const fetchData = useCallback(async () => {
     setLoading(true)
-    // Layanan Recovery Center dari katalog booking (dipakai untuk pilihan scope).
-    const svcRes = await supabase.from('booking_products')
-      .select('name').eq('location', 'RECOVERY_CENTER').eq('is_active', true)
-      .order('sort_order', { ascending: true })
-    const names = ((svcRes.data as { name: string }[] | null) || []).map(s => s.name)
-    setServiceOptions(names)
+    // Produk Recovery Center (untuk pilihan scope voucher).
+    const { data: prods } = await supabase.rpc('recovery_catalog_list')
+    setProducts(((prods as { slug: string; name: string }[] | null) || []).map(p => ({ slug: p.slug, name: p.name })))
 
-    // Voucher recovery via RPC (SECURITY DEFINER) — lihat semua termasuk nonaktif.
-    const { data: rows, error: err } = await supabase.rpc('recovery_vouchers_list')
+    // Voucher Recovery = arena_vouchers dengan location='RECOVERY_CENTER'.
+    const { data: rows, error: err } = await supabase
+      .from('arena_vouchers').select('*')
+      .eq('location', 'RECOVERY_CENTER')
+      .order('created_at', { ascending: false })
     if (err) { setError(err.message); setLoading(false); return }
     setData((rows as Voucher[]) || [])
     setError(''); setLoading(false)
@@ -87,24 +88,25 @@ export default function RecoveryVouchers() {
 
   useEffect(() => { fetchData() }, [fetchData])
 
-  const openAdd = () => { setForm(emptyForm(serviceOptions)); setEditId(null); setFormError(''); setShowModal(true) }
+  const openAdd = () => { setForm(emptyForm()); setEditId(null); setFormError(''); setShowModal(true) }
   const openEdit = (v: Voucher) => {
     setForm({
       code: v.code, description: v.description ?? '',
       discount_type: v.discount_type, discount_value: v.discount_value,
-      services: new Set(v.applicable_services ?? serviceOptions),
-      min_amount: v.min_amount ?? 0, max_discount: v.max_discount, quota: v.quota,
-      valid_from: v.valid_from ?? '', valid_until: v.valid_until ?? '', is_active: v.is_active,
+      slugs: new Set(v.applicable_slugs ?? []),
+      min_amount: v.min_booking_amount ?? 0, max_discount: v.max_discount_amount, quota: v.quota,
+      valid_from: v.valid_from ?? '', valid_until: (v.valid_until && v.valid_until !== FAR_FUTURE) ? v.valid_until : '',
+      is_active: v.is_active,
     })
     setEditId(v.id); setFormError(''); setShowModal(true)
   }
 
   const f = form
   const setF = (patch: Partial<FormState>) => setForm(p => ({ ...p, ...patch }))
-  const toggleService = (name: string, on: boolean) => setForm(p => {
-    const next = new Set(p.services)
-    if (on) next.add(name); else next.delete(name)
-    return { ...p, services: next }
+  const toggleSlug = (slug: string, on: boolean) => setForm(p => {
+    const next = new Set(p.slugs)
+    if (on) next.add(slug); else next.delete(slug)
+    return { ...p, slugs: next }
   })
 
   const handleSave = async (e: React.FormEvent) => {
@@ -113,31 +115,48 @@ export default function RecoveryVouchers() {
     if (!f.code.trim()) return setFormError('Kode wajib diisi')
     if (!f.discount_value || f.discount_value <= 0) return setFormError('Nilai diskon harus > 0')
     if (f.discount_type === 'percentage' && f.discount_value > 100) return setFormError('Diskon persen maksimal 100%')
-    if (f.services.size === 0) return setFormError('Pilih minimal 1 layanan yang berlaku')
     if (f.valid_from && f.valid_until && f.valid_until < f.valid_from) return setFormError('Berlaku s/d harus setelah Berlaku dari')
 
+    // Semua produk terpilih (atau tak ada) => null = berlaku semua produk Recovery.
+    const allSelected = f.slugs.size === 0 || f.slugs.size >= products.length
+    const applicable_slugs = allSelected ? null : Array.from(f.slugs)
+
+    const payload = {
+      code: f.code.trim().toUpperCase(),
+      description: f.description.trim() || null,
+      discount_type: f.discount_type,
+      discount_value: Number(f.discount_value),
+      min_booking_amount: Number(f.min_amount) || 0,
+      max_discount_amount: f.discount_type === 'percentage' ? (f.max_discount || null) : null,
+      quota: f.quota != null && String(f.quota) !== '' ? Number(f.quota) : null,
+      valid_from: f.valid_from || today(),
+      valid_until: f.valid_until || FAR_FUTURE,
+      is_active: f.is_active,
+      corporation_only: false,
+      applies_to: 'both',                 // scope sebenarnya via location; 'both' agar tak ditolak cek applies_to
+      location: 'RECOVERY_CENTER',
+      applicable_slugs,
+      updated_at: new Date().toISOString(),
+    }
+
     setSaving(true)
-    const { error: err } = await supabase.rpc('recovery_voucher_upsert', {
-      p_id: editId,
-      p_code: f.code.trim().toUpperCase(),
-      p_description: f.description.trim() || null,
-      p_discount_type: f.discount_type,
-      p_discount_value: Number(f.discount_value),
-      p_applicable_services: Array.from(f.services),
-      p_min_amount: Number(f.min_amount) || 0,
-      p_max_discount: f.discount_type === 'percentage' ? (f.max_discount || null) : null,
-      p_quota: f.quota != null && String(f.quota) !== '' ? Number(f.quota) : null,
-      p_valid_from: f.valid_from || null,
-      p_valid_until: f.valid_until || null,
-      p_is_active: f.is_active,
-      p_created_by: user?.email || 'admin',
-    })
+    let err
+    if (editId) {
+      const res = await supabase.from('arena_vouchers').update(payload).eq('id', editId)
+      err = res.error
+    } else {
+      const { data: existing } = await supabase.from('arena_vouchers').select('id').eq('code', payload.code).maybeSingle()
+      if (existing) { setSaving(false); return setFormError('Kode voucher sudah dipakai') }
+      const res = await supabase.from('arena_vouchers').insert({ ...payload, used_count: 0, created_by: user?.email || 'admin', created_at: new Date().toISOString() })
+      err = res.error
+    }
     if (err) { setSaving(false); setFormError(err.message); return }
     setSaving(false); setShowModal(false); fetchData()
   }
 
   const toggleActive = async (v: Voucher) => {
-    const { error: err } = await supabase.rpc('recovery_voucher_set_active', { p_id: v.id, p_active: !v.is_active })
+    const { error: err } = await supabase.from('arena_vouchers')
+      .update({ is_active: !v.is_active, updated_at: new Date().toISOString() }).eq('id', v.id)
     if (err) setError(err.message); else fetchData()
   }
 
@@ -146,9 +165,9 @@ export default function RecoveryVouchers() {
     ? data.filter(v => v.code?.toLowerCase().includes(sl) || (v.description ?? '').toLowerCase().includes(sl))
     : data
 
-  const servicesLabel = (v: Voucher) => {
-    const arr = v.applicable_services ?? []
-    if (arr.length === 0 || arr.length >= serviceOptions.length) return 'Semua layanan'
+  const scopeLabel = (v: Voucher) => {
+    const arr = v.applicable_slugs ?? []
+    if (arr.length === 0) return 'Semua layanan'
     return `${arr.length} layanan`
   }
 
@@ -159,7 +178,8 @@ export default function RecoveryVouchers() {
         <button className="btn-primary" onClick={openAdd}>+ Tambah Voucher</button>
       </div>
       <p style={{ color: 'var(--text-muted)', marginTop: -8, marginBottom: 20, fontSize: 13 }}>
-        Kode voucher diskon untuk pembelian di booking.20fit.id/recoverycenter. Tersimpan di tabel voucher bersama, di-scope ke Recovery Center.
+        Kode voucher untuk pembelian di <b>booking.20fit.id/recoverycenter</b>. Bisa dibatasi ke layanan tertentu
+        (kosongkan = berlaku semua layanan Recovery).
       </p>
 
       {error && <p style={{ color: 'var(--red)', fontSize: 13, marginBottom: 12 }}>{error}</p>}
@@ -176,7 +196,7 @@ export default function RecoveryVouchers() {
         <table className="data-table">
           <thead>
             <tr>
-              <th>Kode</th><th>Deskripsi</th><th>Diskon</th><th>Layanan</th><th>Min Belanja</th>
+              <th>Kode</th><th>Deskripsi</th><th>Diskon</th><th>Berlaku Untuk</th><th>Min Belanja</th>
               <th>Kuota</th><th>Dipakai</th><th>Berlaku s/d</th><th>Status</th><th>Aksi</th>
             </tr>
           </thead>
@@ -191,13 +211,13 @@ export default function RecoveryVouchers() {
                 <td>{v.description || '-'}</td>
                 <td style={{ whiteSpace: 'nowrap' }}>
                   {discountLabel(v)}
-                  {v.discount_type === 'percentage' && v.max_discount ? <span style={{ color: 'var(--text-muted)', fontSize: 11 }}> (maks {fmtRp(v.max_discount)})</span> : null}
+                  {v.discount_type === 'percentage' && v.max_discount_amount ? <span style={{ color: 'var(--text-muted)', fontSize: 11 }}> (maks {fmtRp(v.max_discount_amount)})</span> : null}
                 </td>
-                <td style={{ fontSize: 12, color: 'var(--text-muted)' }}>{servicesLabel(v)}</td>
-                <td style={{ whiteSpace: 'nowrap' }}>{v.min_amount ? fmtRp(v.min_amount) : '-'}</td>
+                <td style={{ fontSize: 12, color: 'var(--text-muted)' }}>{scopeLabel(v)}</td>
+                <td style={{ whiteSpace: 'nowrap' }}>{v.min_booking_amount ? fmtRp(v.min_booking_amount) : '-'}</td>
                 <td style={{ textAlign: 'center' }}>{v.quota ?? '∞'}</td>
                 <td style={{ textAlign: 'center' }}>{v.used_count}</td>
-                <td style={{ whiteSpace: 'nowrap' }}>{v.valid_until ? fmtDate(v.valid_until) : '-'}</td>
+                <td style={{ whiteSpace: 'nowrap' }}>{v.valid_until && v.valid_until !== FAR_FUTURE ? fmtDate(v.valid_until) : '-'}</td>
                 <td>
                   <span className={`badge ${v.is_active ? 'badge-confirmed' : 'badge-cancelled'}`}>
                     {v.is_active ? 'Aktif' : 'Nonaktif'}
@@ -279,14 +299,17 @@ export default function RecoveryVouchers() {
               </div>
 
               <div className="form-group">
-                <label>Berlaku untuk layanan * ({f.services.size}/{serviceOptions.length} dipilih)</label>
-                <div style={{ maxHeight: 160, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 6, marginTop: 4 }}>
-                  {serviceOptions.length === 0 ? (
-                    <div style={{ padding: 12, fontSize: 13, color: 'var(--text-muted)' }}>Tidak ada layanan Recovery Center aktif</div>
-                  ) : serviceOptions.map(name => (
-                    <label key={name} style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '8px 12px', borderBottom: '1px solid var(--border)', cursor: 'pointer', fontSize: 13 }}>
-                      <input type="checkbox" checked={f.services.has(name)} onChange={e => toggleService(name, e.target.checked)} style={{ width: 'auto' }} />
-                      <span>{name}</span>
+                <label>Berlaku untuk layanan ({f.slugs.size === 0 ? 'semua' : `${f.slugs.size} dipilih`})</label>
+                <small style={{ color: 'var(--text-muted)', fontSize: 11, display: 'block', marginBottom: 6 }}>
+                  Kosongkan semua = voucher berlaku untuk semua layanan Recovery. Centang untuk membatasi.
+                </small>
+                <div style={{ maxHeight: 160, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 6 }}>
+                  {products.length === 0 ? (
+                    <div style={{ padding: 12, fontSize: 13, color: 'var(--text-muted)' }}>Tidak ada layanan Recovery Center</div>
+                  ) : products.map(p => (
+                    <label key={p.slug} style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '8px 12px', borderBottom: '1px solid var(--border)', cursor: 'pointer', fontSize: 13 }}>
+                      <input type="checkbox" checked={f.slugs.has(p.slug)} onChange={e => toggleSlug(p.slug, e.target.checked)} style={{ width: 'auto' }} />
+                      <span>{p.name}</span>
                     </label>
                   ))}
                 </div>
