@@ -16,6 +16,7 @@ import ArenaVouchers from './pages/arena/ArenaVouchers'
 import ArenaUnits from './pages/arena/master/ArenaUnits'
 import ArenaClassTypes from './pages/arena/master/ArenaClassTypes'
 import ArenaPackages from './pages/arena/master/ArenaPackages'
+import ArenaBundles from './pages/arena/ArenaBundles'
 import ArenaSchedules from './pages/arena/master/ArenaSchedules'
 import ArenaCoaches from './pages/arena/master/ArenaCoaches'
 import ArenaAddons from './pages/arena/master/ArenaAddons'
@@ -107,6 +108,7 @@ export default function App() {
             <Route path="master/units" element={<ArenaUnits />} />
             <Route path="master/class-types" element={<ArenaClassTypes />} />
             <Route path="master/packages" element={<ArenaPackages />} />
+            <Route path="master/bundles" element={<ArenaBundles />} />
             <Route path="master/schedules" element={<ArenaSchedules />} />
             <Route path="master/coaches" element={<ArenaCoaches />} />
             <Route path="master/addons" element={<ArenaAddons />} />
