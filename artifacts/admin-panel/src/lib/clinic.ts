@@ -428,10 +428,12 @@ export async function updateBookingAssignment(
 export async function listServices(): Promise<ClinicService[]> {
   const { data, error } = await supabase
     .from('clinic_services')
-    .select('id, name, price, duration_minutes, is_active, requires_doctor, package_category, is_online_bookable')
+    .select('id, name, price, duration_minutes, is_active, requires_doctor, package_category, is_online_bookable, service_group')
     .order('name', { ascending: true })
   if (error) throw error
-  return (data || []) as ClinicService[]
+  // Sembunyikan layanan Recovery Center dari semua picker clinic (dikelola di hub Recovery).
+  return ((data || []) as (ClinicService & { service_group?: string | null })[])
+    .filter(s => s.service_group !== 'Recovery Center') as ClinicService[]
 }
 
 // ─── Patients ────────────────────────────────────────────────────────────────
@@ -1161,6 +1163,12 @@ const SERVICE_FULL_FIELDS =
   'id, code, name, description, price, duration_minutes, category, service_group, ' +
   'is_online_bookable, is_active, sort_order, created_at'
 
+// Layanan Recovery Center dikelola di hub Recovery (booking_products), TERPISAH dari
+// 20FIT Sports Clinic. clinic_services grup ini hanya jadi baris penyambung booking
+// recovery, jadi disembunyikan dari semua layar clinic (dropdown kunjungan + master
+// Services). Filter client-side supaya baris tanpa grup (null) tetap tampil.
+const RECOVERY_SERVICE_GROUP = 'Recovery Center'
+
 export async function listServicesFull(activeOnly = false): Promise<ClinicServiceFull[]> {
   let q = supabase
     .from('clinic_services')
@@ -1170,7 +1178,8 @@ export async function listServicesFull(activeOnly = false): Promise<ClinicServic
   if (activeOnly) q = q.eq('is_active', true)
   const { data, error } = await q
   if (error) throw error
-  return (data ?? []) as unknown as ClinicServiceFull[]
+  return ((data ?? []) as unknown as ClinicServiceFull[])
+    .filter(s => s.service_group !== RECOVERY_SERVICE_GROUP)
 }
 
 export async function createService(s: ServicePayload): Promise<void> {
