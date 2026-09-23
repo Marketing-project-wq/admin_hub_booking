@@ -302,7 +302,7 @@ export default function BookingDetailModal({ type, booking, onClose, onRefresh }
                   <div className="detail-row"><span className="detail-label">Unit</span><span className="detail-value">{unit?.name as string || String(booking.unit_id || '')}</span></div>
                   <div className="detail-row"><span className="detail-label">Tanggal</span><span className="detail-value">{fmtDate(booking.booking_date as string)}</span></div>
                   <div className="detail-row"><span className="detail-label">Waktu</span><span className="detail-value">{fmtTime(booking.start_time as string)} – {fmtTime(booking.end_time as string)}</span></div>
-                  <div className="detail-row"><span className="detail-label">Sewa</span><span className="detail-value">{booking.rent_type === 'with_coach' ? 'Dengan Coach' : booking.rent_type === 'venue_only' ? 'Venue Saja' : booking.rent_type === 'open_arena' ? 'Open Arena' : booking.rent_type === 'open_arena_month' ? 'Open Arena 1 Month' : booking.rent_type === 'bundle' ? 'Bundle' : '-'}</span></div>
+                  <div className="detail-row"><span className="detail-label">Sewa</span><span className="detail-value">{booking.rent_type === 'with_coach' ? 'Dengan Coach' : booking.rent_type === 'venue_only' ? 'Venue Saja' : booking.rent_type === 'open_arena' ? 'Open Arena' : booking.rent_type === 'open_arena_month' ? 'Open Arena 1 Month' : booking.rent_type === 'open_arena_coach' ? 'Open Arena with Coach' : booking.rent_type === 'open_arena_head_coach' ? 'Open Arena with Head Coach' : booking.rent_type === 'bundle' ? 'Bundle' : '-'}</span></div>
                 </>
               ) : (
                 <>
