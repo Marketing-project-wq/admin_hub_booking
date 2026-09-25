@@ -14,6 +14,9 @@ export default function ArenaCoaches() {
   const [formError, setFormError] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all')
+  const [specFilter, setSpecFilter] = useState('all')
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -46,6 +49,23 @@ export default function ArenaCoaches() {
     fetchData()
   }
 
+  // Distinct specialities present in the data → drives the optional Spesialisasi dropdown.
+  const specialities = Array.from(
+    new Set(data.map(c => (c.speciality || '').trim()).filter(Boolean)),
+  ).sort((a, b) => a.localeCompare(b))
+
+  // Client-side filter over ALL loaded coaches (this page fetches every row, no pagination),
+  // so search/filter always spans the full dataset. Name match is case-insensitive & partial.
+  const s = search.trim().toLowerCase()
+  const displayData = data.filter(c => {
+    if (s && !c.name.toLowerCase().includes(s)) return false
+    if (statusFilter === 'active' && !c.is_active) return false
+    if (statusFilter === 'inactive' && c.is_active) return false
+    if (specFilter !== 'all' && (c.speciality || '').trim() !== specFilter) return false
+    return true
+  })
+  const hasFilter = !!s || statusFilter !== 'all' || specFilter !== 'all'
+
   const f = form
   return (
     <div>
@@ -54,13 +74,45 @@ export default function ArenaCoaches() {
         <button className="btn-primary" onClick={openAdd}>+ Tambah Coach</button>
       </div>
       {error && <p style={{ color: 'var(--red)', fontSize: 13, marginBottom: 12 }}>{error}</p>}
+      <div className="filter-bar">
+        <input
+          type="text"
+          placeholder="Cari nama coach..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          style={{ minWidth: 240 }}
+        />
+        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value as 'all' | 'active' | 'inactive')}>
+          <option value="all">Semua Status</option>
+          <option value="active">Active</option>
+          <option value="inactive">Inactive</option>
+        </select>
+        {specialities.length > 0 && (
+          <select value={specFilter} onChange={e => setSpecFilter(e.target.value)}>
+            <option value="all">Semua Spesialisasi</option>
+            {specialities.map(sp => <option key={sp} value={sp}>{sp}</option>)}
+          </select>
+        )}
+        {hasFilter && (
+          <button
+            className="btn-secondary"
+            style={{ fontSize: 12, padding: '6px 12px' }}
+            onClick={() => { setSearch(''); setStatusFilter('all'); setSpecFilter('all') }}
+          >
+            Reset
+          </button>
+        )}
+        <span style={{ marginLeft: 'auto', fontSize: 13, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+          {displayData.length} coach
+        </span>
+      </div>
       <div className="table-wrap">
         <table className="data-table">
           <thead><tr><th>Nama</th><th>Spesialisasi</th><th>Status</th><th>Aksi</th></tr></thead>
           <tbody>
             {loading ? <tr className="loading-row"><td colSpan={4}>Memuat...</td></tr>
-              : data.length === 0 ? <tr><td colSpan={4} className="empty-state">Tidak ada coach</td></tr>
-              : data.map(c => (
+              : displayData.length === 0 ? <tr><td colSpan={4} className="empty-state">{hasFilter ? 'Coach tidak ditemukan' : 'Tidak ada coach'}</td></tr>
+              : displayData.map(c => (
                 <tr key={c.id}>
                   <td style={{ fontWeight: 600 }}>{c.name}</td>
                   <td>{c.speciality}</td>
