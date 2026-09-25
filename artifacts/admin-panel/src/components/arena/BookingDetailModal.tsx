@@ -3,6 +3,7 @@ import { X } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { fmtRp, fmtDate, fmtDateTime, fmtTime, STATUS_LABEL } from '../../lib/format'
 import ConfirmModal from './ConfirmModal'
+import CoachPackagePanel from './CoachPackagePanel'
 
 interface Props {
   type: 'slot' | 'class'
@@ -326,6 +327,18 @@ export default function BookingDetailModal({ type, booking, onClose, onRefresh }
             <div className="detail-row"><span className="detail-label">Diskon</span><span className="detail-value">{fmtRp(booking.discount as number)}</span></div>
             <div className="detail-row"><span className="detail-label">Harga Final</span><span className="detail-value" style={{ fontWeight: 700 }}>{fmtRp(booking.price as number)}</span></div>
           </div>
+
+          {/* Fase 2 — redeem paket coaching (Open Arena with Coach / Head Coach) */}
+          {type === 'slot' && !isEditing &&
+            (booking.rent_type === 'open_arena_coach' || booking.rent_type === 'open_arena_head_coach') && (
+            <CoachPackagePanel
+              bookingId={booking.id as string}
+              sessionsTotal={Number(booking.sessions_total || 0)}
+              validUntil={(booking.valid_until as string) || null}
+              packageStatus={String(booking.status || '')}
+              onChanged={onRefresh}
+            />
+          )}
 
           {type === 'class' && ((booking.addons as unknown[]) || []).length > 0 && (() => {
             const addons = booking.addons as Array<{ id: string; addon_name: string; addon_price: number; qty: number; subtotal: number }>
