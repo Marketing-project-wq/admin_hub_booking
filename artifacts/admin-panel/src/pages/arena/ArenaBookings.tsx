@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { ArrowLeft, ArrowRight, X } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
+import { genderShort, genderLabel } from '../../lib/gender'
 import { fmtRp, fmtDate, fmtTime, STATUS_LABEL, exportToCSV } from '../../lib/format'
 import BookingDetailModal from '../../components/arena/BookingDetailModal'
 import ManualBookingModal from '../../components/arena/ManualBookingModal'
@@ -138,7 +139,7 @@ export default function ArenaBookings() {
   const handleExport = async () => {
     const { data: all } = await supabase
       .from('arena_bookings')
-      .select('booking_code, unit:arena_booking_units(name), booking_date, start_time, end_time, full_name, email, phone, customer_type, rent_type, price_before_disc, discount, price, status, payment_method, payment_ref, paid_at, notes, created_at')
+      .select('booking_code, unit:arena_booking_units(name), booking_date, start_time, end_time, full_name, email, phone, gender, customer_type, rent_type, price_before_disc, discount, price, status, payment_method, payment_ref, paid_at, notes, created_at')
       .order('created_at', { ascending: false })
     if (all) {
       const flat = all.map((r: Record<string, unknown>) => ({
@@ -205,6 +206,7 @@ export default function ArenaBookings() {
               <th>Tanggal</th>
               <th>Waktu</th>
               <th>Nama</th>
+              <th>Gender</th>
               <th>Tipe</th>
               <th>Telp</th>
               <th>Amount</th>
@@ -228,6 +230,7 @@ export default function ArenaBookings() {
                   <td>{fmtDate(row.booking_date as string)}</td>
                   <td style={{ whiteSpace: 'nowrap' }}>{fmtTime(row.start_time as string)}–{fmtTime(row.end_time as string)}</td>
                   <td>{row.full_name as string}</td>
+                  <td style={{ textAlign: 'center' }} title={genderLabel(row.gender)}>{genderShort(row.gender)}</td>
                   <td style={{ whiteSpace: 'nowrap' }}>{row.customer_type === 'corporation' ? 'Korporasi' : 'Individu'}</td>
                   <td>{row.phone as string}</td>
                   <td style={{ whiteSpace: 'nowrap' }}>{fmtRp(row.price as number)}</td>

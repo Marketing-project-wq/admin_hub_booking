@@ -3,6 +3,7 @@ import { ArrowLeft, ArrowRight, X } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { fmtRp, fmtDate, fmtDateTime, fmtTime, STATUS_LABEL, exportToCSV } from '../../lib/format'
 import ConfirmModal from '../../components/gym/ConfirmModal'
+import { genderShort, genderLabel } from '../../lib/gender'
 
 // GYM — Transaksi (daftar gym_class_bookings SAJA). Mirror kemampuan
 // ArenaClassBookings, TAPI hanya baca/tulis tabel gym_*. Skema gym lebih ramping:
@@ -37,7 +38,7 @@ export default function GymClassBookings() {
       .from('gym_class_bookings')
       .select(`
         id, booking_code, schedule_id,
-        full_name, email, phone, notes, price, discount, price_before_disc,
+        full_name, email, phone, gender, notes, price, discount, price_before_disc,
         status, payment_method, payment_ref, channel, paid_at, created_at, updated_at,
         schedule:gym_class_schedules(
           schedule_date, start_time, end_time, instructor, quota,
@@ -149,7 +150,7 @@ export default function GymClassBookings() {
       .select(`
         booking_code,
         schedule:gym_class_schedules(schedule_date, start_time, end_time, instructor, class_type:gym_class_types(name)),
-        full_name, email, phone, price_before_disc, discount, price,
+        full_name, email, phone, gender, price_before_disc, discount, price,
         status, payment_method, payment_ref, channel, paid_at, created_at
       `)
       .order('paid_at', { ascending: false, nullsFirst: false })
@@ -167,6 +168,7 @@ export default function GymClassBookings() {
           full_name: r.full_name,
           email: r.email,
           phone: r.phone,
+          gender: genderLabel(r.gender),
           price_before_disc: r.price_before_disc,
           discount: r.discount,
           price: r.price,
@@ -242,7 +244,7 @@ export default function GymClassBookings() {
           <thead>
             <tr>
               <th>Booking Code</th><th>Kelas</th>
-              <th>Tgl Bayar</th><th>Jadwal</th><th>Nama</th><th>Telp</th>
+              <th>Tgl Bayar</th><th>Jadwal</th><th>Nama</th><th>Gender</th><th>Telp</th>
               <th>Amount</th><th>Sisa Kuota</th><th>Status</th><th>Payment</th>
               <th style={{ fontSize: 11, color: '#9CA3AF' }}>Channel</th>
               <th>Aksi</th>
@@ -250,9 +252,9 @@ export default function GymClassBookings() {
           </thead>
           <tbody>
             {loading ? (
-              <tr className="loading-row"><td colSpan={12}>Memuat data...</td></tr>
+              <tr className="loading-row"><td colSpan={13}>Memuat data...</td></tr>
             ) : data.length === 0 ? (
-              <tr><td colSpan={12} className="empty-state">Tidak ada data</td></tr>
+              <tr><td colSpan={13} className="empty-state">Tidak ada data</td></tr>
             ) : data.map((row: Row) => {
               const s = STATUS_LABEL[row.status as string] || { label: row.status, css: '' }
               const sch = row.schedule as Row | undefined
@@ -272,6 +274,7 @@ export default function GymClassBookings() {
                     {fmtDate(sch?.schedule_date as string)} {fmtTime(sch?.start_time as string)}
                   </td>
                   <td>{row.full_name as string}</td>
+                  <td style={{ textAlign: 'center' }} title={genderLabel(row.gender)}>{genderShort(row.gender)}</td>
                   <td>{row.phone as string}</td>
                   <td style={{ whiteSpace: 'nowrap', fontWeight: 600 }}>{fmtRp(row.price as number)}</td>
                   <td style={{ textAlign: 'center', color: sisa === 0 ? 'var(--red)' : 'inherit', fontWeight: sisa === 0 ? 700 : 400 }}>
@@ -331,6 +334,7 @@ export default function GymClassBookings() {
               <div style={rowStyle}><span style={lbl}>Instruktur</span><span>{(sch?.instructor as string) || '-'}</span></div>
               <div style={rowStyle}><span style={lbl}>Sisa Kuota</span><span>{sisa === undefined ? '-' : `${sisa} / ${(sch?.quota as number) ?? '-'}`}</span></div>
               <div style={rowStyle}><span style={lbl}>Nama</span><span>{b.full_name as string}</span></div>
+              <div style={rowStyle}><span style={lbl}>Gender</span><span>{genderLabel(b.gender)}</span></div>
               <div style={rowStyle}><span style={lbl}>Email</span><span>{(b.email as string) || '-'}</span></div>
               <div style={rowStyle}><span style={lbl}>Telepon</span><span>{(b.phone as string) || '-'}</span></div>
               <div style={rowStyle}><span style={lbl}>Harga Normal</span><span>{fmtRp(b.price_before_disc as number)}</span></div>

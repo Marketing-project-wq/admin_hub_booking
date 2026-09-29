@@ -33,6 +33,9 @@ export default function ManualBookingModal({ type, onClose, onRefresh }: Props) 
   const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
+  // Admin-entered bookings collect gender too, so an admin-created row is not a permanent
+  // blank in the gender report. Left optional here: the desk does not always get to ask.
+  const [gender, setGender] = useState<'' | 'male' | 'female'>('')
   const [notes, setNotes] = useState('')
   const [voucherCode, setVoucherCode] = useState('')
   const [price, setPrice] = useState(0)
@@ -131,6 +134,7 @@ export default function ManualBookingModal({ type, onClose, onRefresh }: Props) 
           full_name: fullName,
           email,
           phone,
+          gender: gender || null,
           notes: notes || null,
           voucher_code: voucherCode || null,
           price: priceFinal,
@@ -162,6 +166,7 @@ export default function ManualBookingModal({ type, onClose, onRefresh }: Props) 
           full_name: fullName,
           email,
           phone,
+          gender: gender || null,
           notes: notes || null,
           price: priceFinal,
           discount,
@@ -321,6 +326,14 @@ export default function ManualBookingModal({ type, onClose, onRefresh }: Props) 
             <div className="form-group">
               <label>Telp *</label>
               <input type="text" value={phone} onChange={e => setPhone(e.target.value)} required />
+            </div>
+            <div className="form-group">
+              <label>Gender</label>
+              <select value={gender} onChange={e => setGender(e.target.value as '' | 'male' | 'female')}>
+                <option value="">— tidak tercatat —</option>
+                <option value="male">Laki-laki</option>
+                <option value="female">Perempuan</option>
+              </select>
             </div>
             {type === 'slot' && (
               <div className="form-group">

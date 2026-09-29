@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
-import { supabase } from '@workspace/admin-shared'
+import { supabase, genderShort, genderLabel } from '@workspace/admin-shared'
 import { fmtRp, fmtDate, fmtTime, fmtDateTime, exportToCSV } from '@workspace/admin-shared'
 import { ConfirmModal } from '@workspace/admin-shared'
 
@@ -9,7 +9,7 @@ const PAGE_SIZE = 20
 interface Booking {
   id: string; booking_code: string; unit_id: string; booking_date: string;
   start_time: string; end_time: string; booker_type: string; customer_type: string;
-  full_name: string; email: string; phone: string; notes: string | null;
+  full_name: string; email: string; phone: string; gender: string | null; notes: string | null;
   price: number; discount: number; price_before_disc: number;
   status: string; payment_method: string | null; payment_ref: string | null;
   paid_at: string | null; created_at: string; updated_at: string | null;
@@ -225,7 +225,7 @@ export default function ArenaVenueBooking() {
   const handleExport = async () => {
     const { data } = await supabase
       .from('arena_bookings')
-      .select('booking_code, full_name, email, phone, customer_type, booking_date, start_time, end_time, price_before_disc, discount, price, status, payment_method, payment_ref, paid_at, notes, created_at')
+      .select('booking_code, full_name, email, phone, gender, customer_type, booking_date, start_time, end_time, price_before_disc, discount, price, status, payment_method, payment_ref, paid_at, notes, created_at')
       .order('booking_date', { ascending: false })
     if (data) {
       exportToCSV(data.map((b: Record<string, unknown>) => ({
@@ -286,15 +286,15 @@ export default function ArenaVenueBooking() {
         <table className="data-table">
           <thead>
             <tr>
-              <th>Booking Code</th><th>Nama / Organisasi</th><th>Telp</th>
+              <th>Booking Code</th><th>Nama / Organisasi</th><th>Gender</th><th>Telp</th>
               <th>Tanggal</th><th>Waktu</th><th>Durasi</th><th>Harga</th><th>Status</th><th>Aksi</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr className="loading-row"><td colSpan={9}>Memuat data...</td></tr>
+              <tr className="loading-row"><td colSpan={10}>Memuat data...</td></tr>
             ) : bookings.length === 0 ? (
-              <tr><td colSpan={9} className="empty-state">Tidak ada data</td></tr>
+              <tr><td colSpan={10} className="empty-state">Tidak ada data</td></tr>
             ) : bookings.map(b => (
               <tr key={b.id}>
                 <td><code style={{ fontSize: 11 }}>{b.booking_code}</code></td>
@@ -302,6 +302,7 @@ export default function ArenaVenueBooking() {
                   <div style={{ fontWeight: 600 }}>{b.full_name}</div>
                   {b.notes && <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{b.notes.slice(0, 40)}</div>}
                 </td>
+                <td style={{ textAlign: 'center' }} title={genderLabel(b.gender)}>{genderShort(b.gender)}</td>
                 <td>{b.phone}</td>
                 <td>{fmtDate(b.booking_date)}</td>
                 <td style={{ whiteSpace: 'nowrap' }}>{fmtTime(b.start_time)} – {fmtTime(b.end_time)}</td>
