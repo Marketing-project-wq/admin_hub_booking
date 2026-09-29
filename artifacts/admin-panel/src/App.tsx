@@ -13,6 +13,8 @@ import ArenaBookings from './pages/arena/ArenaBookings'
 import ArenaClassBookings from './pages/arena/ArenaClassBookings'
 import ArenaPackageOrders from './pages/arena/ArenaPackageOrders'
 import ArenaVouchers from './pages/arena/ArenaVouchers'
+import ArenaCoachOrders from './pages/arena/ArenaCoachOrders'
+import ArenaCoachVouchers from './pages/arena/ArenaCoachVouchers'
 import ArenaUnits from './pages/arena/master/ArenaUnits'
 import ArenaClassTypes from './pages/arena/master/ArenaClassTypes'
 import ArenaPackages from './pages/arena/master/ArenaPackages'
@@ -103,6 +105,8 @@ export default function App() {
             <Route path="class-bookings" element={<ArenaClassBookings />} />
             <Route path="packages" element={<ArenaPackageOrders />} />
             <Route path="vouchers" element={<ArenaVouchers />} />
+            <Route path="coach-orders" element={<ArenaCoachOrders />} />
+            <Route path="coach-vouchers" element={<ArenaCoachVouchers />} />
             <Route path="users" element={<ArenaUserManagement />} />
             <Route path="analytics" element={<ArenaAnalytics />} />
             <Route path="api-keys" element={<ArenaApiKeys />} />
