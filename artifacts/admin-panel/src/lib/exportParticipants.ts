@@ -1,5 +1,6 @@
 import writeXlsxFile, { type Row, type CellObject } from 'write-excel-file/browser'
 import { supabase } from './supabase'
+import { genderLabel } from './gender'
 
 // ---------------------------------------------------------------------------
 // Export "Rekap Peserta" (class participants) to a real .xlsx file.
@@ -18,6 +19,7 @@ type BookingRow = Record<string, unknown>
 
 interface Agg {
   nama: string
+  gender: string
   email: string
   noHp: string
   total: number
@@ -112,6 +114,7 @@ function aggregate(records: BookingRow[], keyFn: (r: BookingRow) => string): Agg
     const dates = recs.map((r) => ts(r.created_at)).filter((n) => !Number.isNaN(n))
     out.push({
       nama: mostRecent(recs, 'full_name') || '-',
+      gender: genderLabel(mostRecent(recs, 'gender')),
       email: mostRecent(recs, 'email') || str(recs[0]?.email) || '-',
       noHp: mostRecent(recs, 'phone'),
       total: recs.length,
@@ -134,7 +137,7 @@ async function fetchAllBookings(): Promise<BookingRow[]> {
     const { data, error } = await supabase
       .from('arena_class_bookings')
       .select(
-        `id, booking_code, full_name, email, phone, customer_type, status, price, notes,
+        `id, booking_code, full_name, gender, email, phone, customer_type, status, price, notes,
          created_at, paid_at, schedule_id,
          schedule:arena_class_schedules(
            schedule_date, start_time, instructor,
@@ -211,6 +214,13 @@ export async function exportClassParticipants(): Promise<void> {
   }
   const classRows = [...byClass.entries()].sort((a, b) => b[1].confirmed - a[1].confirmed)
 
+  // Gender split across all bookings. "Tidak tercatat" is kept as its own line rather than
+  // folded into either bucket: those are bookings made before the field existed (or via a
+  // path that does not collect it), so counting them as one gender would skew the split.
+  const maleCount    = rows.filter((r) => r.gender === 'male').length
+  const femaleCount  = rows.filter((r) => r.gender === 'female').length
+  const unknownCount = rows.length - maleCount - femaleCount
+
   // ---- Sheet 1: Ringkasan ----
   const W1 = 6
   const s1: Row[] = []
@@ -226,6 +236,9 @@ export async function exportClassParticipants(): Promise<void> {
   stat('Total booking (semua status)', rows.length)
   stat('  • Confirmed', confirmedCount)
   stat('  • Cancelled', cancelledCount)
+  stat('Gender — Laki-laki', maleCount)
+  stat('Gender — Perempuan', femaleCount)
+  stat('Gender — tidak tercatat', unknownCount)
   stat('Peserta unik teridentifikasi (punya email)', recap.length)
   stat('Booking tanpa email / walk-in (noemail@20fit.id)', legacy.length)
   stat('  • nama unik pada kelompok ini', legacyAgg.length)
@@ -242,14 +255,14 @@ export async function exportClassParticipants(): Promise<void> {
 
   // ---- Sheet 2: Rekap Peserta ----
   const head2 = [
-    'No', 'Nama', 'Email', 'No HP', 'Total Booking', 'Confirmed', 'Cancelled',
+    'No', 'Nama', 'Gender', 'Email', 'No HP', 'Total Booking', 'Confirmed', 'Cancelled',
     'Jml Jenis Kelas', 'Jenis Kelas yang Diikuti', 'Total Dibayar (Rp)',
     'Booking Pertama', 'Booking Terakhir',
   ]
   const s2: Row[] = [head2.map(H)]
   recap.forEach((p, i) => {
     s2.push([
-      num(i + 1), { value: p.nama }, { value: p.email }, { value: p.noHp },
+      num(i + 1), { value: p.nama }, { value: p.gender }, { value: p.email }, { value: p.noHp },
       num(p.total), num(p.confirmed), num(p.cancelled), num(p.nJenis),
       { value: p.jenisKelas }, num(p.totalBayar),
       { value: fmtWib(p.pertamaTs) }, { value: fmtWib(p.terakhirTs) },
@@ -258,7 +271,7 @@ export async function exportClassParticipants(): Promise<void> {
 
   // ---- Sheet 3: Booking Tanpa Email ----
   const head3 = [
-    'No', 'Nama', 'No HP', 'Total Booking', 'Confirmed', 'Cancelled',
+    'No', 'Nama', 'Gender', 'No HP', 'Total Booking', 'Confirmed', 'Cancelled',
     'Jenis Kelas (dari catatan)', 'Booking Pertama', 'Booking Terakhir',
   ]
   const s3: Row[] = [
@@ -267,7 +280,7 @@ export async function exportClassParticipants(): Promise<void> {
   ]
   legacyAgg.forEach((p, i) => {
     s3.push([
-      num(i + 1), { value: p.nama }, { value: p.noHp }, num(p.total),
+      num(i + 1), { value: p.nama }, { value: p.gender }, { value: p.noHp }, num(p.total),
       num(p.confirmed), num(p.cancelled), { value: p.jenisKelas },
       { value: fmtWib(p.pertamaTs) }, { value: fmtWib(p.terakhirTs) },
     ])
@@ -275,7 +288,7 @@ export async function exportClassParticipants(): Promise<void> {
 
   // ---- Sheet 4: Semua Booking (Detail) ----
   const head4 = [
-    'Booking Code', 'Tgl Daftar', 'Nama', 'Email', 'No HP', 'Jenis Kelas',
+    'Booking Code', 'Tgl Daftar', 'Nama', 'Gender', 'Email', 'No HP', 'Jenis Kelas',
     'Tgl Kelas', 'Jam', 'Instruktur', 'Status', 'Harga (Rp)', 'Tipe Customer',
   ]
   const s4: Row[] = [head4.map(H)]
@@ -284,7 +297,7 @@ export async function exportClassParticipants(): Promise<void> {
     const sch = firstOf(r.schedule)
     s4.push([
       { value: str(r.booking_code) }, { value: fmtWib(ts(r.created_at)) },
-      { value: str(r.full_name) }, { value: str(r.email) }, { value: str(r.phone) },
+      { value: str(r.full_name) }, { value: genderLabel(r.gender) }, { value: str(r.email) }, { value: str(r.phone) },
       { value: classLabel(r) }, { value: str(sch?.schedule_date) },
       { value: str(sch?.start_time).slice(0, 5) }, { value: str(sch?.instructor) },
       { value: str(r.status) }, num(Number(r.price) || 0), { value: str(r.customer_type) },
@@ -293,8 +306,8 @@ export async function exportClassParticipants(): Promise<void> {
 
   await writeXlsxFile([
     { sheet: 'Ringkasan', columns: [{ width: 42 }, { width: 22 }, { width: 26 }, { width: 16 }, { width: 12 }, { width: 10 }], stickyRowsCount: 0, data: s1 },
-    { sheet: 'Rekap Peserta', stickyRowsCount: 1, columns: [{ width: 5 }, { width: 24 }, { width: 32 }, { width: 16 }, { width: 13 }, { width: 11 }, { width: 11 }, { width: 12 }, { width: 46 }, { width: 16 }, { width: 15 }, { width: 15 }], data: s2 },
-    { sheet: 'Booking Tanpa Email', stickyRowsCount: 2, columns: [{ width: 5 }, { width: 26 }, { width: 16 }, { width: 13 }, { width: 11 }, { width: 11 }, { width: 40 }, { width: 15 }, { width: 15 }], data: s3 },
-    { sheet: 'Semua Booking (Detail)', stickyRowsCount: 1, columns: [{ width: 20 }, { width: 12 }, { width: 22 }, { width: 30 }, { width: 16 }, { width: 30 }, { width: 12 }, { width: 8 }, { width: 16 }, { width: 11 }, { width: 12 }, { width: 13 }], data: s4 },
+    { sheet: 'Rekap Peserta', stickyRowsCount: 1, columns: [{ width: 5 }, { width: 24 }, { width: 11 }, { width: 32 }, { width: 16 }, { width: 13 }, { width: 11 }, { width: 11 }, { width: 12 }, { width: 46 }, { width: 16 }, { width: 15 }, { width: 15 }], data: s2 },
+    { sheet: 'Booking Tanpa Email', stickyRowsCount: 2, columns: [{ width: 5 }, { width: 26 }, { width: 11 }, { width: 16 }, { width: 13 }, { width: 11 }, { width: 11 }, { width: 40 }, { width: 15 }, { width: 15 }], data: s3 },
+    { sheet: 'Semua Booking (Detail)', stickyRowsCount: 1, columns: [{ width: 20 }, { width: 12 }, { width: 22 }, { width: 11 }, { width: 30 }, { width: 16 }, { width: 30 }, { width: 12 }, { width: 8 }, { width: 16 }, { width: 11 }, { width: 12 }, { width: 13 }], data: s4 },
   ]).toFile(`Rekap_Peserta_Kelas_20FIT_${today()}.xlsx`)
 }

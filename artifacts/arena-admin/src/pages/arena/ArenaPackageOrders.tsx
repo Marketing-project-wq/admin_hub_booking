@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
-import { supabase } from '@workspace/admin-shared'
+import { supabase, genderShort, genderLabel } from '@workspace/admin-shared'
 import { fmtRp, fmtDateTime, STATUS_LABEL, exportToCSV } from '@workspace/admin-shared'
 
 const PAGE_SIZE = 20
@@ -26,7 +26,7 @@ export default function ArenaPackageOrders() {
       .from('arena_package_orders')
       .select(`
         id, order_code, package_id, package_name, sessions, price,
-        full_name, email, phone, notes, status, payment_method,
+        full_name, email, phone, gender, notes, status, payment_method,
         payment_ref, paid_at, created_at, updated_at,
         arena_package_vouchers(
           voucher_code, total_sessions, used_sessions, is_active
@@ -95,6 +95,7 @@ export default function ArenaPackageOrders() {
               <th>Package</th>
               <th>Sessions</th>
               <th>Nama</th>
+              <th>Gender</th>
               <th>Telp</th>
               <th>Amount</th>
               <th>Status</th>
@@ -106,9 +107,9 @@ export default function ArenaPackageOrders() {
           </thead>
           <tbody>
             {loading ? (
-              <tr className="loading-row"><td colSpan={11}>Memuat data...</td></tr>
+              <tr className="loading-row"><td colSpan={12}>Memuat data...</td></tr>
             ) : data.length === 0 ? (
-              <tr><td colSpan={11} className="empty-state">Tidak ada data</td></tr>
+              <tr><td colSpan={12} className="empty-state">Tidak ada data</td></tr>
             ) : data.map((row: Record<string, unknown>) => {
               const s = STATUS_LABEL[row.status as string] || { label: row.status, css: '' }
               return (
@@ -117,6 +118,7 @@ export default function ArenaPackageOrders() {
                   <td>{row.package_name as string}</td>
                   <td style={{ textAlign: 'center' }}>{row.sessions as number}</td>
                   <td>{row.full_name as string}</td>
+                  <td style={{ textAlign: 'center' }} title={genderLabel(row.gender)}>{genderShort(row.gender)}</td>
                   <td>{row.phone as string}</td>
                   <td style={{ whiteSpace: 'nowrap' }}>{fmtRp(row.price as number)}</td>
                   <td><span className={`badge ${s.css}`}>{s.label}</span></td>

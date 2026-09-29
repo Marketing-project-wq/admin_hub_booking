@@ -1,5 +1,6 @@
 export { supabase } from './lib/supabase'
 export * from './lib/format'
+export * from './lib/gender'
 export * from './lib/utils'
 export { default as Layout } from './components/Layout'
 export { default as Sidebar } from './components/Sidebar'

@@ -24,6 +24,8 @@ const UNIT_MENUS: Record<string, MenuItem[]> = {
     { label: 'Class Bookings', path: '/arena/class-bookings' },
     { label: 'Package Orders', path: '/arena/packages' },
     { label: 'Vouchers',       path: '/arena/vouchers' },
+    { label: 'Coach Orders',   path: '/arena/coach-orders' },
+    { label: 'Coach Vouchers', path: '/arena/coach-vouchers' },
     { label: 'Analytics',      path: '/arena/analytics' },
     { label: 'API Keys',       path: '/arena/api-keys' },
     { label: 'User Management', path: '/arena/users' },

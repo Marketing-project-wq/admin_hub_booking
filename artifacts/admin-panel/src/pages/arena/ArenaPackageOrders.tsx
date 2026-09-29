@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { ArrowLeft, ArrowRight, X } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
+import { genderShort, genderLabel } from '../../lib/gender'
 import { fmtRp, fmtDateTime, STATUS_LABEL, exportToCSV } from '../../lib/format'
 
 const PAGE_SIZE = 20
@@ -27,7 +28,7 @@ export default function ArenaPackageOrders() {
       .from('arena_package_orders')
       .select(`
         id, order_code, package_id, package_name, sessions, price,
-        full_name, email, phone, notes, status, payment_method,
+        full_name, email, phone, gender, notes, status, payment_method,
         payment_ref, paid_at, created_at, updated_at,
         arena_package_vouchers(
           voucher_code, total_sessions, used_sessions, is_active
@@ -96,6 +97,7 @@ export default function ArenaPackageOrders() {
               <th>Package</th>
               <th>Sessions</th>
               <th>Nama</th>
+              <th>Gender</th>
               <th>Telp</th>
               <th>Amount</th>
               <th>Status</th>
@@ -118,6 +120,7 @@ export default function ArenaPackageOrders() {
                   <td>{row.package_name as string}</td>
                   <td style={{ textAlign: 'center' }}>{row.sessions as number}</td>
                   <td>{row.full_name as string}</td>
+                  <td style={{ textAlign: 'center' }} title={genderLabel(row.gender)}>{genderShort(row.gender)}</td>
                   <td>{row.phone as string}</td>
                   <td style={{ whiteSpace: 'nowrap' }}>{fmtRp(row.price as number)}</td>
                   <td><span className={`badge ${s.css}`}>{s.label}</span></td>

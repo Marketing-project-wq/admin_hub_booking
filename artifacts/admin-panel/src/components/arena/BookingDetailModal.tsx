@@ -4,6 +4,7 @@ import { supabase } from '../../lib/supabase'
 import { fmtRp, fmtDate, fmtDateTime, fmtTime, STATUS_LABEL } from '../../lib/format'
 import ConfirmModal from './ConfirmModal'
 import CoachPackagePanel from './CoachPackagePanel'
+import { genderLabel } from '../../lib/gender'
 
 interface Props {
   type: 'slot' | 'class'
@@ -314,6 +315,7 @@ export default function BookingDetailModal({ type, booking, onClose, onRefresh }
               )}
 
               <div className="detail-row"><span className="detail-label">Customer</span><span className="detail-value">{String(booking.full_name || '')}</span></div>
+              <div className="detail-row"><span className="detail-label">Gender</span><span className="detail-value">{genderLabel(booking.gender)}</span></div>
               <div className="detail-row"><span className="detail-label">Email</span><span className="detail-value">{String(booking.email || '-')}</span></div>
               <div className="detail-row"><span className="detail-label">Telp</span><span className="detail-value">{String(booking.phone || '-')}</span></div>
             </>
