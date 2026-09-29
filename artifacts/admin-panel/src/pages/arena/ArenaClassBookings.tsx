@@ -3,6 +3,7 @@ import { ArrowLeft, ArrowRight } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { fmtRp, fmtDate, fmtTime, STATUS_LABEL, exportToCSV } from '../../lib/format'
 import { exportClassParticipants } from '../../lib/exportParticipants'
+import { genderShort, genderLabel } from '../../lib/gender'
 import BookingDetailModal from '../../components/arena/BookingDetailModal'
 import ManualBookingModal from '../../components/arena/ManualBookingModal'
 import ConfirmModal from '../../components/arena/ConfirmModal'
@@ -36,7 +37,7 @@ export default function ArenaClassBookings() {
       .from('arena_class_bookings')
       .select(`
         id, booking_code, schedule_id, booker_type, customer_type,
-        full_name, email, phone, notes, price, discount, price_before_disc,
+        full_name, email, phone, gender, notes, price, discount, price_before_disc,
         status, payment_method, payment_ref, voucher_code, paid_at, created_at, updated_at,
         group_id, utm_source, utm_medium, utm_campaign,
         addons:arena_class_booking_addons(
@@ -149,7 +150,7 @@ export default function ArenaClassBookings() {
       .select(`
         booking_code,
         schedule:arena_class_schedules(schedule_date, start_time, end_time, class_type:arena_class_types(name)),
-        full_name, email, phone, customer_type, price_before_disc, discount, price,
+        full_name, email, phone, gender, customer_type, price_before_disc, discount, price,
         status, payment_method, paid_at, created_at,
         utm_source, utm_medium, utm_campaign
       `)
@@ -167,6 +168,7 @@ export default function ArenaClassBookings() {
           full_name: r.full_name,
           email: r.email,
           phone: r.phone,
+          gender: genderLabel(r.gender),
           customer_type: r.customer_type,
           price_before_disc: r.price_before_disc,
           discount: r.discount,
@@ -262,6 +264,7 @@ export default function ArenaClassBookings() {
               <th>Booking Code</th><th>Grp</th><th>Kelas</th>
               <th>Tgl Bayar</th>
               <th>Jadwal</th><th>Nama</th>
+              <th>Gender</th>
               <th>Telp</th><th>Amount</th><th>Status</th><th>Payment</th>
               <th style={{ fontSize: 11, color: '#9CA3AF' }}>Ref</th>
               <th style={{ fontSize: 11, color: '#9CA3AF' }}>UTM Source</th>
@@ -272,9 +275,9 @@ export default function ArenaClassBookings() {
           </thead>
           <tbody>
             {loading ? (
-              <tr className="loading-row"><td colSpan={15}>Memuat data...</td></tr>
+              <tr className="loading-row"><td colSpan={16}>Memuat data...</td></tr>
             ) : data.length === 0 ? (
-              <tr><td colSpan={15} className="empty-state">Tidak ada data</td></tr>
+              <tr><td colSpan={16} className="empty-state">Tidak ada data</td></tr>
             ) : data.map((row: Record<string, unknown>) => {
               const s = STATUS_LABEL[row.status as string] || { label: row.status, css: '' }
               const sch = row.schedule as Record<string, unknown> | undefined
@@ -309,6 +312,7 @@ export default function ArenaClassBookings() {
                     {fmtDate(sch?.schedule_date as string)} {fmtTime(sch?.start_time as string)}
                   </td>
                   <td>{row.full_name as string}</td>
+                  <td style={{ textAlign: 'center' }} title={genderLabel(row.gender)}>{genderShort(row.gender)}</td>
                   <td>{row.phone as string}</td>
                   <td style={{ whiteSpace: 'nowrap' }}>
                     <div style={{ fontWeight: 600 }}>{fmtRp(row.price as number)}</div>

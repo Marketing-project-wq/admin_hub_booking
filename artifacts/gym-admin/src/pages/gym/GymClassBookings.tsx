@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
-import { supabase, fmtRp, fmtDate, fmtTime, fmtDateTime, STATUS_LABEL, exportToCSV, ConfirmModal } from '@workspace/admin-shared'
+import { supabase, fmtRp, fmtDate, fmtTime, fmtDateTime, STATUS_LABEL, exportToCSV, ConfirmModal, genderShort, genderLabel } from '@workspace/admin-shared'
 
 const PAGE_SIZE = 20
 
@@ -27,7 +27,7 @@ export default function GymClassBookings() {
     let query = supabase
       .from('gym_class_bookings')
       .select(`
-        id, booking_code, schedule_id, full_name, email, phone, notes,
+        id, booking_code, schedule_id, full_name, email, phone, gender, notes,
         price, discount, price_before_disc, status, payment_method, payment_ref,
         paid_at, created_at, channel,
         schedule:gym_class_schedules(
@@ -99,7 +99,7 @@ export default function GymClassBookings() {
   const handleExport = async () => {
     const { data: all } = await supabase
       .from('gym_class_bookings')
-      .select('booking_code, schedule:gym_class_schedules(schedule_date, start_time, class_type:gym_class_types(name)), full_name, email, phone, price_before_disc, discount, price, status, payment_method, paid_at, created_at, channel')
+      .select('booking_code, schedule:gym_class_schedules(schedule_date, start_time, class_type:gym_class_types(name)), full_name, email, phone, gender, price_before_disc, discount, price, status, payment_method, paid_at, created_at, channel')
       .order('paid_at', { ascending: false, nullsFirst: false })
     if (all) {
       const flat = (all as Row[]).map(r => {
@@ -108,7 +108,7 @@ export default function GymClassBookings() {
         return {
           booking_code: r.booking_code, class_name: ct?.name || '',
           schedule_date: sch?.schedule_date || '', start_time: sch?.start_time || '',
-          full_name: r.full_name, email: r.email, phone: r.phone,
+          full_name: r.full_name, gender: genderLabel(r.gender), email: r.email, phone: r.phone,
           price_before_disc: r.price_before_disc, discount: r.discount, price: r.price,
           status: r.status, payment_method: r.payment_method, paid_at: r.paid_at,
           created_at: r.created_at, channel: r.channel || '',
@@ -163,15 +163,15 @@ export default function GymClassBookings() {
         <table className="data-table">
           <thead>
             <tr>
-              <th>Booking Code</th><th>Kelas</th><th>Jadwal</th><th>Nama</th>
+              <th>Booking Code</th><th>Kelas</th><th>Jadwal</th><th>Nama</th><th>Gender</th>
               <th>Telp</th><th>Amount</th><th>Status</th><th>Payment</th><th>Aksi</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr className="loading-row"><td colSpan={9}>Memuat data...</td></tr>
+              <tr className="loading-row"><td colSpan={10}>Memuat data...</td></tr>
             ) : data.length === 0 ? (
-              <tr><td colSpan={9} className="empty-state">Tidak ada data</td></tr>
+              <tr><td colSpan={10} className="empty-state">Tidak ada data</td></tr>
             ) : data.map(row => {
               const s = STATUS_LABEL[row.status as string] || { label: row.status as string, css: '' }
               const sch = schOf(row); const ct = ctOf(row)
@@ -186,6 +186,7 @@ export default function GymClassBookings() {
                     {fmtDate(sch?.schedule_date as string)} {fmtTime(sch?.start_time as string)}
                   </td>
                   <td>{row.full_name as string}</td>
+                  <td style={{ textAlign: 'center' }} title={genderLabel(row.gender)}>{genderShort(row.gender)}</td>
                   <td>{row.phone as string}</td>
                   <td style={{ whiteSpace: 'nowrap', fontWeight: 600 }}>{fmtRp(row.price as number)}</td>
                   <td><span className={`badge ${s.css}`}>{s.label}</span></td>

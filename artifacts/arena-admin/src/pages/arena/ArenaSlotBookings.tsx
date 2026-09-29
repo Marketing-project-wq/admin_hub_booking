@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
-import { supabase } from '@workspace/admin-shared'
+import { supabase, genderShort, genderLabel } from '@workspace/admin-shared'
 import { fmtRp, fmtDate, fmtTime, fmtDateTime, STATUS_LABEL, exportToCSV } from '@workspace/admin-shared'
 import BookingDetailModal from '../../components/arena/BookingDetailModal'
 import ManualBookingModal from '../../components/arena/ManualBookingModal'
@@ -81,7 +81,7 @@ export default function ArenaSlotBookings() {
   const handleExport = async () => {
     const { data: all } = await supabase
       .from('arena_bookings')
-      .select('booking_code, unit:arena_booking_units(name), booking_date, start_time, end_time, full_name, email, phone, customer_type, price_before_disc, discount, price, status, payment_method, paid_at, created_at')
+      .select('booking_code, unit:arena_booking_units(name), booking_date, start_time, end_time, full_name, email, phone, gender, customer_type, price_before_disc, discount, price, status, payment_method, paid_at, created_at')
       .order('created_at', { ascending: false })
     if (all) {
       const flat = all.map((r: Record<string, unknown>) => ({
@@ -139,6 +139,7 @@ export default function ArenaSlotBookings() {
               <th>Tanggal</th>
               <th>Waktu</th>
               <th>Nama</th>
+              <th>Gender</th>
               <th>Telp</th>
               <th>Amount</th>
               <th>Status</th>
@@ -148,9 +149,9 @@ export default function ArenaSlotBookings() {
           </thead>
           <tbody>
             {loading ? (
-              <tr className="loading-row"><td colSpan={10}>Memuat data...</td></tr>
+              <tr className="loading-row"><td colSpan={11}>Memuat data...</td></tr>
             ) : data.length === 0 ? (
-              <tr><td colSpan={10} className="empty-state">Tidak ada data</td></tr>
+              <tr><td colSpan={11} className="empty-state">Tidak ada data</td></tr>
             ) : data.map((row: Record<string, unknown>) => {
               const s = STATUS_LABEL[row.status as string] || { label: row.status, css: '' }
               const unit = row.unit as Record<string, unknown> | undefined
@@ -161,6 +162,7 @@ export default function ArenaSlotBookings() {
                   <td>{fmtDate(row.booking_date as string)}</td>
                   <td style={{ whiteSpace: 'nowrap' }}>{fmtTime(row.start_time as string)}–{fmtTime(row.end_time as string)}</td>
                   <td>{row.full_name as string}</td>
+                  <td style={{ textAlign: 'center' }} title={genderLabel(row.gender)}>{genderShort(row.gender)}</td>
                   <td>{row.phone as string}</td>
                   <td style={{ whiteSpace: 'nowrap' }}>{fmtRp(row.price as number)}</td>
                   <td><span className={`badge ${s.css}`}>{s.label}</span></td>
