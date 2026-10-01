@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { X } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
-import { fmtRp, fmtDate, fmtTime } from '../../lib/format'
+import { fmtRp, fmtDate, fmtTime, describeSupabaseError } from '../../lib/format'
 
 const DAY_LABELS = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab']
 const VENUE_COLOR = '#374151'
@@ -99,30 +99,37 @@ export default function ArenaCalendar() {
     setLoading(true); setError('')
     const first = ymd(year, month, 1)
     const last = ymd(year, month, new Date(year, month + 1, 0).getDate())
-    const [clsRes, venRes] = await Promise.all([
-      supabase
-        .from('arena_class_schedules')
-        .select(`
-          id, schedule_date, start_time, end_time, instructor, is_cancelled, cancelled_reason, quota,
-          arena_class_types ( name, color ),
-          arena_class_bookings ( id, booking_code, full_name, phone, status )
-        `)
-        .gte('schedule_date', first)
-        .lte('schedule_date', last)
-        .order('start_time', { ascending: true }),
-      supabase
-        .from('arena_bookings')
-        .select('id, booking_code, full_name, phone, email, customer_type, booking_date, start_time, end_time, price, status, payment_method')
-        .gte('booking_date', first)
-        .lte('booking_date', last)
-        .neq('status', 'cancelled')
-        .order('start_time', { ascending: true }),
-    ])
-    if (clsRes.error) { setError(clsRes.error.message); setLoading(false); return }
-    if (venRes.error) { setError(venRes.error.message); setLoading(false); return }
-    setSchedules((clsRes.data || []) as unknown as ClassEvent[])
-    setVenues((venRes.data || []) as unknown as VenueEvent[])
-    setLoading(false)
+    try {
+      const [clsRes, venRes] = await Promise.all([
+        supabase
+          .from('arena_class_schedules')
+          .select(`
+            id, schedule_date, start_time, end_time, instructor, is_cancelled, cancelled_reason, quota,
+            arena_class_types ( name, color ),
+            arena_class_bookings ( id, booking_code, full_name, phone, status )
+          `)
+          .gte('schedule_date', first)
+          .lte('schedule_date', last)
+          .order('start_time', { ascending: true }),
+        supabase
+          .from('arena_bookings')
+          .select('id, booking_code, full_name, phone, email, customer_type, booking_date, start_time, end_time, price, status, payment_method')
+          .gte('booking_date', first)
+          .lte('booking_date', last)
+          .neq('status', 'cancelled')
+          .order('start_time', { ascending: true }),
+      ])
+      if (clsRes.error) { setError(describeSupabaseError(clsRes.error)); setLoading(false); return }
+      if (venRes.error) { setError(describeSupabaseError(venRes.error)); setLoading(false); return }
+      setSchedules((clsRes.data || []) as unknown as ClassEvent[])
+      setVenues((venRes.data || []) as unknown as VenueEvent[])
+    } catch (e) {
+      // Kegagalan network (mis. "TypeError: Failed to fetch") di-throw, bukan dikembalikan
+      // via .error — tangkap di sini supaya tidak jadi unhandled rejection dan pesannya jelas.
+      setError(describeSupabaseError(e))
+    } finally {
+      setLoading(false)
+    }
   }, [year, month])
 
   useEffect(() => { fetchData() }, [fetchData])
@@ -195,7 +202,16 @@ export default function ArenaCalendar() {
         {loading && <span style={{ marginLeft: 'auto' }}>Memuat…</span>}
       </div>
 
-      {error && <p style={{ color: 'var(--red)', fontSize: 13, marginBottom: 12 }}>{error}</p>}
+      {error && (
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 12,
+          background: 'var(--red-soft)', border: '1px solid var(--red)', borderRadius: 8, padding: '10px 14px' }}>
+          <p style={{ color: 'var(--red)', fontSize: 13, margin: 0, flex: 1, lineHeight: 1.5 }}>{error}</p>
+          <button className="btn-secondary" onClick={() => fetchData()} disabled={loading}
+            style={{ fontSize: 12, padding: '6px 12px', flexShrink: 0 }}>
+            {loading ? 'Memuat…' : 'Coba lagi'}
+          </button>
+        </div>
+      )}
 
       {/* Calendar grid — 7 equal columns that fit the viewport width (no horizontal scroll);
           only grows vertically. minmax(0,1fr) lets columns shrink so cell text ellipsizes. */}

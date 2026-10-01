@@ -21,6 +21,30 @@ export const fmtTime = (timeStr: string | null | undefined) => {
   return timeStr.substring(0, 5)
 }
 
+// Ubah error Supabase/PostgREST menjadi pesan yang bisa langsung di-diagnosa.
+// Membedakan 3 kondisi yang tampak mirip di production:
+//  - Gagal di lapisan network ("Failed to fetch") → koneksi/CORS/extension/kuota,
+//    BUKAN RLS. RLS tidak pernah menghasilkan "Failed to fetch".
+//  - Akses ditolak (401/403 atau code 42501) → kemungkinan RLS/policy atau anon key.
+//  - Error lain → tampilkan mentah supaya tetap terlihat.
+export const describeSupabaseError = (err: unknown): string => {
+  const e = err as { message?: string; code?: string; details?: string; hint?: string } | null
+  const raw = (e?.message || String(err || 'Unknown error')).trim()
+  const code = e?.code || ''
+  const low = raw.toLowerCase()
+
+  if (low.includes('failed to fetch') || low.includes('networkerror') || low.includes('load failed')) {
+    return `Gagal terhubung ke server (network). Ini BUKAN RLS. Cek: koneksi internet, ` +
+           `ad-blocker/extension browser yang memblok *.supabase.co, atau status/kuota proyek ` +
+           `Supabase (proyek free yang lewat limit bisa direstriksi). Detail: ${raw}`
+  }
+  if (code === '42501' || low.includes('permission denied') || low.includes('row-level security') ||
+      low.includes('jwt') || low.includes('api key') || low.includes('invalid authentication')) {
+    return `Akses ditolak (kemungkinan RLS/policy atau anon key). Detail: ${raw}${code ? ` [${code}]` : ''}`
+  }
+  return `${raw}${code ? ` [${code}]` : ''}`
+}
+
 export const STATUS_LABEL: Record<string, { label: string; css: string }> = {
   confirmed:       { label: 'Confirmed', css: 'badge-confirmed' },
   pending_payment: { label: 'Pending',   css: 'badge-pending' },
