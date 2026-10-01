@@ -43,6 +43,7 @@ const UNIT_MENUS: Record<string, MenuItem[]> = {
     { label: 'Dashboard',     path: '/gym' },
     { label: 'Kelola Jadwal', path: '/gym/schedules' },
     { label: 'Transaksi',     path: '/gym/class-bookings' },
+    { label: 'Membership Orders', path: '/gym/membership-orders' },
   ],
   recovery: [
     { label: 'Dashboard', path: '/recovery' },
