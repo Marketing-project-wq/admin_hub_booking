@@ -30,6 +30,7 @@ import GymDashboard from './pages/gym/GymDashboard'
 import GymSchedules from './pages/gym/GymSchedules'
 import GymClassBookings from './pages/gym/GymClassBookings'
 import GymMembershipOrders from './pages/gym/GymMembershipOrders'
+import GymDayPassOrders from './pages/gym/GymDayPassOrders'
 import RecoveryDashboard from './pages/recovery/RecoveryDashboard'
 import RecoveryBookings from './pages/recovery/RecoveryBookings'
 import RecoveryServices from './pages/recovery/RecoveryServices'
@@ -133,6 +134,7 @@ export default function App() {
             <Route path="schedules" element={<GymSchedules />} />
             <Route path="class-bookings" element={<GymClassBookings />} />
             <Route path="membership-orders" element={<GymMembershipOrders />} />
+            <Route path="day-pass-orders" element={<GymDayPassOrders />} />
           </Route>
 
           <Route
