@@ -3,6 +3,7 @@ import { X } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { fmtRp, fmtDate, fmtDateTime, fmtTime, STATUS_LABEL } from '../../lib/format'
 import ConfirmModal from './ConfirmModal'
+import PaymentMethodCell, { bookingVoucherCode } from './PaymentMethodCell'
 import { genderLabel } from '../../lib/gender'
 
 interface Props {
@@ -321,7 +322,7 @@ export default function BookingDetailModal({ type, booking, onClose, onRefresh }
           )}
           <div className="detail-row"><span className="detail-label">Tipe</span><span className="detail-value">{String(booking.customer_type || '')} / {String(booking.booker_type || '')}</span></div>
           {!!booking.notes && <div className="detail-row"><span className="detail-label">Notes</span><span className="detail-value">{String(booking.notes)}</span></div>}
-          {type === 'slot' && !!booking.voucher_code && <div className="detail-row"><span className="detail-label">Voucher</span><span className="detail-value">{String(booking.voucher_code)}</span></div>}
+          {!!booking.voucher_code && <div className="detail-row"><span className="detail-label">Voucher</span><span className="detail-value" style={{ fontFamily: 'monospace' }}>{String(booking.voucher_code)}</span></div>}
 
           <div className="modal-section">
             <div className="detail-row"><span className="detail-label">Harga Normal</span><span className="detail-value">{fmtRp(booking.price_before_disc as number)}</span></div>
@@ -362,8 +363,10 @@ export default function BookingDetailModal({ type, booking, onClose, onRefresh }
               <span className="detail-label">Status</span>
               <span><span className={`badge ${statusInfo.css}`}>{statusInfo.label}</span></span>
             </div>
-            <div className="detail-row"><span className="detail-label">Payment</span><span className="detail-value">{String(booking.payment_method || '-')}</span></div>
-            {booking.payment_ref ? (
+            <div className="detail-row"><span className="detail-label">Payment</span><span className="detail-value"><PaymentMethodCell method={booking.payment_method} voucherCode={booking.voucher_code} paymentRef={booking.payment_ref} showCode={false} /></span></div>
+            {booking.payment_method === 'voucher' ? (
+              <div className="detail-row"><span className="detail-label">Kode Voucher</span><span className="detail-value" style={{ fontFamily: 'monospace', fontSize: 12 }}>{bookingVoucherCode(booking.payment_method, booking.voucher_code, booking.payment_ref) || '-'}</span></div>
+            ) : booking.payment_ref ? (
               <div className="detail-row">
                 <span className="detail-label">Mayar Ref</span>
                 <span className="detail-value" style={{ fontFamily: 'monospace', fontSize: 12 }}>

@@ -6,6 +6,7 @@ import { fmtRp, fmtDate, fmtTime, STATUS_LABEL, exportToCSV } from '../../lib/fo
 import BookingDetailModal from '../../components/arena/BookingDetailModal'
 import ManualBookingModal from '../../components/arena/ManualBookingModal'
 import ConfirmModal from '../../components/arena/ConfirmModal'
+import PaymentMethodCell from '../../components/arena/PaymentMethodCell'
 
 const PAGE_SIZE = 20
 // Default unit for the "Buat Booking" (venue) form — no longer hardcoded/locked:
@@ -139,7 +140,7 @@ export default function ArenaBookings() {
   const handleExport = async () => {
     const { data: all } = await supabase
       .from('arena_bookings')
-      .select('booking_code, unit:arena_booking_units(name), booking_date, start_time, end_time, full_name, email, phone, gender, customer_type, rent_type, price_before_disc, discount, price, status, payment_method, payment_ref, paid_at, notes, created_at')
+      .select('booking_code, unit:arena_booking_units(name), booking_date, start_time, end_time, full_name, email, phone, gender, customer_type, rent_type, price_before_disc, discount, price, voucher_code, status, payment_method, payment_ref, paid_at, notes, created_at')
       .order('created_at', { ascending: false })
     if (all) {
       const flat = all.map((r: Record<string, unknown>) => ({
@@ -235,7 +236,7 @@ export default function ArenaBookings() {
                   <td>{row.phone as string}</td>
                   <td style={{ whiteSpace: 'nowrap' }}>{fmtRp(row.price as number)}</td>
                   <td><span className={`badge ${s.css}`}>{s.label}</span></td>
-                  <td>{row.payment_method as string || '-'}</td>
+                  <td><PaymentMethodCell method={row.payment_method} voucherCode={row.voucher_code} paymentRef={row.payment_ref} /></td>
                   <td style={{ whiteSpace: 'nowrap' }}>
                     <button className="action-btn detail" onClick={() => setSelectedBooking(row)}>Detail</button>
                     {row.status === 'pending_payment' && (
