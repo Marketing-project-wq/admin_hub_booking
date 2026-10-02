@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { X } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { fmtDate, fmtTime } from '../../lib/format'
+import VoucherCodeField from '../../components/VoucherCodeField'
 
 interface Voucher {
   id: string; code: string; description: string; discount_type: string; discount_value: number;
@@ -91,7 +92,11 @@ export default function ArenaVouchers() {
 
   const fetchData = useCallback(async () => {
     setLoading(true)
-    const { data: rows, error: err } = await supabase.from('arena_vouchers').select('*').order('created_at', { ascending: false })
+    // Voucher Clinic (location='CLINIC') dikelola di /clinic/vouchers — jangan tampil di sini,
+    // karena menyimpan dari form Arena akan menimpa location-nya menjadi 'ARENA'.
+    const { data: rows, error: err } = await supabase.from('arena_vouchers').select('*')
+      .or('location.is.null,location.neq.CLINIC')
+      .order('created_at', { ascending: false })
     if (err) { setError(err.message); setLoading(false); return }
     setData(rows as Voucher[])
 
@@ -438,15 +443,15 @@ export default function ArenaVouchers() {
             </div>
             {formError && <p style={{ color: 'var(--red)', fontSize: 13, marginBottom: 12 }}>{formError}</p>}
             <form onSubmit={handleSave}>
-              <div className="form-row">
-                <div className="form-group">
-                  <label>Code *</label>
-                  <input type="text" value={f.code || ''} onChange={e => setForm(p => ({ ...p, code: e.target.value.toUpperCase() }))} required />
-                </div>
-                <div className="form-group">
-                  <label>Deskripsi</label>
-                  <input type="text" value={f.description || ''} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} />
-                </div>
+              <VoucherCodeField
+                value={f.code || ''}
+                onChange={code => { setForm(p => ({ ...p, code })); setFormError('') }}
+                storageKey="arena"
+                onError={setFormError}
+              />
+              <div className="form-group">
+                <label>Deskripsi</label>
+                <input type="text" value={f.description || ''} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} />
               </div>
               <div className="form-group">
                 <label>Tipe Diskon *</label>
