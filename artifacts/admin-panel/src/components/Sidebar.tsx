@@ -26,6 +26,7 @@ const UNIT_MENUS: Record<string, MenuItem[]> = {
     { label: 'Vouchers',       path: '/arena/vouchers' },
     { label: 'Coach Orders',   path: '/arena/coach-orders' },
     { label: 'Coach Vouchers', path: '/arena/coach-vouchers' },
+    { label: 'Add-on Refunds',  path: '/arena/addon-refunds' },
     { label: 'Analytics',      path: '/arena/analytics' },
     { label: 'API Keys',       path: '/arena/api-keys' },
     { label: 'User Management', path: '/arena/users' },
