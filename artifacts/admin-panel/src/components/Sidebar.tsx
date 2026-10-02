@@ -20,7 +20,8 @@ const UNIT_MENUS: Record<string, MenuItem[]> = {
   arena: [
     { label: 'Dashboard',      path: '/arena' },
     { label: 'Kalender',       path: '/arena/calendar' },
-    { label: 'Bookings',       path: '/arena/bookings' },
+    { label: 'Booking Venue',  path: '/arena/bookings' },
+    { label: 'Open Arena',     path: '/arena/open-arena' },
     { label: 'Class Bookings', path: '/arena/class-bookings' },
     { label: 'Package Orders', path: '/arena/packages' },
     { label: 'Vouchers',       path: '/arena/vouchers' },

@@ -2,9 +2,11 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { X } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { fmtRp, fmtDate, fmtTime } from '../../lib/format'
+import { arenaBookingKind, rentTypeLabel } from '../../lib/arenaBookingKind'
 
 const DAY_LABELS = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab']
 const VENUE_COLOR = '#374151'
+const OPEN_ARENA_COLOR = '#0F766E'
 const DEFAULT_CLASS_COLOR = '#C0392B'
 
 type ClassTypeEmbed = { name: string; color: string | null }
@@ -41,6 +43,7 @@ interface VenueEvent {
   price: number
   status: string
   payment_method: string | null
+  rent_type: string | null
 }
 
 const STATUS_BADGE: Record<string, string> = {
@@ -112,7 +115,7 @@ export default function ArenaCalendar() {
         .order('start_time', { ascending: true }),
       supabase
         .from('arena_bookings')
-        .select('id, booking_code, full_name, phone, email, customer_type, booking_date, start_time, end_time, price, status, payment_method')
+        .select('id, booking_code, full_name, phone, email, customer_type, booking_date, start_time, end_time, price, status, payment_method, rent_type')
         .gte('booking_date', first)
         .lte('booking_date', last)
         .neq('status', 'cancelled')
@@ -192,6 +195,9 @@ export default function ArenaCalendar() {
         <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <span style={{ width: 12, height: 12, borderRadius: 3, background: VENUE_COLOR, display: 'inline-block' }} /> Venue Booking
         </span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ width: 12, height: 12, borderRadius: 3, background: OPEN_ARENA_COLOR, display: 'inline-block' }} /> Open Arena
+        </span>
         {loading && <span style={{ marginLeft: 'auto' }}>Memuat…</span>}
       </div>
 
@@ -269,20 +275,25 @@ export default function ArenaCalendar() {
                       </button>
                     )
                   })}
-                  {ven.map(v => (
+                  {ven.map(v => {
+                    const isOpenArena = arenaBookingKind(v.rent_type) === 'open_arena'
+                    return (
                     <button
                       key={v.id}
                       onClick={() => setSelectedVenue(v)}
-                      title={`${fmtTime(v.start_time)}-${fmtTime(v.end_time)} ${v.full_name} (${v.customer_type === 'corporation' ? 'korporasi' : 'individual'})`}
+                      title={isOpenArena
+                        ? `Open Arena ${rentTypeLabel(v.rent_type)} — ${v.full_name}`
+                        : `${fmtTime(v.start_time)}-${fmtTime(v.end_time)} ${v.full_name} (${v.customer_type === 'corporation' ? 'korporasi' : 'individual'})`}
                       style={{
-                        background: VENUE_COLOR, color: '#fff', border: 'none', borderRadius: 4,
+                        background: isOpenArena ? OPEN_ARENA_COLOR : VENUE_COLOR, color: '#fff', border: 'none', borderRadius: 4,
                         padding: '3px 6px', fontSize: 11, cursor: 'pointer', width: '100%', textAlign: 'left',
                         fontFamily: 'inherit', lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                       }}
                     >
-                      {fmtTime(v.start_time)}-{fmtTime(v.end_time)} {v.full_name}
+                      {isOpenArena ? `OA ${rentTypeLabel(v.rent_type)}` : `${fmtTime(v.start_time)}-${fmtTime(v.end_time)}`} {v.full_name}
                     </button>
-                  ))}
+                    )
+                  })}
                 </div>
               )
             })}
@@ -377,6 +388,8 @@ export default function ArenaCalendar() {
               </div>
               <button onClick={() => setSelectedVenue(null)} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--text-muted)' }}><X size={18} /></button>
             </div>
+
+            <div className="detail-row"><span>Jenis</span><span>{arenaBookingKind(selectedVenue.rent_type) === 'open_arena' ? `Open Arena — ${rentTypeLabel(selectedVenue.rent_type)}` : `Venue — ${rentTypeLabel(selectedVenue.rent_type)}`}</span></div>
 
             <div style={sectionTitle}>Pemesan</div>
             <div className="detail-row"><span>Nama</span><span>{selectedVenue.full_name}</span></div>

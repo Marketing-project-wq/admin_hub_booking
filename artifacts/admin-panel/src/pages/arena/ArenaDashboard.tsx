@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { ChevronDown } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { fmtRp, fmtDate } from '../../lib/format'
+import { arenaBookingKind } from '../../lib/arenaBookingKind'
 
 // ─── Date helpers ────────────────────────────────────────────────────────────
 const toDay          = () => new Date().toISOString().slice(0, 10)
@@ -126,8 +127,22 @@ function OccupancyGauge({ value, label, color }: { value: number; label?: string
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-interface SalesShape  { total: number; class: number; slot: number; venue: number; package: number }
-interface RevenueShape { total: number; class: number; slot: number; venue: number; package: number }
+// arena_bookings dipecah per jenis (lib/arenaBookingKind): Venue (sewa arena, dirinci
+// individu/korporasi) vs Open Arena (pass harian/bulanan/coach/bundle).
+interface SalesShape  { total: number; class: number; venue: number; venueInd: number; venueCorp: number; openArena: number; package: number }
+type RevenueShape = SalesShape
+const EMPTY_TOTALS: SalesShape = { total: 0, class: 0, venue: 0, venueInd: 0, venueCorp: 0, openArena: 0, package: 0 }
+
+type ArenaRow = { price: number; rent_type: string | null; customer_type: string | null }
+function splitArenaBookings<T extends ArenaRow>(rows: T[] | null) {
+  const venueInd: T[] = [], venueCorp: T[] = [], openArena: T[] = []
+  for (const r of rows || []) {
+    if (arenaBookingKind(r.rent_type) === 'open_arena') openArena.push(r)
+    else if (r.customer_type === 'corporation') venueCorp.push(r)
+    else venueInd.push(r)
+  }
+  return { venueInd, venueCorp, openArena }
+}
 
 // ─── Main component ───────────────────────────────────────────────────────────
 export default function ArenaDashboard() {
@@ -139,11 +154,11 @@ export default function ArenaDashboard() {
   const [loadingSales,   setLoadingSales]   = useState(true)
   const [loadingRevenue, setLoadingRevenue] = useState(true)
 
-  const [sales,          setSales]          = useState<SalesShape>({ total: 0, class: 0, slot: 0, venue: 0, package: 0 })
+  const [sales,          setSales]          = useState<SalesShape>(EMPTY_TOTALS)
   const [salesCount,     setSalesCount]     = useState(0)
   const [salesChartData, setSalesChartData] = useState<DayPoint[]>([])
 
-  const [revenue,          setRevenue]          = useState<RevenueShape>({ total: 0, class: 0, slot: 0, venue: 0, package: 0 })
+  const [revenue,          setRevenue]          = useState<RevenueShape>(EMPTY_TOTALS)
   const [revenueCount,     setRevenueCount]     = useState(0)
   const [revenueChartData, setRevenueChartData] = useState<DayPoint[]>([])
 
@@ -176,29 +191,31 @@ export default function ArenaDashboard() {
     const start = dateFrom + 'T00:00:00+07:00'
     const end   = dateTo   + 'T23:59:59+07:00'
 
-    const [cls, ind, corp, pkg] = await Promise.all([
+    const [cls, arena, pkg] = await Promise.all([
       supabase.from('arena_class_bookings').select('price, paid_at, full_name')
         .eq('status', 'confirmed').not('paid_at', 'is', null).gte('paid_at', start).lte('paid_at', end),
-      supabase.from('arena_bookings').select('price, paid_at')
-        .eq('status', 'confirmed').eq('customer_type', 'individual').not('paid_at', 'is', null).gte('paid_at', start).lte('paid_at', end),
-      supabase.from('arena_bookings').select('price, paid_at, full_name')
-        .eq('status', 'confirmed').eq('customer_type', 'corporation').not('paid_at', 'is', null).gte('paid_at', start).lte('paid_at', end),
+      supabase.from('arena_bookings').select('price, paid_at, rent_type, customer_type')
+        .eq('status', 'confirmed').in('customer_type', ['individual', 'corporation'])
+        .not('paid_at', 'is', null).gte('paid_at', start).lte('paid_at', end),
       supabase.from('arena_package_orders').select('price, paid_at')
         .eq('status', 'confirmed').not('paid_at', 'is', null).gte('paid_at', start).lte('paid_at', end),
     ])
 
     const sum = (d: { price: number }[] | null) => (d || []).reduce((s, r) => s + Number(r.price), 0)
-    const clsAmt = sum(cls.data); const indAmt = sum(ind.data)
-    const corpAmt = sum(corp.data); const pkgAmt = sum(pkg.data)
+    const split = splitArenaBookings(arena.data as (ArenaRow & { paid_at: string })[] | null)
+    const clsAmt = sum(cls.data); const pkgAmt = sum(pkg.data)
+    const indAmt = sum(split.venueInd); const corpAmt = sum(split.venueCorp); const oaAmt = sum(split.openArena)
 
-    setSales({ class: clsAmt, slot: indAmt, venue: corpAmt, package: pkgAmt, total: clsAmt + indAmt + corpAmt + pkgAmt })
-    setSalesCount((cls.data?.length || 0) + (ind.data?.length || 0) + (corp.data?.length || 0) + (pkg.data?.length || 0))
+    setSales({
+      class: clsAmt, venue: indAmt + corpAmt, venueInd: indAmt, venueCorp: corpAmt, openArena: oaAmt, package: pkgAmt,
+      total: clsAmt + indAmt + corpAmt + oaAmt + pkgAmt,
+    })
+    setSalesCount((cls.data?.length || 0) + (arena.data?.length || 0) + (pkg.data?.length || 0))
 
     buildDailyChart([
-      ...(cls.data  || []).map(r => ({ date: r.paid_at, price: Number(r.price) })),
-      ...(ind.data  || []).map(r => ({ date: r.paid_at, price: Number(r.price) })),
-      ...(corp.data || []).map(r => ({ date: r.paid_at, price: Number(r.price) })),
-      ...(pkg.data  || []).map(r => ({ date: r.paid_at, price: Number(r.price) })),
+      ...(cls.data   || []).map(r => ({ date: r.paid_at, price: Number(r.price) })),
+      ...((arena.data as { paid_at: string; price: number }[] | null) || []).map(r => ({ date: r.paid_at, price: Number(r.price) })),
+      ...(pkg.data   || []).map(r => ({ date: r.paid_at, price: Number(r.price) })),
     ], setSalesChartData)
 
     setLoadingSales(false)
@@ -208,15 +225,12 @@ export default function ArenaDashboard() {
   const fetchRevenue = useCallback(async () => {
     setLoadingRevenue(true)
 
-    const [cls, ind, corp, pkgUsageResult] = await Promise.all([
+    const [cls, arena, pkgUsageResult] = await Promise.all([
       supabase.from('arena_class_bookings')
         .select('price, schedule:arena_class_schedules(schedule_date)')
         .eq('status', 'confirmed'),
-      supabase.from('arena_bookings').select('price, booking_date')
-        .eq('status', 'confirmed').eq('customer_type', 'individual')
-        .gte('booking_date', dateFrom).lte('booking_date', dateTo),
-      supabase.from('arena_bookings').select('price, booking_date')
-        .eq('status', 'confirmed').eq('customer_type', 'corporation')
+      supabase.from('arena_bookings').select('price, booking_date, rent_type, customer_type')
+        .eq('status', 'confirmed').in('customer_type', ['individual', 'corporation'])
         .gte('booking_date', dateFrom).lte('booking_date', dateTo),
       supabase.from('arena_package_revenue_view').select('session_revenue, used_at')
         .gte('used_at', dateFrom + 'T00:00:00+07:00')
@@ -230,15 +244,22 @@ export default function ArenaDashboard() {
       return sd && sd >= dateFrom && sd <= dateTo
     })
 
+    const arenaRows = (arena.data as (ArenaRow & { booking_date: string })[] | null) || []
+    const split   = splitArenaBookings(arenaRows)
+    const sumRows = (d: { price: number }[]) => d.reduce((s, r) => s + Number(r.price), 0)
     const sumCls  = clsFiltered.reduce((s, r) => s + Number(r.price), 0)
-    const sumInd  = (ind.data  || []).reduce((s, r) => s + Number(r.price), 0)
-    const sumCorp = (corp.data || []).reduce((s, r) => s + Number(r.price), 0)
+    const sumInd  = sumRows(split.venueInd)
+    const sumCorp = sumRows(split.venueCorp)
+    const sumOa   = sumRows(split.openArena)
     const sumPkg  = pkgUsageResult.error ? 0 :
       (pkgUsageResult.data || []).reduce((s: number, r: { session_revenue: number }) => s + Number(r.session_revenue), 0)
 
-    setRevenue({ class: sumCls, slot: sumInd, venue: sumCorp, package: sumPkg, total: sumCls + sumInd + sumCorp + sumPkg })
+    setRevenue({
+      class: sumCls, venue: sumInd + sumCorp, venueInd: sumInd, venueCorp: sumCorp, openArena: sumOa, package: sumPkg,
+      total: sumCls + sumInd + sumCorp + sumOa + sumPkg,
+    })
     setRevenueCount(
-      clsFiltered.length + (ind.data?.length || 0) + (corp.data?.length || 0) +
+      clsFiltered.length + arenaRows.length +
       (pkgUsageResult.error ? 0 : pkgUsageResult.data?.length || 0)
     )
 
@@ -247,8 +268,7 @@ export default function ArenaDashboard() {
         const sch = Array.isArray(r.schedule) ? r.schedule[0] : r.schedule
         return { date: sch?.schedule_date, price: Number(r.price) }
       }),
-      ...(ind.data  || []).map(r => ({ date: r.booking_date, price: Number(r.price) })),
-      ...(corp.data || []).map(r => ({ date: r.booking_date, price: Number(r.price) })),
+      ...arenaRows.map(r => ({ date: r.booking_date, price: Number(r.price) })),
       ...(pkgUsageResult.error ? [] : (pkgUsageResult.data || []).map((r: { used_at: string; session_revenue: number }) => ({
         date: r.used_at?.slice(0, 10), price: Number(r.session_revenue),
       }))),
@@ -263,12 +283,14 @@ export default function ArenaDashboard() {
     const days = Math.max(1, Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1)
     const totalSlots = days * 14
 
-    const { data } = await supabase.from('arena_bookings')
-      .select('booking_date, start_time, end_time')
+    const { data: rows } = await supabase.from('arena_bookings')
+      .select('booking_date, start_time, end_time, rent_type')
       .eq('status', 'confirmed')
       .gte('booking_date', dateFrom).lte('booking_date', dateTo)
+    // Hanya sewa venue — pass Open Arena (08:00–21:00, arena dipakai bersama) bukan jam venue terpakai.
+    const data = (rows || []).filter(b => arenaBookingKind(b.rent_type) === 'venue')
 
-    if (!data || data.length === 0) { setVenueOccupancy(0); return }
+    if (data.length === 0) { setVenueOccupancy(0); return }
 
     const hoursPerDay: Record<string, number> = {}
     data.forEach(b => {
@@ -386,8 +408,8 @@ export default function ArenaDashboard() {
           {([
             { label: 'Total Sales', value: sales.total,   sub: `${salesCount} transaksi`,  color: 'var(--red)' },
             { label: 'Class',       value: sales.class,   sub: 'Class booking',            color: 'var(--blue)' },
-            { label: 'Slot',        value: sales.slot,    sub: 'Individual',               color: 'var(--green)' },
-            { label: 'Venue',       value: sales.venue,   sub: 'Korporasi',                color: 'var(--amber)' },
+            { label: 'Venue',       value: sales.venue,   sub: `Ind ${fmtRp(sales.venueInd)} · Korp ${fmtRp(sales.venueCorp)}`, color: 'var(--amber)' },
+            { label: 'Open Arena',  value: sales.openArena, sub: 'Harian, 1 bulan, coach, bundle', color: 'var(--green)' },
             { label: 'Package',     value: sales.package, sub: 'Package orders',           color: '#7C3AED' },
           ] as { label: string; value: number; sub: string; color: string }[]).map((k, i) => (
             <div key={i} style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 14, padding: '14px 16px' }}>
@@ -422,8 +444,8 @@ export default function ArenaDashboard() {
           {([
             { label: 'Total Revenue', value: revenue.total,   sub: `${revenueCount} layanan`,  color: 'var(--red)' },
             { label: 'Class',         value: revenue.class,   sub: 'Kelas berjalan',           color: 'var(--blue)' },
-            { label: 'Slot',          value: revenue.slot,    sub: 'Individual',               color: 'var(--green)' },
-            { label: 'Venue',         value: revenue.venue,   sub: 'Korporasi',                color: 'var(--amber)' },
+            { label: 'Venue',         value: revenue.venue,   sub: `Ind ${fmtRp(revenue.venueInd)} · Korp ${fmtRp(revenue.venueCorp)}`, color: 'var(--amber)' },
+            { label: 'Open Arena',    value: revenue.openArena, sub: 'Harian, 1 bulan, coach, bundle', color: 'var(--green)' },
             { label: 'Package',       value: revenue.package, sub: 'Sesi terpakai',            color: '#7C3AED' },
           ] as { label: string; value: number; sub: string; color: string }[]).map((k, i) => (
             <div key={i} style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 14, padding: '14px 16px' }}>
