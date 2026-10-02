@@ -7,6 +7,7 @@ import BookingDetailModal from '../../components/arena/BookingDetailModal'
 import ManualBookingModal from '../../components/arena/ManualBookingModal'
 import ConfirmModal from '../../components/arena/ConfirmModal'
 import PaymentMethodCell from '../../components/arena/PaymentMethodCell'
+import { type ArenaBookingKind, KIND_TITLE, applyKindFilter, rentTypeLabel } from '../../lib/arenaBookingKind'
 
 const PAGE_SIZE = 20
 // Default unit for the "Buat Booking" (venue) form — no longer hardcoded/locked:
@@ -20,7 +21,29 @@ const emptyVenueForm = () => ({
   price_before_disc: '', discount: '0', paid: false, payment_ref: '',
 })
 
-export default function ArenaBookings() {
+// Filter "Jenis" per menu. Nilai '__null' = booking slot lama (rent_type kosong).
+const RENT_TYPE_OPTIONS: Record<ArenaBookingKind, { value: string; label: string }[]> = {
+  venue: [
+    { value: '__null', label: 'Slot (per jam)' },
+    { value: 'venue_only', label: 'Venue Saja' },
+    { value: 'with_coach', label: 'Dengan Coach' },
+  ],
+  open_arena: [
+    { value: 'open_arena', label: 'Harian' },
+    { value: 'open_arena_month', label: '1 Bulan' },
+    { value: 'open_arena_coach', label: 'With Coach' },
+    { value: 'open_arena_head_coach', label: 'With Head Coach' },
+    { value: 'bundle', label: 'Bundle' },
+  ],
+}
+
+const KIND_SUBTITLE: Record<ArenaBookingKind, string> = {
+  venue: 'Sewa arena per jam / eksklusif (individu & korporasi)',
+  open_arena: 'Pass Open Arena harian, 1 bulan, with coach, dan bundle',
+}
+
+export default function ArenaBookings({ kind = 'venue' }: { kind?: ArenaBookingKind }) {
+  const isOpen = kind === 'open_arena'
   const [data, setData] = useState<Record<string, unknown>[]>([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -31,6 +54,7 @@ export default function ArenaBookings() {
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [unitFilter, setUnitFilter] = useState('all')
+  const [rentTypeFilter, setRentTypeFilter] = useState('all')
   const [units, setUnits] = useState<Record<string, unknown>[]>([])
   const [selectedBooking, setSelectedBooking] = useState<Record<string, unknown> | null>(null)
   const [showManual, setShowManual] = useState(false)
@@ -50,11 +74,14 @@ export default function ArenaBookings() {
     supabase.from('arena_booking_units').select('id, name').then(({ data }) => { if (data) setUnits(data) })
   }, [])
 
-  const fetchData = useCallback(async () => {
-    setLoading(true)
+  // Query dasar per jenis + filter aktif — dipakai list & export supaya CSV = yang tampil.
+  const buildQuery = useCallback((select: string, withCount: boolean) => {
     let query = supabase
       .from('arena_bookings')
-      .select('*, unit:arena_booking_units(name)', { count: 'exact' })
+      .select(select, withCount ? { count: 'exact' } : undefined)
+    query = applyKindFilter(query, kind)
+    if (rentTypeFilter === '__null') query = query.is('rent_type', null)
+    else if (rentTypeFilter !== 'all') query = query.eq('rent_type', rentTypeFilter)
     if (customerTypeFilter !== 'all') query = query.eq('customer_type', customerTypeFilter)
     if (statusFilter !== 'all') query = query.eq('status', statusFilter)
     if (search) query = query.or(
@@ -68,12 +95,17 @@ export default function ArenaBookings() {
     if (dateFrom) query = query.gte('booking_date', dateFrom)
     if (dateTo) query = query.lte('booking_date', dateTo)
     if (unitFilter !== 'all') query = query.eq('unit_id', unitFilter)
-    query = query.order('created_at', { ascending: false }).range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)
-    const { data: rows, count, error: err } = await query
+    return query.order('created_at', { ascending: false })
+  }, [kind, rentTypeFilter, search, statusFilter, customerTypeFilter, dateFrom, dateTo, unitFilter])
+
+  const fetchData = useCallback(async () => {
+    setLoading(true)
+    const { data: rows, count, error: err } = await buildQuery('*, unit:arena_booking_units(name)', true)
+      .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)
     if (err) setError(err.message)
-    else { setData(rows || []); setTotal(count || 0) }
+    else { setData((rows || []) as unknown as Record<string, unknown>[]); setTotal(count || 0) }
     setLoading(false)
-  }, [search, statusFilter, customerTypeFilter, dateFrom, dateTo, unitFilter, page])
+  }, [buildQuery, page])
 
   useEffect(() => { fetchData() }, [fetchData])
 
@@ -138,32 +170,39 @@ export default function ArenaBookings() {
   }
 
   const handleExport = async () => {
-    const { data: all } = await supabase
-      .from('arena_bookings')
-      .select('booking_code, unit:arena_booking_units(name), booking_date, start_time, end_time, full_name, email, phone, gender, customer_type, rent_type, price_before_disc, discount, price, voucher_code, status, payment_method, payment_ref, paid_at, notes, created_at')
-      .order('created_at', { ascending: false })
+    const { data: all, error: err } = await buildQuery('booking_code, unit:arena_booking_units(name), booking_date, start_time, end_time, full_name, email, phone, gender, customer_type, rent_type, booking_product_slug, num_people, price_before_disc, discount, price, voucher_code, status, payment_method, payment_ref, paid_at, notes, created_at', false)
+    if (err) { setError(err.message); return }
     if (all) {
-      const flat = all.map((r: Record<string, unknown>) => ({
+      const flat = (all as unknown as Record<string, unknown>[]).map(r => ({
         ...r,
+        jenis: rentTypeLabel(r.rent_type),
         unit_name: (r.unit as Record<string, unknown>)?.name || '',
         unit: undefined,
       }))
-      exportToCSV(flat, 'bookings')
+      exportToCSV(flat, isOpen ? 'open-arena' : 'booking-venue')
     }
   }
 
   const venuePriceFinal = (Number(venueForm.price_before_disc) || 0) - (Number(venueForm.discount) || 0)
+  const colCount = isOpen ? 11 : 13
   const from = page * PAGE_SIZE + 1
   const to = Math.min((page + 1) * PAGE_SIZE, total)
 
   return (
     <div>
       <div className="page-header">
-        <h2 className="page-title">Bookings</h2>
+        <div>
+          <h2 className="page-title">{KIND_TITLE[kind]}</h2>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{KIND_SUBTITLE[kind]}</div>
+        </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button className="btn-secondary" onClick={handleExport}>Export CSV</button>
-          <button className="btn-secondary" onClick={() => { resetVenueForm(); setShowVenueCreate(true) }}>+ Buat Booking</button>
-          <button className="btn-primary" onClick={() => setShowManual(true)}>+ Manual Booking</button>
+          <button className="btn-secondary" onClick={handleExport} title="Export sesuai filter yang aktif">Export CSV</button>
+          {!isOpen && (
+            <>
+              <button className="btn-secondary" onClick={() => { resetVenueForm(); setShowVenueCreate(true) }}>+ Buat Booking</button>
+              <button className="btn-primary" onClick={() => setShowManual(true)}>+ Manual Booking</button>
+            </>
+          )}
         </div>
       </div>
 
@@ -177,6 +216,10 @@ export default function ArenaBookings() {
           onChange={e => handleSearchChange(e.target.value)}
           style={{ minWidth: 220 }}
         />
+        <select value={rentTypeFilter} onChange={e => { setRentTypeFilter(e.target.value); setPage(0) }}>
+          <option value="all">Semua Jenis</option>
+          {RENT_TYPE_OPTIONS[kind].map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
         <select value={customerTypeFilter} onChange={e => { setCustomerTypeFilter(e.target.value); setPage(0) }}>
           <option value="all">Semua Tipe</option>
           <option value="individual">Individual</option>
@@ -192,10 +235,12 @@ export default function ArenaBookings() {
         </select>
         <input type="date" value={dateFrom} onChange={e => { setDateFrom(e.target.value); setPage(0) }} placeholder="Dari" title="Dari tanggal" />
         <input type="date" value={dateTo} onChange={e => { setDateTo(e.target.value); setPage(0) }} placeholder="Sampai" title="Sampai tanggal" />
-        <select value={unitFilter} onChange={e => { setUnitFilter(e.target.value); setPage(0) }}>
-          <option value="all">Semua Unit</option>
-          {units.map((u: Record<string, unknown>) => <option key={u.id as string} value={u.id as string}>{u.name as string}</option>)}
-        </select>
+        {!isOpen && (
+          <select value={unitFilter} onChange={e => { setUnitFilter(e.target.value); setPage(0) }}>
+            <option value="all">Semua Unit</option>
+            {units.map((u: Record<string, unknown>) => <option key={u.id as string} value={u.id as string}>{u.name as string}</option>)}
+          </select>
+        )}
       </div>
 
       <div className="table-wrap">
@@ -203,12 +248,13 @@ export default function ArenaBookings() {
           <thead>
             <tr>
               <th>Booking Code</th>
-              <th>Unit</th>
-              <th>Tanggal</th>
-              <th>Waktu</th>
+              {isOpen ? <th>Jenis</th> : <th>Unit</th>}
+              <th>{isOpen ? 'Tanggal Mulai' : 'Tanggal'}</th>
+              {isOpen ? <th>Orang</th> : <th>Waktu</th>}
+              {!isOpen && <th>Sewa</th>}
               <th>Nama</th>
               <th>Gender</th>
-              <th>Tipe</th>
+              {!isOpen && <th>Tipe</th>}
               <th>Telp</th>
               <th>Amount</th>
               <th>Status</th>
@@ -218,21 +264,26 @@ export default function ArenaBookings() {
           </thead>
           <tbody>
             {loading ? (
-              <tr className="loading-row"><td colSpan={11}>Memuat data...</td></tr>
+              <tr className="loading-row"><td colSpan={colCount}>Memuat data...</td></tr>
             ) : data.length === 0 ? (
-              <tr><td colSpan={11} className="empty-state">Tidak ada data</td></tr>
+              <tr><td colSpan={colCount} className="empty-state">Tidak ada data</td></tr>
             ) : data.map((row: Record<string, unknown>) => {
               const s = STATUS_LABEL[row.status as string] || { label: row.status, css: '' }
               const unit = row.unit as Record<string, unknown> | undefined
               return (
                 <tr key={row.id as string}>
                   <td style={{ fontFamily: 'monospace', fontSize: 11 }}>{row.booking_code as string}</td>
-                  <td>{unit?.name as string || '-'}</td>
+                  {isOpen
+                    ? <td style={{ whiteSpace: 'nowrap' }}>{rentTypeLabel(row.rent_type)}</td>
+                    : <td>{unit?.name as string || '-'}</td>}
                   <td>{fmtDate(row.booking_date as string)}</td>
-                  <td style={{ whiteSpace: 'nowrap' }}>{fmtTime(row.start_time as string)}–{fmtTime(row.end_time as string)}</td>
+                  {isOpen
+                    ? <td style={{ textAlign: 'center' }}>{Number(row.num_people) || 1}</td>
+                    : <td style={{ whiteSpace: 'nowrap' }}>{fmtTime(row.start_time as string)}–{fmtTime(row.end_time as string)}</td>}
+                  {!isOpen && <td style={{ whiteSpace: 'nowrap' }}>{rentTypeLabel(row.rent_type)}</td>}
                   <td>{row.full_name as string}</td>
                   <td style={{ textAlign: 'center' }} title={genderLabel(row.gender)}>{genderShort(row.gender)}</td>
-                  <td style={{ whiteSpace: 'nowrap' }}>{row.customer_type === 'corporation' ? 'Korporasi' : 'Individu'}</td>
+                  {!isOpen && <td style={{ whiteSpace: 'nowrap' }}>{row.customer_type === 'corporation' ? 'Korporasi' : 'Individu'}</td>}
                   <td>{row.phone as string}</td>
                   <td style={{ whiteSpace: 'nowrap' }}>{fmtRp(row.price as number)}</td>
                   <td><span className={`badge ${s.css}`}>{s.label}</span></td>

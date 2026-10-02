@@ -103,7 +103,9 @@ export default function App() {
           >
             <Route index element={<ArenaDashboard />} />
             <Route path="calendar" element={<ArenaCalendar />} />
-            <Route path="bookings" element={<ArenaBookings />} />
+            {/* arena_bookings dipisah per jenis (lib/arenaBookingKind): key → state filter tidak terbawa antar menu */}
+            <Route path="bookings" element={<ArenaBookings key="venue" kind="venue" />} />
+            <Route path="open-arena" element={<ArenaBookings key="open_arena" kind="open_arena" />} />
             {/* Redirect rute lama ke halaman gabungan */}
             <Route path="venue-booking" element={<Navigate to="/arena/bookings" replace />} />
             <Route path="slot-bookings" element={<Navigate to="/arena/bookings" replace />} />
