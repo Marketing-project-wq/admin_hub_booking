@@ -176,6 +176,11 @@ export default function ClinicReceiptModal({ transaction: t, onClose }: {
             <div style={{ width: 300, flexShrink: 0 }}>
               <SumRow label="Subtotal Layanan" value={fmtRp(t.service_price)} />
               <SumRow label="Total Diskon" value={t.discount > 0 ? `-${fmtRp(t.discount)}` : fmtRp(0)} />
+              {t.voucher_code && (
+                <div style={{ fontSize: 11, color: MUTED, textAlign: 'right', marginTop: -2, marginBottom: 4 }}>
+                  termasuk voucher {t.voucher_code}{t.voucher_discount ? ` (-${fmtRp(t.voucher_discount)})` : ''}
+                </div>
+              )}
               <SumRow label="Biaya Administrasi" value={fmtRp(t.admin_fee ?? 0)} />
               <SumRow label="Total Tagihan" value={fmtRp(t.total_amount)} strong />
               <SumRow label={`Dibayar via ${methodLabel}`} value={fmtRp(t.total_amount)} />

@@ -25,6 +25,9 @@ export interface ClinicTransaction {
   is_package_purchase: boolean
   package_id: string | null
   used_package_ids: string[] | null
+  // Kode voucher Clinic yang dimasukkan kasir saat Close Bill (sudah termasuk di `discount`)
+  voucher_code?: string | null
+  voucher_discount?: number | null
   created_at: string
   updated_at: string
   // joined
