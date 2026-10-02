@@ -7,6 +7,7 @@ import { genderShort, genderLabel } from '../../lib/gender'
 import BookingDetailModal from '../../components/arena/BookingDetailModal'
 import ManualBookingModal from '../../components/arena/ManualBookingModal'
 import ConfirmModal from '../../components/arena/ConfirmModal'
+import PaymentMethodCell from '../../components/arena/PaymentMethodCell'
 import RescheduleModal from '../../components/arena/RescheduleModal'
 
 const PAGE_SIZE = 20
@@ -323,7 +324,7 @@ export default function ArenaClassBookings() {
                     )}
                   </td>
                   <td><span className={`badge ${s.css}`}>{s.label}</span></td>
-                  <td>{row.payment_method as string || '-'}</td>
+                  <td><PaymentMethodCell method={row.payment_method} showCode={false} /></td>
                   <td style={{ fontSize: 11, fontFamily: 'monospace', color: 'var(--text-muted)' }}>
                     {(() => {
                       const isVoucher = row.payment_method === 'voucher'
