@@ -1,0 +1,25 @@
+name: no xendit-webhook mirror
+
+# Hard guard against the xendit-webhook edge function being re-mirrored into this
+# repo. It is a single live function (Supabase project cpvzwqptzcxnwzfzgrmt) whose
+# authoritative copy lives in ARENA-BOOKING. A duplicate copy here has diverged
+# before and been manually re-synced; this check fails the build if the file comes
+# back, so the dedupe can't silently regress. See
+# supabase/functions/xendit-webhook/README.md.
+
+on:
+  pull_request:
+  push:
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reject xendit-webhook mirror
+        run: |
+          if [ -f supabase/functions/xendit-webhook/index.ts ]; then
+            echo "::error file=supabase/functions/xendit-webhook/index.ts::xendit-webhook is authoritative in ARENA-BOOKING — do not add a copy here (deploy from ARENA)."
+            exit 1
+          fi
+          echo "OK: no xendit-webhook/index.ts mirror in this repo."
