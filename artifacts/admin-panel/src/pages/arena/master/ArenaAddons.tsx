@@ -4,10 +4,11 @@ import { supabase } from '../../../lib/supabase'
 import { fmtRp } from '../../../lib/format'
 
 // Add-on catalog (arena_addons). Equipment/service add-ons bought during class/arena booking.
-// F1 adds: global stock (stock_total capacity + stock_remaining live; NULL = unlimited),
-// class-type eligibility (arena_addon_class_types; empty = all classes), and a show_on_arena
-// flag for the BK- arena (non-class) flow. Stock is decremented at payment-confirm by the
-// webhook (F2), not here — admin only sets capacity and sees remaining/used.
+// F1: global stock (stock_total capacity + stock_remaining live; NULL = unlimited),
+// class-type eligibility (arena_addon_class_types), show_on_arena flag (BK- flow).
+// extend-F1: specific-schedule eligibility (arena_addon_schedules). An add-on is unrestricted
+// (all classes) only when it has NO rows in EITHER eligibility table; any row in either
+// restricts it to the UNION of (matching class types) ∪ (matching specific schedules).
 
 interface Addon {
   id: string; name: string; description: string; price: number; image_url: string | null
@@ -15,21 +16,34 @@ interface Addon {
   stock_total: number | null; stock_remaining: number | null; show_on_arena: boolean
 }
 interface ClassType { id: string; name: string }
+interface ScheduleOpt { id: string; schedule_date: string; start_time: string; class_type: { name: string } | { name: string }[] | null }
 
 const emptyForm = (): Partial<Addon> => ({
   name: '', description: '', price: 0, image_url: '', is_active: true, sort_order: 0,
   stock_total: null, show_on_arena: true,
 })
 
+const ctName = (c: ScheduleOpt['class_type']): string =>
+  (Array.isArray(c) ? c[0]?.name : c?.name) ?? 'Kelas'
+const schedLabel = (s: ScheduleOpt): string => {
+  const d = new Date(s.schedule_date + 'T00:00:00').toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })
+  return `${ctName(s.class_type)} — ${d} ${String(s.start_time).slice(0, 5)}`
+}
+
 export default function ArenaAddons() {
   const [data, setData] = useState<Addon[]>([])
   const [classTypes, setClassTypes] = useState<ClassType[]>([])
-  const [eligMap, setEligMap] = useState<Record<string, string[]>>({}) // addon_id -> class_type_id[]
+  const [schedules, setSchedules] = useState<ScheduleOpt[]>([])          // upcoming options (capped)
+  const [eligMap, setEligMap] = useState<Record<string, string[]>>({})     // addon_id -> class_type_id[]
+  const [eligSchedMap, setEligSchedMap] = useState<Record<string, string[]>>({}) // addon_id -> schedule_id[]
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
   const [form, setForm] = useState<Partial<Addon>>(emptyForm())
   const [selectedCT, setSelectedCT] = useState<string[]>([])
+  const [selectedSched, setSelectedSched] = useState<string[]>([])
+  const [pastSched, setPastSched] = useState<ScheduleOpt[]>([])           // selected schedules outside the upcoming set
+  const [schedQuery, setSchedQuery] = useState('')
   const [formError, setFormError] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -39,41 +53,59 @@ export default function ArenaAddons() {
     const { data: rows, error: err } = await supabase.from('arena_addons').select('*').order('sort_order')
     if (err) setError(err.message)
     else { setData(rows as Addon[]); setError('') }
-    // Eligibility + class-type options are best-effort: if the join table / columns aren't
-    // provisioned yet (pre-F1-migration), the catalog list still renders.
+    // Eligibility + options are best-effort (still render the catalog pre-migration).
     const { data: elig } = await supabase.from('arena_addon_class_types').select('addon_id, class_type_id')
     if (elig) {
       const m: Record<string, string[]> = {}
       for (const r of elig as { addon_id: string; class_type_id: string }[]) (m[r.addon_id] ??= []).push(r.class_type_id)
       setEligMap(m)
     }
+    const { data: eligS } = await supabase.from('arena_addon_schedules').select('addon_id, schedule_id')
+    if (eligS) {
+      const m: Record<string, string[]> = {}
+      for (const r of eligS as { addon_id: string; schedule_id: string }[]) (m[r.addon_id] ??= []).push(r.schedule_id)
+      setEligSchedMap(m)
+    }
     const { data: cts } = await supabase.from('arena_class_types').select('id, name').eq('is_active', true).order('name')
     if (cts) setClassTypes(cts as ClassType[])
+    const today = new Date().toISOString().slice(0, 10)
+    const { data: scheds } = await supabase.from('arena_class_schedules')
+      .select('id, schedule_date, start_time, class_type:arena_class_types(name)')
+      .gte('schedule_date', today).eq('is_cancelled', false)
+      .order('schedule_date', { ascending: true }).order('start_time', { ascending: true })
+      .limit(500)
+    if (scheds) setSchedules(scheds as ScheduleOpt[])
     setLoading(false)
   }, [])
 
   useEffect(() => { fetchData() }, [fetchData])
 
-  const openAdd = () => { setForm(emptyForm()); setSelectedCT([]); setEditId(null); setFormError(''); setShowModal(true) }
-  const openEdit = (a: Addon) => {
+  const openAdd = () => {
+    setForm(emptyForm()); setSelectedCT([]); setSelectedSched([]); setPastSched([])
+    setSchedQuery(''); setEditId(null); setFormError(''); setShowModal(true)
+  }
+  const openEdit = async (a: Addon) => {
     setForm({ ...a, stock_total: a.stock_total ?? null })
     setSelectedCT(eligMap[a.id] ?? [])
-    setEditId(a.id); setFormError(''); setShowModal(true)
+    const sel = eligSchedMap[a.id] ?? []
+    setSelectedSched(sel); setSchedQuery(''); setEditId(a.id); setFormError(''); setShowModal(true)
+    // Fetch any selected schedules not in the upcoming list (past / beyond the cap) so they render.
+    const missing = sel.filter(id => !schedules.some(s => s.id === id))
+    if (missing.length) {
+      const { data: extra } = await supabase.from('arena_class_schedules')
+        .select('id, schedule_date, start_time, class_type:arena_class_types(name)').in('id', missing)
+      setPastSched((extra as ScheduleOpt[]) ?? [])
+    } else setPastSched([])
   }
 
-  const toggleCT = (id: string) =>
-    setSelectedCT(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
+  const toggleCT = (id: string) => setSelectedCT(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id])
+  const toggleSched = (id: string) => setSelectedSched(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id])
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!form.name) return setFormError('Nama wajib diisi')
     setSaving(true)
 
-    // stock_total: null = unlimited. Derive stock_remaining:
-    //  - create:            remaining = total
-    //  - edit, now unlimited: remaining = null
-    //  - edit, was unlimited: remaining = total (start full)
-    //  - edit, capacity changed: shift remaining by the delta (restock), floored at 0
     const stockTotal: number | null =
       form.stock_total === null || form.stock_total === undefined || (form.stock_total as unknown as string) === ''
         ? null : Number(form.stock_total)
@@ -104,20 +136,32 @@ export default function ArenaAddons() {
       if (err || !ins) { setSaving(false); setFormError(err?.message || 'Gagal membuat add-on'); return }
       addonId = (ins as { id: string }).id
     }
+    if (!addonId) { setSaving(false); setFormError('Missing add-on id'); return }
 
-    // Eligibility diff against the stored mapping (empty selection = all classes).
-    const existing = (addonId && eligMap[addonId]) || []
-    const toAdd = selectedCT.filter(ct => !existing.includes(ct))
-    const toDel = existing.filter(ct => !selectedCT.includes(ct))
-    if (addonId && toAdd.length) {
-      const { error: addErr } = await supabase.from('arena_addon_class_types')
-        .insert(toAdd.map(ct => ({ addon_id: addonId, class_type_id: ct })))
-      if (addErr) { setSaving(false); setFormError(addErr.message); return }
+    // Class-type eligibility diff.
+    const curCT = eligMap[addonId] || []
+    const ctAdd = selectedCT.filter(ct => !curCT.includes(ct))
+    const ctDel = curCT.filter(ct => !selectedCT.includes(ct))
+    if (ctAdd.length) {
+      const { error: e1 } = await supabase.from('arena_addon_class_types').insert(ctAdd.map(ct => ({ addon_id: addonId, class_type_id: ct })))
+      if (e1) { setSaving(false); setFormError(e1.message); return }
     }
-    if (addonId && toDel.length) {
-      const { error: delErr } = await supabase.from('arena_addon_class_types')
-        .delete().eq('addon_id', addonId).in('class_type_id', toDel)
-      if (delErr) { setSaving(false); setFormError(delErr.message); return }
+    if (ctDel.length) {
+      const { error: e2 } = await supabase.from('arena_addon_class_types').delete().eq('addon_id', addonId).in('class_type_id', ctDel)
+      if (e2) { setSaving(false); setFormError(e2.message); return }
+    }
+
+    // Specific-schedule eligibility diff.
+    const curS = eligSchedMap[addonId] || []
+    const sAdd = selectedSched.filter(id => !curS.includes(id))
+    const sDel = curS.filter(id => !selectedSched.includes(id))
+    if (sAdd.length) {
+      const { error: e3 } = await supabase.from('arena_addon_schedules').insert(sAdd.map(id => ({ addon_id: addonId, schedule_id: id })))
+      if (e3) { setSaving(false); setFormError(e3.message); return }
+    }
+    if (sDel.length) {
+      const { error: e4 } = await supabase.from('arena_addon_schedules').delete().eq('addon_id', addonId).in('schedule_id', sDel)
+      if (e4) { setSaving(false); setFormError(e4.message); return }
     }
 
     setSaving(false); setShowModal(false); fetchData()
@@ -134,9 +178,20 @@ export default function ArenaAddons() {
     return `${remaining} sisa · ${Math.max(0, a.stock_total - remaining)} terpakai`
   }
   const eligLabel = (a: Addon) => {
-    const n = (eligMap[a.id] ?? []).length
-    return n === 0 ? 'Semua' : `${n} kelas`
+    const nCT = (eligMap[a.id] ?? []).length
+    const nS = (eligSchedMap[a.id] ?? []).length
+    return (nCT === 0 && nS === 0) ? 'Semua' : `${nCT} kelas · ${nS} jadwal`
   }
+
+  // Schedule options shown in the modal: upcoming set + any selected-but-outside rows, filtered by search.
+  const schedDisplay = (() => {
+    const byId: Record<string, ScheduleOpt> = {}
+    for (const s of [...schedules, ...pastSched]) byId[s.id] = s
+    let list = Object.values(byId)
+    const q = schedQuery.trim().toLowerCase()
+    if (q) list = list.filter(s => schedLabel(s).toLowerCase().includes(q))
+    return list.sort((a, b) => (a.schedule_date + a.start_time).localeCompare(b.schedule_date + b.start_time))
+  })()
 
   const f = form
   return (
@@ -157,7 +212,7 @@ export default function ArenaAddons() {
                   <td style={{ fontWeight: 600 }}>{a.name}</td>
                   <td>{fmtRp(a.price)}</td>
                   <td style={{ whiteSpace: 'nowrap', fontSize: 12 }}>{stockLabel(a)}</td>
-                  <td style={{ fontSize: 12, color: 'var(--text-muted)' }}>{eligLabel(a)}</td>
+                  <td style={{ fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{eligLabel(a)}</td>
                   <td style={{ textAlign: 'center' }}>{a.show_on_arena ? '✓' : '—'}</td>
                   <td style={{ textAlign: 'center' }}>{a.sort_order}</td>
                   <td><span className={`badge ${a.is_active ? 'badge-confirmed' : 'badge-cancelled'}`}>{a.is_active ? 'Active' : 'Inactive'}</span></td>
@@ -196,7 +251,7 @@ export default function ArenaAddons() {
                     onChange={e => setForm(p => ({ ...p, stock_total: e.target.value === '' ? null : Number(e.target.value) }))} />
                   {editId && (
                     <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                      Sisa sekarang: {(data.find(d => d.id === editId)?.stock_remaining ?? null) === null ? '∞' : data.find(d => d.id === editId)?.stock_remaining}. Mengubah total akan menambah/mengurangi sisa sebesar selisihnya (restock).
+                      Sisa sekarang: {(data.find(d => d.id === editId)?.stock_remaining ?? null) === null ? '∞' : data.find(d => d.id === editId)?.stock_remaining}. Mengubah total menambah/mengurangi sisa sebesar selisihnya (restock).
                     </span>
                   )}
                 </div>
@@ -209,8 +264,8 @@ export default function ArenaAddons() {
               </div>
 
               <div className="form-group">
-                <label>Eligibility Kelas <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}>(tak ada dipilih = semua kelas)</span></label>
-                <div style={{ maxHeight: 160, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 12px' }}>
+                <label>Eligibility Kelas <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}>(tak ada dipilih di kedua daftar = semua kelas)</span></label>
+                <div style={{ maxHeight: 130, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 12px' }}>
                   {classTypes.length === 0 ? (
                     <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Tidak ada kelas aktif</span>
                   ) : classTypes.map(ct => (
@@ -220,6 +275,22 @@ export default function ArenaAddons() {
                     </label>
                   ))}
                 </div>
+              </div>
+
+              <div className="form-group">
+                <label>Eligibility Jadwal Spesifik <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}>(untuk event spesifik — opsional)</span></label>
+                <input value={schedQuery} onChange={e => setSchedQuery(e.target.value)} placeholder="Cari jadwal (tipe / tanggal)..." style={{ marginBottom: 6 }} />
+                <div style={{ maxHeight: 160, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 12px' }}>
+                  {schedDisplay.length === 0 ? (
+                    <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{schedQuery ? 'Tak ada jadwal cocok' : 'Tak ada jadwal mendatang'}</span>
+                  ) : schedDisplay.map(s => (
+                    <label key={s.id} style={{ display: 'flex', gap: 8, alignItems: 'center', cursor: 'pointer', fontSize: 13, padding: '3px 0' }}>
+                      <input type="checkbox" checked={selectedSched.includes(s.id)} onChange={() => toggleSched(s.id)} />
+                      {schedLabel(s)}
+                    </label>
+                  ))}
+                </div>
+                {selectedSched.length > 0 && <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{selectedSched.length} jadwal dipilih</span>}
               </div>
 
               <label style={{ display: 'flex', gap: 8, alignItems: 'center', cursor: 'pointer', fontSize: 14, margin: '12px 0 16px' }}>
