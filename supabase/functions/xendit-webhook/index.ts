@@ -11,6 +11,7 @@
 //   PKG- → arena_package_orders   (+ generate voucher)
 //   CLC- → clinic_bookings        (+ claim slot)
 //   MBR- → gym_membership_orders  (+ provision membership)
+//   PTP- → pt_package_orders      (+ voucher paket PT, `issuePtPackageVoucher`)
 //
 // Xendit Invoice webhook payload (flat):
 //   { id, external_id, status, paid_amount, ... }
@@ -21,6 +22,7 @@
 //   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY — otomatis tersedia di edge functions
 
 import { createClient } from "jsr:@supabase/supabase-js@2"
+import { issuePtPackageVoucher, provisionMembership } from "../_shared/confirm_side_effects.ts"
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -32,18 +34,26 @@ const TABLE_MAP: Record<string, string> = {
   "BK-":  "arena_bookings",
   "CL-":  "arena_class_bookings",
   "GM-":  "gym_class_bookings",
+  "GDP-": "gym_day_pass_orders",
   "PKG-": "arena_package_orders",
   "CLC-": "clinic_bookings",
   "MBR-": "gym_membership_orders",
+  "COACH-": "coach_bookings",
+  "CPKG-": "coach_package_orders",
+  "PTP-": "pt_package_orders",
 }
 
 const CODE_FIELD: Record<string, string> = {
   arena_bookings:        "booking_code",
   arena_class_bookings:  "booking_code",
   gym_class_bookings:    "booking_code",
+  gym_day_pass_orders:   "order_code",
   arena_package_orders:  "order_code",
   clinic_bookings:       "booking_code",
   gym_membership_orders: "order_code",
+  coach_bookings:        "order_code",
+  coach_package_orders:  "order_code",
+  pt_package_orders:     "order_code",
 }
 
 // Kolom ekstra yang HANYA ada di tabel tertentu — jangan select di tabel lain
@@ -51,12 +61,12 @@ const CODE_FIELD: Record<string, string> = {
 const EXTRA_SELECT: Record<string, string> = {
   arena_class_bookings:  ", group_id",
   clinic_bookings:       ", slot_id",
-  gym_membership_orders: ", duration_months, email, full_name, plan_name, price",
+  gym_membership_orders: ", duration_months, email, full_name, phone, plan_id, plan_name, order_code, price",
 }
 
 function extractBookingCode(text: string): string | null {
   if (!text) return null
-  const match = text.match(/((?:CLC|MBR|PKG|BK|CL|GM)-[\w-]+)/i)
+  const match = text.match(/((?:COACH|CPKG|CLC|MBR|GDP|PTP|PKG|BK|CL|GM)-[\w-]+)/i)
   return match ? match[1].toUpperCase() : null
 }
 
@@ -130,12 +140,16 @@ Deno.serve(async (req: Request) => {
     })
   }
 
-  const prefix = bookingCode.startsWith("CLC-") ? "CLC-"
+  const prefix = bookingCode.startsWith("COACH-") ? "COACH-"
+               : bookingCode.startsWith("CPKG-") ? "CPKG-"
+               : bookingCode.startsWith("CLC-") ? "CLC-"
                : bookingCode.startsWith("MBR-") ? "MBR-"
                : bookingCode.startsWith("PKG-") ? "PKG-"
                : bookingCode.startsWith("BK-")  ? "BK-"
                : bookingCode.startsWith("CL-")  ? "CL-"
                : bookingCode.startsWith("GM-")  ? "GM-"
+               : bookingCode.startsWith("GDP-") ? "GDP-"
+               : bookingCode.startsWith("PTP-") ? "PTP-"
                : null
 
   const tableName = prefix ? TABLE_MAP[prefix] : null
@@ -205,6 +219,7 @@ Deno.serve(async (req: Request) => {
 
   // GROUP BOOKING: konfirmasi semua member group (arena_class_bookings)
   let groupRowsUpdated = 0
+  let groupMemberIds: string[] = []
   if (tableName === "arena_class_bookings") {
     const groupId = (updated[0] as any)?.group_id
     if (groupId) {
@@ -214,9 +229,12 @@ Deno.serve(async (req: Request) => {
         .eq("group_id", groupId)
         .eq("status", "pending_payment")
         .neq("booking_code", bookingCode)
-        .select("booking_code, full_name")
+        .select("id, booking_code, full_name")
       if (groupErr) console.error("Group update error:", groupErr)
-      else groupRowsUpdated = groupUpdated?.length || 0
+      else {
+        groupRowsUpdated = groupUpdated?.length || 0
+        groupMemberIds = ((groupUpdated ?? []) as { id: string }[]).map(r => r.id).filter(Boolean)
+      }
     }
   }
 
@@ -290,23 +308,80 @@ Deno.serve(async (req: Request) => {
     } catch (e) { console.error("Voucher generation error (non-blocking):", e) }
   }
 
-  // MEMBERSHIP PROVISION
-  if (tableName === "gym_membership_orders") {
-    const order = updated[0] as any
+  // COACH PACKAGE VOUCHER — buat voucher (terkunci coach_id) saat paket PAID. Idempotent.
+  // Redeem/assign sesi TIDAK di web (app 20FIT / GRO admin). first_used_at di-stamp saat
+  // sesi pertama dipakai. Voucher code digenerate di sini (tanpa RPC).
+  if (tableName === "coach_package_orders") {
+    const orderId = updated[0].id
     try {
-      const startDate = wibToday()
-      const endDate = addMonths(startDate, order.duration_months ?? 1)
-      const { error: memErr } = await supabase.from("gym_memberships").insert({
-        order_id: order.id,
-        email: order.email,
-        full_name: order.full_name,
-        plan_name: order.plan_name,
-        start_date: startDate,
-        end_date: endDate,
-        is_active: true,
-      })
-      if (memErr) console.error("Membership insert error:", memErr)
-    } catch (e) { console.error("Membership provision error (non-blocking):", e) }
+      const { data: existing } = await supabase
+        .from("coach_package_vouchers").select("id").eq("order_id", orderId).limit(1)
+      if (!existing || existing.length === 0) {
+        const { data: order } = await supabase
+          .from("coach_package_orders").select("coach_id, tier, sessions, validity_months").eq("id", orderId).single()
+        const voucherCode = "CV-" + Date.now().toString(36).toUpperCase() + "-" + Math.random().toString(36).slice(2, 6).toUpperCase()
+        await supabase.from("coach_package_vouchers").insert({
+          voucher_code: voucherCode,
+          order_id: orderId,
+          coach_id: (order as any)?.coach_id,
+          tier: (order as any)?.tier,
+          total_sessions: (order as any)?.sessions ?? 0,
+          used_sessions: 0,
+          validity_months: (order as any)?.validity_months ?? null,
+          first_used_at: null,
+          is_active: true,
+        })
+      }
+    } catch (e) { console.error("Coach package voucher generation error (non-blocking):", e) }
+  }
+
+  // PT PACKAGE VOUCHER — helper bersama (idempoten by order_id), jadi bentuknya
+  // identik dengan yang diterbitkan xendit-check-payment & start-split-payment.
+  if (tableName === "pt_package_orders") {
+    try {
+      await issuePtPackageVoucher(supabase, updated[0].id, "xendit-webhook")
+    } catch (e) { console.error("PT voucher generation error (non-blocking):", e) }
+  }
+
+  // MEMBERSHIP PROVISION — helper bersama (idempoten by order_id; isi plan_id/phone/
+  // duration_months/source), sama dengan xendit-check-payment & confirm-free-payment.
+  if (tableName === "gym_membership_orders") {
+    const o = updated[0] as any
+    await provisionMembership(supabase, {
+      id: o.id, order_code: o.order_code, plan_id: o.plan_id,
+      full_name: o.full_name, email: o.email, phone: o.phone,
+      duration_months: o.duration_months,
+    }, "xendit-webhook")
+  }
+
+  // ADD-ON STOCK COMMIT (CL- arena_class_bookings + BK- arena_bookings) — decrement the global
+  // stock pool for this booking's add-on line items at payment-confirm. The RPC is atomic
+  // (guarded UPDATE) and idempotent (stock_committed_at per line), and FLAGS oversold lines
+  // (paid-but-sold-out) for the admin refund view rather than failing anything. NON-BLOCKING:
+  // the confirm is already persisted above, so any error here is logged and swallowed — the
+  // booking stays confirmed and Xendit is NOT made to retry. Group CL- add-ons live on the
+  // paid/primary booking row (updated[0]); the group member rows confirmed above are committed
+  // too (no-op when a row has no add-on lines). BK- is a single booking.
+  if (tableName === "arena_class_bookings" || tableName === "arena_bookings") {
+    const addonTable = tableName === "arena_class_bookings"
+      ? "arena_class_booking_addons"
+      : "arena_booking_addons"
+    const addonBookingIds = [updated[0].id as string, ...groupMemberIds]
+    for (const addonBookingId of addonBookingIds) {
+      try {
+        const { data: stockResult, error: stockErr } = await supabase.rpc("commit_addon_stock", {
+          p_booking_id: addonBookingId,
+          p_table: addonTable,
+        })
+        if (stockErr) {
+          console.error("Add-on stock commit error (non-blocking):", stockErr)
+        } else if (stockResult && (stockResult as unknown[]).length) {
+          console.log("Add-on stock commit:", JSON.stringify(stockResult))
+          const oversold = (stockResult as { result: string }[]).filter(r => r.result === "oversold")
+          if (oversold.length) console.warn(`Add-on OVERSOLD on ${bookingCode}:`, JSON.stringify(oversold))
+        }
+      } catch (e) { console.error("Add-on stock commit error (non-blocking):", e) }
+    }
   }
 
   return new Response(JSON.stringify({ ok: true, bookingCode, tableName, newStatus, rows: updated.length, groupRowsUpdated }), {
