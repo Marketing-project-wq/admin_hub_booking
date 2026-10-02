@@ -4,6 +4,7 @@ import { fmtRp } from '../../lib/format'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../context/AuthContext'
 import { type ClinicTransaction } from '../../lib/clinicBilling'
+import { verifyClinicVoucher, type ClinicVoucherCheck } from '../../lib/clinicVoucher'
 import {
   listPackages, listPatientActivePackages,
   listServices, listClinicStaffOptions, logAssignmentChange,
@@ -46,6 +47,14 @@ export default function ClinicCloseBillModal({
   const [notes, setNotes] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+
+  // Kode voucher Clinic yang dimasukkan kasir (beda dari voucher booking online di atas).
+  // Divalidasi via verify_clinic_voucher; kuota dipakai atomik saat konfirmasi
+  // (close_clinic_bill_with_voucher).
+  const [voucherInput, setVoucherInput] = useState('')
+  const [codeVoucher, setCodeVoucher] = useState<ClinicVoucherCheck | null>(null)
+  const [voucherChecking, setVoucherChecking] = useState(false)
+  const [voucherError, setVoucherError] = useState('')
 
   // ── Guard kelengkapan klinis sebelum Close Bill ──────────────────────────────
   // Wajib: Screening + Consent (semua visit) + Assessment Dokter (khusus layanan
@@ -191,6 +200,14 @@ export default function ClinicCloseBillModal({
   const payableServices = uncoveredServices.filter(s => s !== voucherService)
 
   const visitSubtotal = payableServices.reduce((sum, s) => sum + (Number(s.price) || 0), 0)
+
+  // Item yang boleh didiskon kode voucher kasir = layanan yang benar-benar ditagih
+  // (bukan ter-cover paket, bukan baris voucher booking). Pembelian paket tidak ikut.
+  const voucherItems = payableServices
+    .filter(s => s.service_id)
+    .map(s => ({ service_id: s.service_id, price: Number(s.price) || 0 }))
+  const voucherItemsSig = voucherItems.map(i => `${i.service_id}:${i.price}`).join('|')
+  const codeDiscount = codeVoucher ? Math.min(codeVoucher.discount, visitSubtotal) : 0
   // Paket yang dipilih untuk dibeli (bisa lebih dari satu). Urutan mengikuti daftar
   // master `packages` agar rincian biaya tampil rapi & konsisten.
   const selectedNewPkgs = buyingPackage
@@ -200,17 +217,49 @@ export default function ClinicCloseBillModal({
   // Biaya admin opsional — tidak berlaku untuk pembayaran online (sudah settle di Mayar).
   // Ditambahkan SETELAH max(0, ...) supaya tidak bisa dimakan diskon.
   const adminFee = !paidOnline && addAdminFee ? ADMIN_FEE : 0
-  const grandTotal = Math.max(0, visitSubtotal + packageSubtotal - (Number(discount) || 0)) + adminFee
+  const grandTotal = Math.max(0, visitSubtotal + packageSubtotal - (Number(discount) || 0) - codeDiscount) + adminFee
   // Batas atas diskon = harga layanan + paket (sama dengan p_service_price di RPC, yang
   // menolak discount > service_price) — biaya admin TIDAK ikut (tidak boleh didiskon).
-  const maxDiscount = visitSubtotal + packageSubtotal
+  // Diskon manual + voucher kasir bersama-sama tidak boleh melewati batas ini.
+  const maxDiscount = Math.max(0, visitSubtotal + packageSubtotal - codeDiscount)
   const change = method === 'cash' && cashReceived > grandTotal ? cashReceived - grandTotal : 0
   const isCard = method === 'debit' || method === 'kredit'
 
   // Voucher menutup segalanya (tak ada sisa tagihan & tak beli paket) → metode 'voucher'
   // tanpa pilih metode. Selain itu — termasuk voucherMissing — metode pembayaran wajib.
   const voucherFullyCovers = !!voucherService && grandTotal === 0 && !buyingPackage
-  const needsMethod = !paidOnline && !voucherFullyCovers
+  // Idem untuk kode voucher kasir yang SENDIRIAN membuat tagihan jadi 0 (tanpa diskon manual).
+  const codeVoucherFullyCovers = !!codeVoucher && grandTotal === 0 && !buyingPackage && !(Number(discount) > 0)
+  const needsMethod = !paidOnline && !voucherFullyCovers && !codeVoucherFullyCovers
+
+  // Diskon voucher dihitung terhadap layanan yang ditagih saat tombol Terapkan ditekan.
+  // Kalau rinciannya berubah (mis. coverage paket baru termuat), voucher harus diterapkan ulang.
+  useEffect(() => {
+    if (!codeVoucher) return
+    setCodeVoucher(null)
+    setVoucherError('Rincian layanan berubah — klik Terapkan lagi untuk menghitung ulang voucher.')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [voucherItemsSig])
+
+  const applyVoucher = async () => {
+    const code = voucherInput.trim().toUpperCase()
+    if (!code) return
+    setVoucherChecking(true); setVoucherError('')
+    try {
+      const res = await verifyClinicVoucher(code, voucherItems)
+      if (!res.valid) { setCodeVoucher(null); setVoucherError(res.message || 'Voucher tidak valid'); return }
+      setCodeVoucher(res)
+      // Diskon manual + voucher tidak boleh melebihi harga layanan + paket.
+      const cap = Math.max(0, visitSubtotal + packageSubtotal - Math.min(res.discount, visitSubtotal))
+      setDiscount(d => Math.min(d, cap))
+    } finally {
+      setVoucherChecking(false)
+    }
+  }
+  const removeVoucher = () => { setCodeVoucher(null); setVoucherInput(''); setVoucherError('') }
+  const codeVoucherServiceNames = codeVoucher
+    ? [...new Set(payableServices.filter(s => codeVoucher.eligibleServiceIds.includes(s.service_id)).map(s => s.service_name))]
+    : []
 
   const handleConfirm = async () => {
     setError('')
@@ -235,13 +284,13 @@ export default function ClinicCloseBillModal({
       // menutup semuanya tanpa sisa & tanpa beli paket.
       const finalPaymentMethod = paidOnline
         ? 'mayar'
-        : voucherFullyCovers
+        : voucherFullyCovers || codeVoucherFullyCovers
           ? 'voucher'
           : method
       const finalTotal = paidOnline
         ? services.reduce((sum, s) => sum + s.price, 0)
         : grandTotal
-      const finalDiscount = paidOnline ? 0 : (Number(discount) || 0) + voucherAmount
+      const finalDiscount = paidOnline ? 0 : (Number(discount) || 0) + voucherAmount + codeDiscount
 
       // Sesi paket yang dipotong: 1 per kategori ter-cover (Performance & Medic), maks 2.
       // coveredServices sudah mengecualikan baris voucher, jadi coverage paket untuk
@@ -259,7 +308,15 @@ export default function ClinicCloseBillModal({
       // Satu RPC atomik menggantikan createTransaction + lockRecord + completeVisitPayment
       // + usePackageSession(×2) + purchasePatientPackage — semua rollback bersama jika ada
       // langkah gagal, dan menolak re-close visit yang sudah paid (anti transaksi ganda).
-      const { data: trxData, error: rpcErr } = await supabase.rpc('close_clinic_bill', {
+      // Dengan kode voucher kasir → close_clinic_bill_with_voucher: redeem voucher (kuota) +
+      // close bill dalam SATU transaksi DB; bila salah satu gagal, keduanya batal.
+      const useCodeVoucher = !paidOnline && !!codeVoucher && codeDiscount > 0
+      const { data: trxData, error: rpcErr } = await supabase.rpc(useCodeVoucher ? 'close_clinic_bill_with_voucher' : 'close_clinic_bill', {
+        ...(useCodeVoucher && codeVoucher ? {
+          p_voucher_code: codeVoucher.code,
+          p_voucher_items: voucherItems,
+          p_voucher_discount: codeDiscount,
+        } : {}),
         p_visit_id: visitId,
         p_patient_id: patientId,
         p_service_id: services[0]?.service_id ?? null,
@@ -287,7 +344,14 @@ export default function ClinicCloseBillModal({
             }))
           : null,
       })
-      if (rpcErr) throw rpcErr
+      if (rpcErr) {
+        // Voucher ditolak saat konfirmasi (kuota habis / nilai berubah) → minta terapkan ulang.
+        if (useCodeVoucher && /voucher/i.test(rpcErr.message)) {
+          setCodeVoucher(null)
+          setVoucherError(rpcErr.message)
+        }
+        throw rpcErr
+      }
       const trx = trxData as unknown as ClinicTransaction
 
       // Close Bill = penentu final assignment kunjungan ini. Best-effort: pembayaran
@@ -505,6 +569,13 @@ export default function ClinicCloseBillModal({
             </div>
           )}
 
+          {codeDiscount > 0 && codeVoucher && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: 'var(--amber)', marginBottom: 4 }}>
+              <span>Voucher {codeVoucher.code}{codeVoucherServiceNames.length > 0 && codeVoucherServiceNames.length < payableServices.length ? ` (${codeVoucherServiceNames.join(', ')})` : ''}</span>
+              <span>-{fmtRp(codeDiscount)}</span>
+            </div>
+          )}
+
           {/* Biaya admin opsional — disembunyikan untuk pembayaran online (sudah settle). */}
           {!paidOnline && (
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, marginBottom: 4 }}>
@@ -518,7 +589,7 @@ export default function ClinicCloseBillModal({
 
           <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 15, borderTop: '1px solid var(--border)', paddingTop: 8, marginTop: 4 }}>
             <span>Total</span>
-            <span style={{ color: voucherFullyCovers ? 'var(--amber)' : 'var(--red)' }}>{fmtRp(grandTotal)}</span>
+            <span style={{ color: voucherFullyCovers || codeVoucherFullyCovers ? 'var(--amber)' : 'var(--red)' }}>{fmtRp(grandTotal)}</span>
           </div>
         </div>
 
@@ -652,6 +723,40 @@ export default function ClinicCloseBillModal({
                   : `Voucher hanya menutup ${voucherService.service_name} (${fmtRp(voucherAmount)}) — layanan lain dibayar normal`}
               </div>
             </div>
+          </div>
+        )}
+
+        {/* Kode voucher Clinic (dibuat di Clinic → Voucher) */}
+        {!paidOnline && voucherItems.length > 0 && (
+          <div className="form-group">
+            <label>Kode Voucher</label>
+            {codeVoucher ? (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '10px 12px', borderRadius: 8, background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.35)' }}>
+                <div style={{ fontSize: 13 }}>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700 }}>{codeVoucher.code}</span>
+                  <span style={{ color: 'var(--amber)', fontWeight: 600 }}> · hemat {fmtRp(codeDiscount)}</span>
+                  {codeVoucherServiceNames.length > 0 && (
+                    <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>Berlaku untuk: {codeVoucherServiceNames.join(', ')}</div>
+                  )}
+                </div>
+                <button type="button" onClick={removeVoucher} title="Hapus voucher"
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 0, lineHeight: 1 }}><X size={16} /></button>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input
+                  type="text" value={voucherInput} placeholder="Masukkan kode voucher"
+                  onChange={e => { setVoucherInput(e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, '')); setVoucherError('') }}
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); applyVoucher() } }}
+                  style={{ flex: 1, minWidth: 0, fontFamily: 'var(--font-mono)', letterSpacing: 1 }}
+                />
+                <button type="button" className="btn-secondary" onClick={applyVoucher}
+                  disabled={voucherChecking || !voucherInput.trim()} style={{ whiteSpace: 'nowrap' }}>
+                  {voucherChecking ? 'Mengecek...' : 'Terapkan'}
+                </button>
+              </div>
+            )}
+            {voucherError && <small style={{ color: 'var(--red)', fontSize: 12 }}>{voucherError}</small>}
           </div>
         )}
 
@@ -871,7 +976,7 @@ export default function ClinicCloseBillModal({
             disabled={saving || checkingCompleteness || missingSections.length > 0 || (needsMethod && !method)}
             title={missingSections.length > 0 ? `Lengkapi dulu: ${missingSections.join(', ')}` : undefined}
           >
-            {saving ? 'Memproses...' : checkingCompleteness ? 'Memeriksa kelengkapan…' : <>{paidOnline ? 'Konfirmasi & Selesai' : voucherFullyCovers ? 'Konfirmasi Voucher & Selesai' : 'Konfirmasi Pembayaran'} <ArrowRight size={14} style={{ verticalAlign: -2 }} /></>}
+            {saving ? 'Memproses...' : checkingCompleteness ? 'Memeriksa kelengkapan…' : <>{paidOnline ? 'Konfirmasi & Selesai' : voucherFullyCovers || codeVoucherFullyCovers ? 'Konfirmasi Voucher & Selesai' : 'Konfirmasi Pembayaran'} <ArrowRight size={14} style={{ verticalAlign: -2 }} /></>}
           </button>
         </div>
       </div>

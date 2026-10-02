@@ -14,8 +14,9 @@ import VoucherCodeField from '../../components/VoucherCodeField'
 // Checkout clinic memvalidasi lewat RPC verify_clinic_voucher / redeem_clinic_voucher
 // (repo ARENA-BOOKING, migration 20261002100000_clinic_vouchers.sql).
 //
-// Pemakaian: used_count naik 1x per checkout (saat customer menekan bayar, sebelum
-// pembayaran selesai). Detail siapa yang memakai dibaca dari clinic_bookings.voucher_code.
+// Pemakaian: used_count naik 1x per checkout online (saat customer menekan bayar, sebelum
+// pembayaran selesai) atau 1x per Close Bill di Kasir. Detail siapa yang memakai dibaca dari
+// clinic_bookings.voucher_code (online) + clinic_transactions.voucher_code (Kasir).
 
 interface Voucher {
   id: string
@@ -49,6 +50,7 @@ interface UsageAgg { bookings: number; discount: number }
 type ServiceEmbed = { name: string }
 type SlotEmbed = { slot_date: string; start_time: string }
 interface UsageRow {
+  source: 'online' | 'kasir'
   id: string
   booking_code: string
   full_name: string
@@ -142,6 +144,7 @@ const BOOKING_STATUS: Record<string, { label: string; css: string }> = {
   arrived:         { label: 'Datang',         css: 'badge-info' },
   checked_in:      { label: 'Check-in',       css: 'badge-info' },
   completed:       { label: 'Selesai',        css: 'badge-confirmed' },
+  kasir_paid:      { label: 'Lunas · Kasir',  css: 'badge-confirmed' },
   cancelled:       { label: 'Batal',          css: 'badge-cancelled' },
   no_show:         { label: 'No Show',        css: 'badge-cancelled' },
 }
@@ -210,12 +213,13 @@ export default function ClinicVouchers() {
 
   const fetchData = useCallback(async () => {
     setLoading(true)
-    const [vRes, sRes, uRes] = await Promise.all([
+    const [vRes, sRes, uRes, tRes] = await Promise.all([
       supabase.from('arena_vouchers').select('*').eq('location', 'CLINIC').order('created_at', { ascending: false }),
       supabase.from('clinic_services')
         .select('id, name, price, service_group, is_active, is_online_bookable')
         .order('sort_order', { ascending: true }).order('name', { ascending: true }),
       supabase.from('clinic_bookings').select('voucher_code, discount, status').not('voucher_code', 'is', null),
+      supabase.from('clinic_transactions').select('voucher_code, voucher_discount').not('voucher_code', 'is', null),
     ])
     if (vRes.error) { setError(vRes.error.message); setLoading(false); return }
     setData((vRes.data as Voucher[]) || [])
@@ -229,6 +233,13 @@ export default function ClinicVouchers() {
       if (r.status === 'cancelled') continue
       agg[key].bookings += 1
       agg[key].discount += r.discount || 0
+    }
+    // Pemakaian di Kasir (Close Bill). Transaksi yang dibatalkan sudah terhapus dari tabel.
+    for (const r of (tRes.data || []) as { voucher_code: string; voucher_discount: number | null }[]) {
+      const key = r.voucher_code.toUpperCase()
+      agg[key] = agg[key] || { bookings: 0, discount: 0 }
+      agg[key].bookings += 1
+      agg[key].discount += r.voucher_discount || 0
     }
     setUsage(agg)
     setError(''); setLoading(false)
@@ -388,18 +399,51 @@ export default function ClinicVouchers() {
   // ── Pemakaian (siapa yang memakai) ────────────────────────────────────────
   const openUsage = async (v: Voucher) => {
     setUsageVoucher(v); setUsageRows([]); setUsageError(''); setUsageLoading(true)
-    const { data: rows, error: err } = await supabase
-      .from('clinic_bookings')
-      .select(`
-        id, booking_code, full_name, email, phone, price, discount, price_before_disc,
-        status, payment_method, created_at, appointment_date, appointment_time, manual_date, manual_time,
-        service:clinic_services(name),
-        slot:clinic_slots(slot_date, start_time)
-      `)
-      .eq('voucher_code', v.code)
-      .order('created_at', { ascending: false })
+    const [bRes, tRes] = await Promise.all([
+      supabase
+        .from('clinic_bookings')
+        .select(`
+          id, booking_code, full_name, email, phone, price, discount, price_before_disc,
+          status, payment_method, created_at, appointment_date, appointment_time, manual_date, manual_time,
+          service:clinic_services(name),
+          slot:clinic_slots(slot_date, start_time)
+        `)
+        .eq('voucher_code', v.code),
+      supabase
+        .from('clinic_transactions')
+        .select(`
+          id, transaction_code, service_name, total_amount, voucher_discount, payment_method, created_at,
+          patient:clinic_patients(full_name, phone),
+          visit:clinic_visits(visit_date, visit_time)
+        `)
+        .eq('voucher_code', v.code),
+    ])
+    const err = bRes.error || tRes.error
     if (err) setUsageError(err.message)
-    setUsageRows((rows || []) as unknown as UsageRow[])
+    type TrxRow = {
+      id: string; transaction_code: string; service_name: string; total_amount: number
+      voucher_discount: number | null; payment_method: string; created_at: string
+      patient: { full_name: string; phone: string | null } | { full_name: string; phone: string | null }[] | null
+      visit: { visit_date: string | null; visit_time: string | null } | { visit_date: string | null; visit_time: string | null }[] | null
+    }
+    const online = ((bRes.data || []) as unknown as Omit<UsageRow, 'source'>[]).map(r => ({ ...r, source: 'online' as const }))
+    // Transaksi Kasir dinormalisasi ke bentuk baris yang sama: Dibayar = total transaksi,
+    // Diskon = potongan dari voucher ini, Harga Normal = keduanya dijumlah.
+    const kasir: UsageRow[] = ((tRes.data || []) as unknown as TrxRow[]).map(t => {
+      const pt = one(t.patient)
+      const vs = one(t.visit)
+      const vd = t.voucher_discount || 0
+      return {
+        source: 'kasir', id: t.id, booking_code: t.transaction_code,
+        full_name: pt?.full_name ?? '-', email: null, phone: pt?.phone ?? null,
+        price: t.total_amount, discount: vd, price_before_disc: t.total_amount + vd,
+        status: 'kasir_paid', payment_method: t.payment_method, created_at: t.created_at,
+        appointment_date: vs?.visit_date ?? null, appointment_time: vs?.visit_time ?? null,
+        manual_date: null, manual_time: null,
+        service: { name: t.service_name }, slot: null,
+      }
+    })
+    setUsageRows([...online, ...kasir].sort((a, b) => b.created_at.localeCompare(a.created_at)))
     setUsageLoading(false)
   }
 
@@ -419,7 +463,8 @@ export default function ClinicVouchers() {
     if (!usageVoucher) return
     exportToCSV(usageRows.map(r => ({
       'Tanggal Pakai': fmtDateTime(r.created_at),
-      'Kode Booking': r.booking_code,
+      'Sumber': r.source === 'kasir' ? 'Kasir' : 'Online',
+      'Kode Booking / Transaksi': r.booking_code,
       'Nama': r.full_name,
       'Email': r.email ?? '',
       'No HP': r.phone ?? '',
@@ -469,8 +514,8 @@ export default function ClinicVouchers() {
         <button className="btn-primary" onClick={openAdd}>+ Buat Voucher</button>
       </div>
       <p style={{ color: 'var(--text-muted)', marginTop: -8, marginBottom: 20, fontSize: 13 }}>
-        Kode diskon untuk booking online di <b>booking.20fit.id/clinic</b>. Bisa dibatasi ke layanan tertentu,
-        diskon persen atau nominal, masa berlaku, dan kuota pemakaian.
+        Kode diskon untuk booking online di <b>booking.20fit.id/clinic</b> dan untuk <b>Close Bill di Kasir</b>.
+        Bisa dibatasi ke layanan tertentu, diskon persen atau nominal, masa berlaku, dan kuota pemakaian.
       </p>
 
       {error && <p style={{ color: 'var(--red)', fontSize: 13, marginBottom: 12 }}>{error}</p>}
@@ -686,7 +731,7 @@ export default function ClinicVouchers() {
                               <input type="checkbox" checked={f.serviceIds.has(s.id)} onChange={e => toggleService(s.id, e.target.checked)} style={{ width: 'auto' }} />
                               <span style={{ flex: 1 }}>
                                 {s.name}
-                                {!s.is_online_bookable && <span style={{ color: 'var(--amber)', fontSize: 11 }}> · tidak bisa booking online</span>}
+                                {!s.is_online_bookable && <span style={{ color: 'var(--amber)', fontSize: 11 }}> · hanya via Kasir</span>}
                                 {!s.is_active && <span style={{ color: 'var(--text-muted)', fontSize: 11 }}> · nonaktif</span>}
                               </span>
                               <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-muted)' }}>{fmtRp(s.price)}</span>
@@ -698,8 +743,8 @@ export default function ClinicVouchers() {
                   </>
                 )}
                 <small style={{ color: 'var(--text-muted)', fontSize: 11, marginTop: 6, display: 'block' }}>
-                  Voucher dipakai di checkout online booking.20fit.id/clinic, jadi hanya berpengaruh pada layanan yang bisa dibooking online.
-                  Bila keranjang berisi beberapa layanan, diskon hanya dihitung dari layanan yang dipilih di sini.
+                  Voucher bisa dipakai di checkout online booking.20fit.id/clinic dan di Kasir (Close Bill). Layanan yang tidak bisa
+                  dibooking online hanya bisa memakai voucher lewat Kasir. Bila ada beberapa layanan, diskon hanya dihitung dari layanan yang dipilih di sini.
                 </small>
               </div>
 
@@ -767,7 +812,7 @@ export default function ClinicVouchers() {
               <table className="data-table">
                 <thead>
                   <tr>
-                    <th>Tanggal Pakai</th><th>Kode Booking</th><th>Customer</th><th>Layanan</th><th>Jadwal</th>
+                    <th>Tanggal Pakai</th><th>Kode Booking / Trx</th><th>Customer</th><th>Layanan</th><th>Jadwal</th>
                     <th>Harga Normal</th><th>Diskon</th><th>Dibayar</th><th>Status</th>
                   </tr>
                 </thead>
@@ -781,7 +826,10 @@ export default function ClinicVouchers() {
                     return (
                       <tr key={r.id} style={{ opacity: r.status === 'cancelled' ? 0.55 : 1 }}>
                         <td style={{ whiteSpace: 'nowrap', fontSize: 12 }}>{fmtDateTime(r.created_at)}</td>
-                        <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12, whiteSpace: 'nowrap' }}>{r.booking_code}</td>
+                        <td style={{ whiteSpace: 'nowrap' }}>
+                          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{r.booking_code}</div>
+                          <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{r.source === 'kasir' ? 'Kasir' : 'Online'}</div>
+                        </td>
                         <td>
                           <div style={{ fontWeight: 600 }}>{r.full_name}</div>
                           <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{[r.phone, r.email].filter(Boolean).join(' · ')}</div>
@@ -799,8 +847,9 @@ export default function ClinicVouchers() {
               </table>
             </div>
             <small style={{ color: 'var(--text-muted)', fontSize: 11, display: 'block', marginTop: 10 }}>
-              Kuota terpakai dihitung per checkout saat customer menekan bayar (1 checkout bisa berisi beberapa booking).
-              Booking "Menunggu Bayar" yang tidak diselesaikan tetap memakai kuota — naikkan kuota lewat Edit bila perlu.
+              Kuota terpakai dihitung per checkout online saat customer menekan bayar (1 checkout bisa berisi beberapa booking)
+              dan per Close Bill di Kasir (Batal Bayar mengembalikan kuota). Booking online "Menunggu Bayar" yang tidak
+              diselesaikan tetap memakai kuota — naikkan kuota lewat Edit bila perlu.
               {usageSummary.cancelled > 0 && ` ${usageSummary.cancelled} booking batal tidak dihitung ke total.`}
             </small>
           </div>
