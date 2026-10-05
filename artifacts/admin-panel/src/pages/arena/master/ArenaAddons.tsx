@@ -9,11 +9,16 @@ import { fmtRp } from '../../../lib/format'
 // extend-F1: specific-schedule eligibility (arena_addon_schedules). An add-on is unrestricted
 // (all classes) only when it has NO rows in EITHER eligibility table; any row in either
 // restricts it to the UNION of (matching class types) ∪ (matching specific schedules).
+// Upsell pop-up (booking.20fit.id): when a class-booking customer continues without any add-on,
+// the first active + eligible + in-stock add-on with upsell_enabled (lowest sort_order) is offered.
+// Empty upsell_* fields fall back to name / description / image_url; button defaults to "Add to booking".
 
 interface Addon {
   id: string; name: string; description: string; price: number; image_url: string | null
   is_active: boolean; sort_order: number
   stock_total: number | null; stock_remaining: number | null; show_on_arena: boolean
+  upsell_enabled: boolean; upsell_title: string | null; upsell_body: string | null
+  upsell_image_url: string | null; upsell_badge: string | null; upsell_cta: string | null
 }
 interface ClassType { id: string; name: string }
 interface ScheduleOpt { id: string; schedule_date: string; start_time: string; class_type: { name: string } | { name: string }[] | null }
@@ -21,7 +26,11 @@ interface ScheduleOpt { id: string; schedule_date: string; start_time: string; c
 const emptyForm = (): Partial<Addon> => ({
   name: '', description: '', price: 0, image_url: '', is_active: true, sort_order: 0,
   stock_total: null, show_on_arena: true,
+  upsell_enabled: false, upsell_title: '', upsell_body: '', upsell_image_url: '', upsell_badge: '', upsell_cta: '',
 })
+
+// '' / whitespace-only → null, so booking.20fit.id falls back to the add-on's own fields.
+const blankToNull = (s: string | null | undefined): string | null => (s ?? '').trim() || null
 
 const ctName = (c: ScheduleOpt['class_type']): string =>
   (Array.isArray(c) ? c[0]?.name : c?.name) ?? 'Kelas'
@@ -124,6 +133,10 @@ export default function ArenaAddons() {
       name: form.name, description: form.description, price: form.price || 0,
       image_url: form.image_url || null, is_active: form.is_active ?? true, sort_order: form.sort_order || 0,
       show_on_arena: form.show_on_arena ?? true, stock_total: stockTotal, stock_remaining: stockRemaining,
+      upsell_enabled: form.upsell_enabled ?? false,
+      upsell_title: blankToNull(form.upsell_title), upsell_body: blankToNull(form.upsell_body),
+      upsell_image_url: blankToNull(form.upsell_image_url), upsell_badge: blankToNull(form.upsell_badge),
+      upsell_cta: blankToNull(form.upsell_cta),
     }
 
     let addonId = editId
@@ -194,6 +207,12 @@ export default function ArenaAddons() {
   })()
 
   const f = form
+  // Pop-up preview — same fallbacks as booking.20fit.id (UpsellSheet).
+  const upTitle = f.upsell_title?.trim() || f.name || 'Nama add-on'
+  const upBody = f.upsell_body?.trim() || f.description || ''
+  const upImage = f.upsell_image_url?.trim() || f.image_url || ''
+  const upBadge = f.upsell_badge?.trim() || ''
+  const upCta = f.upsell_cta?.trim() || 'Add to booking'
   return (
     <div>
       <div className="page-header">
@@ -209,7 +228,10 @@ export default function ArenaAddons() {
               : data.length === 0 ? <tr><td colSpan={8} className="empty-state">Tidak ada add-on</td></tr>
               : data.map(a => (
                 <tr key={a.id}>
-                  <td style={{ fontWeight: 600 }}>{a.name}</td>
+                  <td style={{ fontWeight: 600 }}>
+                    {a.name}
+                    {a.upsell_enabled && <span className="badge badge-info" style={{ marginLeft: 8, verticalAlign: 'middle' }} title="Ditawarkan sebagai pop-up upsell di booking.20fit.id">Pop-up</span>}
+                  </td>
                   <td>{fmtRp(a.price)}</td>
                   <td style={{ whiteSpace: 'nowrap', fontSize: 12 }}>{stockLabel(a)}</td>
                   <td style={{ fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{eligLabel(a)}</td>
@@ -296,6 +318,51 @@ export default function ArenaAddons() {
               <label style={{ display: 'flex', gap: 8, alignItems: 'center', cursor: 'pointer', fontSize: 14, margin: '12px 0 16px' }}>
                 <input type="checkbox" checked={f.is_active ?? true} onChange={e => setForm(p => ({ ...p, is_active: e.target.checked }))} /> Active
               </label>
+
+              <div className="modal-section">
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700, marginBottom: 10 }}>
+                  Pop-up upsell (booking.20fit.id)
+                </div>
+                <label style={{ display: 'flex', gap: 8, alignItems: 'center', cursor: 'pointer', fontSize: 14, marginBottom: 6 }}>
+                  <input type="checkbox" checked={f.upsell_enabled ?? false} onChange={e => setForm(p => ({ ...p, upsell_enabled: e.target.checked }))} />
+                  Tampilkan sebagai pop-up saat customer lanjut tanpa add-on
+                </label>
+                <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '0 0 14px', lineHeight: 1.5 }}>
+                  Hanya 1 pop-up yang tampil: add-on pertama (Sort Order terkecil) yang aktif, eligible untuk kelas yang dibooking, stoknya masih ada, dan pop-up-nya dicentang. Kolom kosong memakai data add-on di atas.
+                </p>
+                <div className="form-row">
+                  <div className="form-group"><label>Judul pop-up</label><input value={f.upsell_title || ''} onChange={e => setForm(p => ({ ...p, upsell_title: e.target.value }))} placeholder="Kosong = pakai Nama add-on" /></div>
+                  <div className="form-group"><label>Label / badge</label><input value={f.upsell_badge || ''} onChange={e => setForm(p => ({ ...p, upsell_badge: e.target.value }))} placeholder="mis. Hemat Rp 21.000" /></div>
+                </div>
+                <div className="form-group"><label>Teks pop-up</label><textarea value={f.upsell_body || ''} onChange={e => setForm(p => ({ ...p, upsell_body: e.target.value }))} rows={3} placeholder="Kosong = pakai Deskripsi" /></div>
+                <div className="form-row">
+                  <div className="form-group"><label>Gambar banner URL</label><input value={f.upsell_image_url || ''} onChange={e => setForm(p => ({ ...p, upsell_image_url: e.target.value }))} placeholder="Kosong = pakai Image URL" /></div>
+                  <div className="form-group"><label>Teks tombol</label><input value={f.upsell_cta || ''} onChange={e => setForm(p => ({ ...p, upsell_cta: e.target.value }))} placeholder="Add to booking" /></div>
+                </div>
+
+                {/* Live preview of the customer pop-up (approximation of booking.20fit.id UpsellSheet). */}
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>
+                  Preview{f.upsell_enabled ? '' : ' (belum aktif — tidak tampil di booking)'}
+                </div>
+                <div style={{ maxWidth: 320, margin: '0 auto', border: '1px solid var(--border-strong)', borderRadius: 18, overflow: 'hidden', background: '#fff', color: '#111', fontFamily: 'var(--font-body)', opacity: f.upsell_enabled ? 1 : 0.6 }}>
+                  {upImage && (
+                    <div style={{ position: 'relative', aspectRatio: '16 / 9', background: '#F1F1EE' }}>
+                      <img src={upImage} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+                      {upBadge && <span style={{ position: 'absolute', left: 10, top: 10, background: '#D81F27', color: '#fff', borderRadius: 999, padding: '4px 10px', fontSize: 11, fontWeight: 700 }}>{upBadge}</span>}
+                    </div>
+                  )}
+                  <div style={{ padding: '14px 16px 12px' }}>
+                    {!upImage && upBadge && <span style={{ display: 'inline-flex', background: '#FDECEC', color: '#A81620', borderRadius: 999, padding: '4px 10px', fontSize: 11, fontWeight: 700, marginBottom: 8 }}>{upBadge}</span>}
+                    <div style={{ fontSize: 11, fontWeight: 600, color: '#6B6B68' }}>Add to your booking</div>
+                    <div style={{ fontSize: 16, fontWeight: 700, lineHeight: 1.25, marginTop: 4, overflowWrap: 'anywhere' }}>{upTitle}</div>
+                    {upBody && <p style={{ fontSize: 12.5, color: '#2E2E2C', lineHeight: 1.5, margin: '6px 0 0', display: '-webkit-box', WebkitLineClamp: 4, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{upBody}</p>}
+                    <div style={{ fontSize: 18, fontWeight: 700, marginTop: 10 }}>{fmtRp(f.price)}</div>
+                    <div style={{ marginTop: 12, background: '#D81F27', color: '#fff', borderRadius: 999, padding: '10px 14px', textAlign: 'center', fontSize: 13, fontWeight: 700 }}>{upCta}</div>
+                    <div style={{ paddingTop: 8, textAlign: 'center', fontSize: 12, fontWeight: 600, color: '#6B6B68' }}>No thanks, continue</div>
+                  </div>
+                </div>
+              </div>
+
               <div className="modal-footer">
                 <button type="button" className="btn-secondary" onClick={() => setShowModal(false)}>Batal</button>
                 <button type="submit" className="btn-primary" disabled={saving}>{saving ? 'Menyimpan...' : 'Simpan'}</button>
