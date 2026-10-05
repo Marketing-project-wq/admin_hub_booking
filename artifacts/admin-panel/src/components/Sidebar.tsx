@@ -48,6 +48,7 @@ const UNIT_MENUS: Record<string, MenuItem[]> = {
     { label: 'Transaksi',     path: '/gym/class-bookings' },
     { label: 'Membership Orders', path: '/gym/membership-orders' },
     { label: 'Day Pass Orders', path: '/gym/day-pass-orders' },
+    { label: 'Vouchers',       path: '/gym/vouchers' },
   ],
   recovery: [
     { label: 'Dashboard', path: '/recovery' },
