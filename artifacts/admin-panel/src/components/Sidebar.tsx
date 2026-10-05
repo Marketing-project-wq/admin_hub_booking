@@ -39,6 +39,7 @@ const UNIT_MENUS: Record<string, MenuItem[]> = {
     { label: 'Schedules',      path: '/arena/master/schedules' },
     { label: 'Coaches',        path: '/arena/master/coaches' },
     { label: 'Add-ons',        path: '/arena/master/addons' },
+    { label: 'Promo Mandiri',  path: '/arena/master/promo-mandiri' },
     { label: 'Blocked Slots',  path: '/arena/master/blocked' },
   ],
   gym: [

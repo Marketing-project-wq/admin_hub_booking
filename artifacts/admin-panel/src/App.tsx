@@ -23,6 +23,7 @@ import ArenaBundles from './pages/arena/ArenaBundles'
 import ArenaSchedules from './pages/arena/master/ArenaSchedules'
 import ArenaCoaches from './pages/arena/master/ArenaCoaches'
 import ArenaAddons from './pages/arena/master/ArenaAddons'
+import ArenaPromoMandiri from './pages/arena/master/ArenaPromoMandiri'
 import ArenaBlockedSlots from './pages/arena/master/ArenaBlockedSlots'
 import ArenaUserManagement from './pages/arena/ArenaUserManagement'
 import ArenaAnalytics from './pages/arena/ArenaAnalytics'
@@ -125,6 +126,7 @@ export default function App() {
             <Route path="master/schedules" element={<ArenaSchedules />} />
             <Route path="master/coaches" element={<ArenaCoaches />} />
             <Route path="master/addons" element={<ArenaAddons />} />
+            <Route path="master/promo-mandiri" element={<ArenaPromoMandiri />} />
             <Route path="master/blocked" element={<ArenaBlockedSlots />} />
           </Route>
 
