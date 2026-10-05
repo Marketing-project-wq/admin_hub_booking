@@ -49,6 +49,7 @@ const FLOWS: { key: string; label: string }[] = [
   { key: 'CL-', label: 'Class' },
   { key: 'BK-', label: 'Open Arena · Rent Arena · Bundles · Coaching' },
   { key: 'CLC-', label: 'Recovery Center' },
+  { key: 'PKG-', label: 'Packages (paket kelas, /packages)' },
 ]
 const METHOD_LABEL: Record<string, string> = { va: 'VA Mandiri', card: 'Kartu' }
 
