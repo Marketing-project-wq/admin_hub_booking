@@ -9,7 +9,8 @@ import { useAuth } from '../../../context/AuthContext'
 //   • discount = round(base × pct%), base = product amount EXCLUDING add-ons (after vouchers),
 //     capped by cap_amount and by the remaining budget; base must reach min_amount; only inside
 //     start_at..end_at; only for the selected flows (booking-code prefix) and methods
-//     ('va' = Mandiri VA, 'card' = card whose BIN starts with a bin_list entry or whose issuer
+//     ('va' = Mandiri VA, 'card' = card on a network in card_brands (empty = any; since 2026-10-05
+//     the owner runs it as Mandiri VISA debit/credit only, no VA) whose BIN starts with a bin_list entry or whose issuer
 //     name contains MANDIRI).
 //   • limits — "identity" = card BIN+last4, or the customer's phone/email for VA — count PAID
 //     redemptions + PENDING ones still inside the 35-min charge window.
@@ -33,6 +34,7 @@ interface Promo {
   per_identity_daily_limit: number; per_identity_total_limit: number | null
   total_quota: number | null; budget_amount: number | null
   bin_list: string[] | null; start_at: string | null; end_at: string | null
+  card_brands: string[] | null
   updated_at: string | null; updated_by: string | null
 }
 
@@ -43,7 +45,7 @@ interface Redemption {
 
 const METHODS: { key: string; label: string }[] = [
   { key: 'va', label: 'Virtual Account Mandiri' },
-  { key: 'card', label: 'Kartu Mandiri (Visa/Mastercard)' },
+  { key: 'card', label: 'Kartu Mandiri (debit / kredit)' },
 ]
 const FLOWS: { key: string; label: string }[] = [
   { key: 'CL-', label: 'Class' },
@@ -52,6 +54,11 @@ const FLOWS: { key: string; label: string }[] = [
   { key: 'PKG-', label: 'Packages (paket kelas, /packages)' },
 ]
 const METHOD_LABEL: Record<string, string> = { va: 'VA Mandiri', card: 'Kartu' }
+// Card networks the 'card' method accepts (server: payment_promo.ts isPromoCard checks the BIN's network).
+const CARD_BRANDS: { key: string; label: string }[] = [
+  { key: 'VISA', label: 'Visa' },
+  { key: 'MASTERCARD', label: 'Mastercard' },
+]
 
 // Form state: inputs as strings ('' = blank), datetimes as datetime-local values in WIB.
 interface Form {
@@ -68,6 +75,7 @@ interface Form {
   start_at: string
   end_at: string
   bin_list: string
+  card_brands: string[]
 }
 
 type IntKey = 'cap_amount' | 'min_amount' | 'per_identity_daily_limit' | 'per_identity_total_limit' | 'total_quota' | 'budget_amount'
@@ -121,6 +129,7 @@ const formFromPromo = (p: Promo): Form => ({
   start_at: toWibInput(p.start_at),
   end_at: toWibInput(p.end_at),
   bin_list: (p.bin_list ?? []).join(', '),
+  card_brands: (p.card_brands ?? []).map(b => b.toUpperCase()),
 })
 
 // Only the fields that differ from the saved row (RPC: '' clears a nullable number/date).
@@ -133,6 +142,7 @@ const buildPatch = (saved: Form, f: Form): Record<string, unknown> => {
   }
   if (!sameSet(f.methods, saved.methods)) patch.methods = f.methods
   if (!sameSet(f.flows, saved.flows)) patch.flows = f.flows
+  if (!sameSet(f.card_brands, saved.card_brands)) patch.card_brands = f.card_brands
   if (f.start_at !== saved.start_at) patch.start_at = fromWibInput(f.start_at)
   if (f.end_at !== saved.end_at) patch.end_at = fromWibInput(f.end_at)
   const bins = parseBins(f.bin_list)
@@ -152,6 +162,7 @@ const validate = (f: Form): string | null => {
   }
   if (f.methods.length === 0) return 'Pilih minimal satu metode pembayaran. Untuk mematikan promo, pakai switch ON/OFF.'
   if (f.flows.length === 0) return 'Pilih minimal satu flow booking. Untuk mematikan promo, pakai switch ON/OFF.'
+  if (f.methods.includes('card') && f.card_brands.length === 0) return 'Pilih minimal satu jenis kartu (Visa / Mastercard).'
   if (f.start_at && f.end_at && Date.parse(fromWibInput(f.end_at)) <= Date.parse(fromWibInput(f.start_at))) {
     return 'Waktu selesai harus setelah waktu mulai.'
   }
@@ -176,11 +187,17 @@ const promoState = (p: Promo, now: number): { label: string; css: string } => {
   return { label: 'Aktif', css: 'badge-confirmed' }
 }
 
-const methodsText = (m: string[]): string => {
+const brandText = (brands: string[]): string => {
+  const b = brands.map(x => x.toUpperCase())
+  if (b.length === 1 && b[0] === 'VISA') return 'kartu Mandiri Visa (debit / kredit)'
+  if (b.length === 1 && b[0] === 'MASTERCARD') return 'kartu Mandiri Mastercard (debit / kredit)'
+  return 'kartu Mandiri'
+}
+const methodsText = (m: string[], brands: string[] = []): string => {
   const va = m.includes('va'), card = m.includes('card')
-  if (va && card) return 'VA Bank Mandiri dan kartu Mandiri'
+  if (va && card) return `VA Bank Mandiri dan ${brandText(brands)}`
   if (va) return 'VA Bank Mandiri'
-  if (card) return 'kartu Mandiri'
+  if (card) return brandText(brands)
   return 'Bank Mandiri'
 }
 const fmtPct = (n: number | string): string => Number(n).toLocaleString('id-ID', { maximumFractionDigits: 2 })
@@ -287,7 +304,7 @@ export default function ArenaPromoMandiri() {
 
   const state = promo ? promoState(promo, now) : null
   const subtitle = promo
-    ? `Diskon ${fmtPct(promo.pct)}% untuk pembayaran ${methodsText(promo.methods ?? [])} di booking.20fit.id (add-on tidak termasuk).`
+    ? `Diskon ${fmtPct(promo.pct)}% untuk pembayaran ${methodsText(promo.methods ?? [], promo.card_brands ?? [])} di booking.20fit.id (add-on tidak termasuk).`
     : 'Diskon pembayaran Bank Mandiri di booking.20fit.id (add-on tidak termasuk).'
 
   const rpHint = (v: string, blank: string) =>
@@ -322,6 +339,9 @@ export default function ArenaPromoMandiri() {
   })()
   const bins = form ? parseBins(form.bin_list) : []
   const badBins = bins.filter(b => !/^\d{4,8}$/.test(b))
+  // BINs on a network the promo doesn't accept are ignored by the server — flag them so the list stays clean.
+  const visaOnly = !!form && form.card_brands.length === 1 && form.card_brands[0] === 'VISA'
+  const offBrandBins = visaOnly ? bins.filter(b => /^\d{4,8}$/.test(b) && !b.startsWith('4')) : []
 
   return (
     <div>
@@ -394,6 +414,18 @@ export default function ArenaPromoMandiri() {
                       {m.label}
                     </label>
                   ))}
+                  {form.methods.includes('card') && (
+                    <>
+                      <label style={{ marginTop: 10 }}>Jenis kartu</label>
+                      {CARD_BRANDS.map(b => (
+                        <label key={b.key} style={checkLabel}>
+                          <input type="checkbox" checked={form.card_brands.includes(b.key)} onChange={() => set('card_brands', toggled(CARD_BRANDS, form.card_brands, b.key))} />
+                          {b.label}
+                        </label>
+                      ))}
+                      <span style={hint}>Promo kartu hanya untuk jaringan yang dicentang (debit maupun kredit).</span>
+                    </>
+                  )}
                 </div>
                 <div className="form-group">
                   <label>Flow booking</label>
@@ -453,8 +485,11 @@ export default function ArenaPromoMandiri() {
                   placeholder="490284, 490283, ..." style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }} />
                 <span style={hint}>
                   Pisahkan dengan koma atau baris baru. Kartu dianggap kartu Mandiri bila nomornya diawali salah satu BIN ini,
-                  atau nama issuer kartunya mengandung &quot;MANDIRI&quot;.
+                  atau nama issuer kartunya mengandung &quot;MANDIRI&quot; — dan jaringannya harus sesuai Jenis kartu di atas.
                 </span>
+                {offBrandBins.length > 0 && (
+                  <span style={{ ...hint, color: 'var(--amber)' }}>Bukan BIN Visa (diabaikan selama promo khusus Visa): {offBrandBins.slice(0, 8).join(', ')}{offBrandBins.length > 8 ? ', …' : ''}</span>
+                )}
                 {badBins.length > 0 && (
                   <span style={{ ...hint, color: 'var(--red)' }}>Tidak valid (harus 4–8 digit angka): {badBins.slice(0, 8).join(', ')}{badBins.length > 8 ? ', …' : ''}</span>
                 )}
