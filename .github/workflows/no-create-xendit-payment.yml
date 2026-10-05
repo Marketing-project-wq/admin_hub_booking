@@ -1,0 +1,26 @@
+name: no create-xendit-payment mirror
+
+# Hard guard against the create-xendit-payment edge function being re-mirrored into
+# this repo. It is a single live function (Supabase project cpvzwqptzcxnwzfzgrmt,
+# verify_jwt=true) whose authoritative copy lives in ARENA-BOOKING. A duplicate copy
+# here had diverged (missing the gym anti-tamper price read, invoice_duration override,
+# and coach/day-pass order mappings); this check fails the build if the file comes back,
+# so the dedupe can't silently regress. See
+# supabase/functions/create-xendit-payment/README.md.
+
+on:
+  pull_request:
+  push:
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reject create-xendit-payment mirror
+        run: |
+          if [ -f supabase/functions/create-xendit-payment/index.ts ]; then
+            echo "::error file=supabase/functions/create-xendit-payment/index.ts::create-xendit-payment is authoritative in ARENA-BOOKING — do not add a copy here (deploy from ARENA)."
+            exit 1
+          fi
+          echo "OK: no create-xendit-payment/index.ts mirror in this repo."
