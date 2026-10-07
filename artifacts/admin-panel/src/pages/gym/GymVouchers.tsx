@@ -38,6 +38,7 @@ interface Voucher {
   valid_until: string
   is_active: boolean
   applies_to: Scope
+  applicable_plan_months: number[] | null   // batasan durasi paket membership (bulan); null/[] = semua
   created_by: string | null
   created_at: string
 }
@@ -71,12 +72,14 @@ interface FormState {
   valid_until: string           // '' = tanpa batas waktu
   is_active: boolean
   scope: Scope
+  planMonths: number[]          // durasi paket membership yang diizinkan; [] = semua durasi
 }
 
 type VStatus = 'active' | 'inactive' | 'expired' | 'scheduled' | 'exhausted'
 
 const DEFAULT_PREFIX = 'GYM'
 const FAR_FUTURE = '2099-12-31'   // arena_vouchers.valid_until NOT NULL → "tanpa batas"
+const PLAN_MONTHS_OPTIONS = [1, 3, 6, 12] as const   // pilihan durasi paket membership (bulan)
 
 const SCOPE_META: Record<Scope, { label: string; short: string }> = {
   gym_all:        { label: 'Semua (Membership + Day Pass)', short: 'Semua gym' },
@@ -99,7 +102,7 @@ const endOfMonth = (iso: string) => {
 const emptyForm = (): FormState => ({
   code: '', description: '', discount_type: 'percentage', discount_value: 0,
   max_discount: null, min_amount: 0, quota: 1,
-  valid_from: todayWIB(), valid_until: '', is_active: true, scope: 'gym_all',
+  valid_from: todayWIB(), valid_until: '', is_active: true, scope: 'gym_all', planMonths: [],
 })
 
 const formFromVoucher = (v: Voucher): FormState => ({
@@ -109,7 +112,12 @@ const formFromVoucher = (v: Voucher): FormState => ({
   valid_from: v.valid_from ?? '', valid_until: v.valid_until && v.valid_until !== FAR_FUTURE ? v.valid_until : '',
   is_active: v.is_active,
   scope: (['gym_all', 'gym_membership', 'gym_day_pass'] as Scope[]).includes(v.applies_to) ? v.applies_to : 'gym_all',
+  planMonths: Array.isArray(v.applicable_plan_months) ? [...v.applicable_plan_months].sort((a, b) => a - b) : [],
 })
+
+// Nilai kolom applicable_plan_months untuk payload: hanya untuk scope membership/gym_all; day pass → null.
+const planMonthsPayload = (f: Pick<FormState, 'scope' | 'planMonths'>): number[] | null =>
+  f.scope === 'gym_day_pass' || f.planMonths.length === 0 ? null : [...f.planMonths].sort((a, b) => a - b)
 
 const statusOf = (v: Voucher, today: string): VStatus => {
   if (!v.is_active) return 'inactive'
@@ -240,6 +248,31 @@ export default function GymVouchers() {
   const f = form
   const setF = (patch: Partial<FormState>) => setForm(p => ({ ...p, ...patch }))
   const setIF = (patch: Partial<FormState>) => setImportForm(p => ({ ...p, ...patch }))   // setelan impor
+
+  // Checkbox batasan durasi paket (membership). Dipakai form "Buat Voucher" + step setelan impor.
+  // Hanya relevan untuk scope membership/gym_all; day pass → tak ditampilkan (plan diabaikan).
+  const togglePlanMonth = (cur: number[], m: number): number[] =>
+    cur.includes(m) ? cur.filter(x => x !== m) : [...cur, m].sort((a, b) => a - b)
+  const renderPlanMonthsField = (fm: FormState, apply: (p: Partial<FormState>) => void) =>
+    fm.scope === 'gym_day_pass' ? null : (
+      <div className="form-group">
+        <label>Batasi Durasi Paket (membership)</label>
+        <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginTop: 4 }}>
+          {PLAN_MONTHS_OPTIONS.map(m => (
+            <label key={m} style={{ display: 'flex', gap: 6, alignItems: 'center', cursor: 'pointer', fontSize: 14 }}>
+              <input type="checkbox" checked={fm.planMonths.includes(m)}
+                onChange={() => apply({ planMonths: togglePlanMonth(fm.planMonths, m) })} style={{ width: 'auto' }} />
+              {m} bulan
+            </label>
+          ))}
+        </div>
+        <small style={{ color: 'var(--text-muted)', fontSize: 11 }}>
+          {fm.planMonths.length === 0
+            ? 'Tak ada dicentang = berlaku untuk semua durasi paket.'
+            : `Hanya untuk paket: ${[...fm.planMonths].sort((a, b) => a - b).join(' / ')} bulan.`}
+        </small>
+      </div>
+    )
   const codeLocked = !!editing && editing.used_count > 0   // kode tercatat di order → jangan diubah
 
   const openAdd = () => {
@@ -295,6 +328,7 @@ export default function GymVouchers() {
         location: 'GYM',
         applicable_slugs: null,
         applicable_clinic_service_ids: null,
+        applicable_plan_months: planMonthsPayload(f),
         updated_at: new Date().toISOString(),
       }
 
@@ -399,6 +433,7 @@ export default function GymVouchers() {
           location: 'GYM',
           applicable_slugs: null,
           applicable_clinic_service_ids: null,
+          applicable_plan_months: planMonthsPayload(f),
           used_count: 0,
           created_by: user?.email || user?.full_name || 'admin',
           created_at: new Date().toISOString(),
@@ -595,7 +630,12 @@ export default function GymVouchers() {
                       ? <span style={{ color: 'var(--text-muted)', fontSize: 11, display: 'block' }}>maks {fmtRp(v.max_discount_amount)}</span>
                       : null}
                   </td>
-                  <td style={{ fontSize: 12, color: 'var(--text-muted)' }}>{(SCOPE_META[v.applies_to] ?? SCOPE_META.gym_all).short}</td>
+                  <td style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                    {(SCOPE_META[v.applies_to] ?? SCOPE_META.gym_all).short}
+                    {v.applies_to !== 'gym_day_pass' && v.applicable_plan_months && v.applicable_plan_months.length > 0 && (
+                      <span style={{ display: 'block', fontSize: 11 }}>· {[...v.applicable_plan_months].sort((a, b) => a - b).join('/')} bln</span>
+                    )}
+                  </td>
                   <td style={{ whiteSpace: 'nowrap' }}>{v.min_booking_amount ? fmtRp(v.min_booking_amount) : '-'}</td>
                   <td style={{ minWidth: 110 }}>
                     <div style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>{v.used_count} / {v.quota ?? '∞'}</div>
@@ -662,6 +702,9 @@ export default function GymVouchers() {
                   ))}
                 </div>
               </div>
+
+              {/* Batasan durasi paket membership (hanya saat scope membership / semua). */}
+              {renderPlanMonthsField(f, setF)}
 
               <div className="form-group">
                 <label>Tipe Diskon *</label>
@@ -922,6 +965,9 @@ export default function GymVouchers() {
                     ))}
                   </div>
                 </div>
+
+                {/* Batasan durasi paket membership — berlaku untuk semua kode batch. */}
+                {renderPlanMonthsField(importForm, setIF)}
 
                 <div className="form-group">
                   <label>Tipe Diskon *</label>
