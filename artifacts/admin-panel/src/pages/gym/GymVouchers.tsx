@@ -5,7 +5,7 @@ import { useAuth } from '../../context/AuthContext'
 import { fmtRp, fmtDate, fmtDateTime, STATUS_LABEL, exportToCSV } from '../../lib/format'
 import { isVoucherCodeTaken, generateUniqueVoucherCode } from '../../lib/voucherCode'
 import VoucherCodeField from '../../components/VoucherCodeField'
-import { downloadGymVoucherTemplate, prepareGymVoucherRows, type ParsedVoucherRow } from '../../lib/gymVoucherCsv'
+import { downloadGymVoucherTemplate, prepareGymVoucherCodes, type ParsedCodeRow } from '../../lib/gymVoucherCsv'
 
 // GYM — Voucher diskon untuk checkout Day Pass + Membership (booking.20fit.id).
 //
@@ -180,12 +180,16 @@ export default function GymVouchers() {
   const [usageError, setUsageError] = useState('')
 
   // ── Impor CSV (bulk-create) ─────────────────────────────────────────────────
+  // Alur: upload (preview kode) → settings (setelan untuk semua kode) → result.
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const [showImport, setShowImport] = useState(false)
+  const [importStage, setImportStage] = useState<'upload' | 'settings' | 'result'>('upload')
   const [importFileName, setImportFileName] = useState('')
   const [importParsing, setImportParsing] = useState(false)
   const [importHeaderError, setImportHeaderError] = useState('')
-  const [importRows, setImportRows] = useState<ParsedVoucherRow[]>([])
+  const [importRows, setImportRows] = useState<ParsedCodeRow[]>([])
+  const [importForm, setImportForm] = useState<FormState>(emptyForm())   // setelan untuk semua kode
+  const [importFormError, setImportFormError] = useState('')
   const [importing, setImporting] = useState(false)
   const [importResult, setImportResult] = useState<{ success: number; failed: number; failures: { rowNum: number; reason: string }[] } | null>(null)
 
@@ -235,6 +239,7 @@ export default function GymVouchers() {
   // ── Form helpers ──────────────────────────────────────────────────────────
   const f = form
   const setF = (patch: Partial<FormState>) => setForm(p => ({ ...p, ...patch }))
+  const setIF = (patch: Partial<FormState>) => setImportForm(p => ({ ...p, ...patch }))   // setelan impor
   const codeLocked = !!editing && editing.used_count > 0   // kode tercatat di order → jangan diubah
 
   const openAdd = () => {
@@ -315,17 +320,18 @@ export default function GymVouchers() {
 
   // ── Impor CSV handlers ──────────────────────────────────────────────────────
   const resetImport = () => {
-    setImportFileName(''); setImportRows([]); setImportHeaderError(''); setImportResult(null)
+    setImportStage('upload'); setImportFileName(''); setImportRows([]); setImportHeaderError('')
+    setImportForm(emptyForm()); setImportFormError(''); setImportResult(null)
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
   const openImport = () => { resetImport(); setShowImport(true) }
   const closeImport = () => { setShowImport(false); resetImport() }
 
-  // Baca file → ambil kode existing (DB) sekali → validasi semua baris (preview).
+  // Langkah 1 — baca file → ambil kode existing (DB) sekali → validasi KODE tiap baris (preview).
   const onFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-    setImportFileName(file.name); setImportParsing(true); setImportHeaderError(''); setImportRows([]); setImportResult(null)
+    setImportFileName(file.name); setImportParsing(true); setImportHeaderError(''); setImportRows([]); setImportResult(null); setImportStage('upload')
     try {
       const text = await file.text()
       // Kode dianggap terpakai bila ada di arena_vouchers (semua lokasi, code UNIQUE global) atau
@@ -337,7 +343,7 @@ export default function GymVouchers() {
       const existing = new Set<string>()
       for (const r of (avRes.data as { code: string | null }[] | null) || []) if (r.code) existing.add(r.code.toUpperCase())
       for (const r of (legacyRes.data as { code: string | null }[] | null) || []) if (r.code) existing.add(r.code.toUpperCase())
-      const { headerError, rows } = prepareGymVoucherRows(text, existing)
+      const { headerError, rows } = prepareGymVoucherCodes(text, existing)
       if (headerError) setImportHeaderError(headerError)
       setImportRows(rows)
     } catch (err) {
@@ -347,41 +353,49 @@ export default function GymVouchers() {
     }
   }
 
-  const validImportRows = useMemo(() => importRows.filter(r => r.valid && r.prepared), [importRows])
+  const validImportRows = useMemo(() => importRows.filter(r => r.valid), [importRows])
 
-  // Impor hanya baris valid. Auto-generate kode kosong (dedup antar-baris). Insert per-baris +
-  // tangkap error per-baris (1 baris gagal tidak menggagalkan sisanya). Payload IDENTIK handleSave.
+  // Validasi setelan — IDENTIK dengan handleSave (tanpa cek kode: kode sudah divalidasi di CSV).
+  const validateImportSettings = (f: FormState): string | null => {
+    if (!f.discount_value || f.discount_value <= 0) return 'Nilai diskon harus > 0'
+    if (f.discount_type === 'percentage' && f.discount_value > 100) return 'Diskon persen maksimal 100%'
+    if (f.quota != null && f.quota < 1) return 'Kuota minimal 1 (kosongkan untuk tanpa batas)'
+    if (!f.valid_from) return 'Tanggal mulai berlaku wajib diisi'
+    if (f.valid_until && f.valid_until < f.valid_from) return 'Tanggal berakhir harus setelah tanggal mulai'
+    return null
+  }
+
+  // Langkah 2 → 3 — terapkan setelan ke semua kode valid, insert per-baris. Payload & cara simpan
+  // IDENTIK handleSave (arena_vouchers, location='GYM'); 1 error (mis. 23505) tak gagalkan batch.
   const doImport = async () => {
+    const f = importForm
+    const err = validateImportSettings(f)
+    if (err) { setImportFormError(err); return }
     if (validImportRows.length === 0) return
-    setImporting(true)
+    setImportFormError(''); setImporting(true)
     const generated = new Set<string>()
-    const resolveCode = async (row: ParsedVoucherRow): Promise<string> => {
-      if (!row.autoCode && row.prepared?.code) return row.prepared.code
-      for (let attempt = 0; attempt < 8; attempt++) {
-        const code = await generateUniqueVoucherCode(DEFAULT_PREFIX)
-        if (!generated.has(code)) { generated.add(code); return code }
-      }
-      throw new Error('Gagal membuat kode unik')
-    }
     let success = 0
     const failures: { rowNum: number; reason: string }[] = []
     for (const row of validImportRows) {
-      const p = row.prepared!
       try {
-        const code = await resolveCode(row)
+        // Kode wajib (sudah divalidasi); fallback generate hanya untuk jaga-jaga bila kosong.
+        let code = row.code
+        if (!code) {
+          for (let a = 0; a < 8; a++) { const c = await generateUniqueVoucherCode(DEFAULT_PREFIX); if (!generated.has(c)) { generated.add(c); code = c; break } }
+        }
         const payload = {
           code,
-          description: p.description,
-          discount_type: p.discount_type,
-          discount_value: p.discount_value,
-          min_booking_amount: p.min_booking_amount,
-          max_discount_amount: p.discount_type === 'percentage' ? p.max_discount_amount : null,
-          quota: p.quota,
-          valid_from: p.valid_from,
-          valid_until: p.valid_until,
-          is_active: p.is_active,
+          description: row.description,
+          discount_type: f.discount_type,
+          discount_value: Number(f.discount_value),
+          min_booking_amount: Number(f.min_amount) || 0,
+          max_discount_amount: f.discount_type === 'percentage' ? (f.max_discount || null) : null,
+          quota: f.quota != null ? Number(f.quota) : null,
+          valid_from: f.valid_from,
+          valid_until: f.valid_until || FAR_FUTURE,
+          is_active: f.is_active,
           corporation_only: false,
-          applies_to: p.applies_to,
+          applies_to: f.scope,
           location: 'GYM',
           applicable_slugs: null,
           applicable_clinic_service_ids: null,
@@ -393,13 +407,13 @@ export default function GymVouchers() {
         const res = await supabase.from('arena_vouchers').insert(payload)
         if (res.error) throw new Error(res.error.code === '23505' ? 'Kode voucher sudah dipakai' : res.error.message)
         success++
-      } catch (err) {
-        failures.push({ rowNum: row.rowNum, reason: err instanceof Error ? err.message : 'Gagal menyimpan' })
+      } catch (e) {
+        failures.push({ rowNum: row.rowNum, reason: e instanceof Error ? e.message : 'Gagal menyimpan' })
       }
     }
     const skipped = importRows.length - validImportRows.length
     setImportResult({ success, failed: skipped + failures.length, failures })
-    setImporting(false)
+    setImportStage('result'); setImporting(false)
     fetchData()
   }
 
@@ -509,10 +523,6 @@ export default function GymVouchers() {
       <div className="page-header">
         <h2 className="page-title">Voucher Gym</h2>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <button className="btn-secondary" onClick={downloadGymVoucherTemplate}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            <Download size={15} /> Download Template
-          </button>
           <button className="btn-secondary" onClick={openImport}
             style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
             <Upload size={15} /> Impor CSV
@@ -823,39 +833,154 @@ export default function GymVouchers() {
         </div>
       )}
 
-      {/* ── Modal Impor CSV ── */}
+      {/* ── Modal Impor CSV (Upload → Setelan → Selesai) ── */}
       {showImport && (
         <div className="modal-overlay">
-          <div className="modal-box" style={{ maxWidth: 920 }} onClick={e => e.stopPropagation()}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+          <div className="modal-box" style={{ maxWidth: 760 }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
               <div>
                 <h3 className="modal-title" style={{ margin: 0 }}>Impor Voucher dari CSV</h3>
-                <p style={{ color: 'var(--text-muted)', fontSize: 12, marginTop: 6, marginBottom: 0, maxWidth: 640 }}>
-                  Bulk-create voucher gym. Gunakan <b>Download Template</b> sebagai acuan — baris diawali <code>#</code> dan
-                  baris kosong diabaikan, urutan kolom bebas. Validasi & payload identik dengan form "Buat Voucher".
+                <p style={{ color: 'var(--text-muted)', fontSize: 12, marginTop: 6, marginBottom: 0, maxWidth: 620 }}>
+                  {importStage === 'settings'
+                    ? <>Pilih setelan diskon, produk, masa berlaku & kuota — berlaku untuk <b>semua {validImportRows.length} kode</b> yang diimpor. Validasi & payload identik form "Buat Voucher".</>
+                    : <>Upload CSV berisi <b>kode</b> (+ deskripsi opsional), 1 kode per baris. Pemisah <code>,</code> atau <code>;</code> terdeteksi otomatis; baris diawali <code>#</code> & baris kosong diabaikan.</>}
                 </p>
               </div>
               <button onClick={closeImport} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}><X size={18} /></button>
             </div>
 
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
-              <button className="btn-secondary" onClick={() => fileInputRef.current?.click()}
-                style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
-                <Upload size={14} /> Pilih file CSV
-              </button>
-              <button className="btn-secondary" onClick={downloadGymVoucherTemplate}
-                style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
-                <Download size={14} /> Download Template
-              </button>
-              {importFileName && <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{importFileName}</span>}
+            {/* Stepper */}
+            <div style={{ display: 'flex', gap: 10, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 14 }}>
+              {(['upload', 'settings', 'result'] as const).map((st, i) => {
+                const label = { upload: '1 · Kode', settings: '2 · Setelan', result: '3 · Selesai' }[st]
+                const active = importStage === st
+                return <span key={st} style={{ fontWeight: active ? 700 : 500, color: active ? 'var(--red)' : 'var(--text-muted)' }}>{label}{i < 2 ? '  →' : ''}</span>
+              })}
             </div>
 
-            {importParsing && <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Memproses file…</p>}
-            {importHeaderError && <p style={{ color: 'var(--red)', fontSize: 13, marginBottom: 12 }}>{importHeaderError}</p>}
+            {/* STAGE 1 — Upload + preview kode */}
+            {importStage === 'upload' && (
+              <>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
+                  <button className="btn-secondary" onClick={() => fileInputRef.current?.click()}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+                    <Upload size={14} /> Pilih file CSV
+                  </button>
+                  <button className="btn-secondary" onClick={downloadGymVoucherTemplate}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+                    <Download size={14} /> Download Template
+                  </button>
+                  {importFileName && <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{importFileName}</span>}
+                </div>
 
-            {/* Ringkasan hasil impor */}
-            {importResult && (
-              <div style={{ background: 'var(--bg-input)', borderRadius: 8, padding: '12px 14px', marginBottom: 12, fontSize: 13 }}>
+                {importParsing && <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Memproses file…</p>}
+                {importHeaderError && <p style={{ color: 'var(--red)', fontSize: 13, marginBottom: 12 }}>{importHeaderError}</p>}
+
+                {importRows.length > 0 && (
+                  <>
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>
+                      {importRows.length} kode · <b style={{ color: 'var(--green)' }}>{validImportRows.length} valid</b>
+                      {importRows.length - validImportRows.length > 0 && <> · <b style={{ color: 'var(--red)' }}>{importRows.length - validImportRows.length} error (dilewati)</b></>}
+                    </div>
+                    <div className="table-wrap" style={{ maxHeight: 340, overflow: 'auto' }}>
+                      <table className="data-table">
+                        <thead><tr><th>#</th><th>Kode</th><th>Deskripsi</th><th>Status</th></tr></thead>
+                        <tbody>
+                          {importRows.map(r => (
+                            <tr key={r.rowNum} style={{ opacity: r.valid ? 1 : 0.85 }}>
+                              <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{r.rowNum}</td>
+                              <td style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>{r.code || '-'}</td>
+                              <td style={{ fontSize: 13 }}>{r.description || '-'}</td>
+                              <td style={{ fontSize: 12 }}>
+                                {r.valid
+                                  ? <span className="badge badge-confirmed">OK</span>
+                                  : <span style={{ color: 'var(--red)' }}>{r.errors.join('; ')}</span>}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                )}
+              </>
+            )}
+
+            {/* STAGE 2 — Setelan (berlaku untuk semua kode). Field & validasi mirror "Buat Voucher". */}
+            {importStage === 'settings' && (
+              <>
+                {importFormError && <p style={{ color: 'var(--red)', fontSize: 13, marginBottom: 12 }}>{importFormError}</p>}
+
+                <div className="form-group">
+                  <label>Berlaku Untuk (produk) *</label>
+                  <div style={{ display: 'flex', gap: 16, marginTop: 4, flexWrap: 'wrap' }}>
+                    {(Object.keys(SCOPE_META) as Scope[]).map(s => (
+                      <label key={s} style={{ display: 'flex', gap: 6, alignItems: 'center', cursor: 'pointer', fontSize: 14 }}>
+                        <input type="radio" name="imp-scope" value={s} checked={importForm.scope === s} onChange={() => setIF({ scope: s })} style={{ width: 'auto' }} />
+                        {SCOPE_META[s].label}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="form-group">
+                  <label>Tipe Diskon *</label>
+                  <div style={{ display: 'flex', gap: 16, marginTop: 4 }}>
+                    {([['percentage', 'Persentase (%)'], ['fixed', 'Nominal (Rp)']] as const).map(([t, lbl]) => (
+                      <label key={t} style={{ display: 'flex', gap: 6, alignItems: 'center', cursor: 'pointer', fontSize: 14 }}>
+                        <input type="radio" name="imp-dtype" value={t} checked={importForm.discount_type === t} onChange={() => setIF({ discount_type: t })} style={{ width: 'auto' }} />
+                        {lbl}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Nilai Diskon * {importForm.discount_type === 'percentage' ? '(%)' : '(Rp)'}</label>
+                    <input type="number" min={0} max={importForm.discount_type === 'percentage' ? 100 : undefined}
+                      value={importForm.discount_value || ''} onChange={e => setIF({ discount_value: Number(e.target.value) })} />
+                  </div>
+                  {importForm.discount_type === 'percentage' ? (
+                    <div className="form-group">
+                      <label>Maks Diskon (Rp)</label>
+                      <input type="number" min={0} value={importForm.max_discount || ''}
+                        onChange={e => setIF({ max_discount: Number(e.target.value) || null })} placeholder="opsional" />
+                    </div>
+                  ) : <div />}
+                </div>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Min. Belanja (Rp)</label>
+                    <input type="number" min={0} value={importForm.min_amount || ''} placeholder="0"
+                      onChange={e => setIF({ min_amount: Number(e.target.value) || 0 })} />
+                  </div>
+                  <div className="form-group">
+                    <label>Kuota Pemakaian</label>
+                    <input type="number" min={1} value={importForm.quota ?? ''} placeholder="tanpa batas"
+                      onChange={e => setIF({ quota: e.target.value === '' ? null : Number(e.target.value) })} />
+                    <small style={{ color: 'var(--text-muted)', fontSize: 11 }}>1 = sekali pakai, N = kuota, kosong = tanpa batas. Berlaku per-kode.</small>
+                  </div>
+                </div>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Berlaku Dari *</label>
+                    <input type="date" value={importForm.valid_from} onChange={e => setIF({ valid_from: e.target.value })} />
+                  </div>
+                  <div className="form-group">
+                    <label>Berlaku Sampai</label>
+                    <input type="date" value={importForm.valid_until} min={importForm.valid_from || undefined} onChange={e => setIF({ valid_until: e.target.value })} placeholder="tanpa batas" />
+                  </div>
+                </div>
+                <label style={{ display: 'flex', gap: 8, alignItems: 'center', cursor: 'pointer', fontSize: 14, marginTop: 4 }}>
+                  <input type="checkbox" checked={importForm.is_active} onChange={e => setIF({ is_active: e.target.checked })} style={{ width: 'auto' }} />
+                  Aktif (bisa dipakai customer)
+                </label>
+              </>
+            )}
+
+            {/* STAGE 3 — Hasil */}
+            {importStage === 'result' && importResult && (
+              <div style={{ background: 'var(--bg-input)', borderRadius: 8, padding: '12px 14px', fontSize: 13 }}>
                 <b style={{ color: 'var(--green)' }}>{importResult.success} berhasil</b>
                 {importResult.failed > 0 && <span> · <b style={{ color: 'var(--red)' }}>{importResult.failed} gagal/dilewati</b></span>}
                 {importResult.failures.length > 0 && (
@@ -867,52 +992,27 @@ export default function GymVouchers() {
               </div>
             )}
 
-            {/* Preview per-baris (sebelum impor) */}
-            {!importResult && importRows.length > 0 && (
-              <>
-                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>
-                  {importRows.length} baris · <b style={{ color: 'var(--green)' }}>{validImportRows.length} valid</b>
-                  {importRows.length - validImportRows.length > 0 && <> · <b style={{ color: 'var(--red)' }}>{importRows.length - validImportRows.length} error (dilewati)</b></>}
-                </div>
-                <div className="table-wrap" style={{ maxHeight: 360, overflow: 'auto' }}>
-                  <table className="data-table">
-                    <thead>
-                      <tr><th>#</th><th>Kode</th><th>Scope</th><th>Diskon</th><th>Status</th></tr>
-                    </thead>
-                    <tbody>
-                      {importRows.map(r => {
-                        const p = r.prepared
-                        const disc = p ? (p.discount_type === 'percentage'
-                          ? `${p.discount_value}%${p.max_discount_amount ? ` (maks ${fmtRp(p.max_discount_amount)})` : ''}`
-                          : fmtRp(p.discount_value)) : '-'
-                        return (
-                          <tr key={r.rowNum} style={{ opacity: r.valid ? 1 : 0.85 }}>
-                            <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{r.rowNum}</td>
-                            <td style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>
-                              {r.autoCode ? <span style={{ color: 'var(--text-muted)' }}>(otomatis)</span> : (r.rawCode.toUpperCase() || '-')}
-                            </td>
-                            <td style={{ fontSize: 12 }}>{p ? (SCOPE_META[p.applies_to] ?? SCOPE_META.gym_all).short : '-'}</td>
-                            <td style={{ fontSize: 13, whiteSpace: 'nowrap' }}>{disc}</td>
-                            <td style={{ fontSize: 12 }}>
-                              {r.valid
-                                ? <span className="badge badge-confirmed">OK</span>
-                                : <span style={{ color: 'var(--red)' }}>{r.errors.join('; ')}</span>}
-                            </td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </>
-            )}
-
+            {/* Footer per-stage */}
             <div className="modal-footer">
-              <button type="button" className="btn-secondary" onClick={closeImport}>{importResult ? 'Tutup' : 'Batal'}</button>
-              {!importResult && (
-                <button type="button" className="btn-primary" disabled={importing || validImportRows.length === 0} onClick={doImport}>
-                  {importing ? 'Mengimpor…' : `Impor ${validImportRows.length} baris valid`}
-                </button>
+              {importStage === 'upload' && (
+                <>
+                  <button type="button" className="btn-secondary" onClick={closeImport}>Batal</button>
+                  <button type="button" className="btn-primary" disabled={validImportRows.length === 0}
+                    onClick={() => { setImportForm(emptyForm()); setImportFormError(''); setImportStage('settings') }}>
+                    Lanjut: Setelan ({validImportRows.length} kode)
+                  </button>
+                </>
+              )}
+              {importStage === 'settings' && (
+                <>
+                  <button type="button" className="btn-secondary" onClick={() => { setImportFormError(''); setImportStage('upload') }}>← Kembali</button>
+                  <button type="button" className="btn-primary" disabled={importing || validImportRows.length === 0} onClick={doImport}>
+                    {importing ? 'Mengimpor…' : `Impor ${validImportRows.length} kode`}
+                  </button>
+                </>
+              )}
+              {importStage === 'result' && (
+                <button type="button" className="btn-secondary" onClick={closeImport}>Tutup</button>
               )}
             </div>
           </div>
