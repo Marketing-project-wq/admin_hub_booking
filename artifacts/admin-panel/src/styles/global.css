@@ -852,6 +852,8 @@ table.data-table tbody tr:last-child td { border-bottom: none; }
 .action-btn.cancel { border-color: var(--red); color: var(--red); }
 .action-btn.cancel:hover { background: var(--red); color: #fff; }
 .action-btn.detail { border-color: var(--border-strong); }
+.action-btn.reschedule { border-color: var(--blue); color: var(--blue); }
+.action-btn.reschedule:hover { background: var(--blue); color: #fff; }
 
 /* Pagination */
 .pagination {

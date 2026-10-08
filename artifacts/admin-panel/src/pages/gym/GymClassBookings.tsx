@@ -3,6 +3,7 @@ import { ArrowLeft, ArrowRight, X } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { fmtRp, fmtDate, fmtDateTime, fmtTime, STATUS_LABEL, exportToCSV } from '../../lib/format'
 import ConfirmModal from '../../components/gym/ConfirmModal'
+import RescheduleModal from '../../components/gym/RescheduleModal'
 import { genderShort, genderLabel } from '../../lib/gender'
 
 // GYM — Transaksi (daftar gym_class_bookings SAJA). Mirror kemampuan
@@ -29,6 +30,7 @@ export default function GymClassBookings() {
   const [selectedBooking, setSelectedBooking] = useState<Row | null>(null)
   const [confirmCancel, setConfirmCancel] = useState<Row | null>(null)
   const [confirmConfirm, setConfirmConfirm] = useState<Row | null>(null)
+  const [rescheduleBooking, setRescheduleBooking] = useState<Row | null>(null)
   const [error, setError] = useState('')
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -41,7 +43,7 @@ export default function GymClassBookings() {
         full_name, email, phone, gender, notes, price, discount, price_before_disc,
         status, payment_method, payment_ref, channel, paid_at, created_at, updated_at,
         schedule:gym_class_schedules(
-          schedule_date, start_time, end_time, instructor, quota,
+          class_type_id, schedule_date, start_time, end_time, instructor, quota,
           class_type:gym_class_types(name, color)
         )
       `, { count: 'exact' })
@@ -285,6 +287,9 @@ export default function GymClassBookings() {
                   <td style={{ fontSize: 11, whiteSpace: 'nowrap', color: 'var(--text-muted)' }} title={(row.channel as string) || ''}>{(row.channel as string) || '-'}</td>
                   <td style={{ whiteSpace: 'nowrap' }}>
                     <button className="action-btn detail" onClick={() => setSelectedBooking(row)}>Detail</button>
+                    {row.status !== 'cancelled' && (
+                      <button className="action-btn reschedule" onClick={() => setRescheduleBooking(row)}>Reschedule</button>
+                    )}
                     {row.status === 'pending_payment' && (
                       <button className="action-btn confirm" onClick={() => setConfirmConfirm(row)}>Confirm</button>
                     )}
@@ -356,6 +361,9 @@ export default function GymClassBookings() {
                   <button className="btn-primary" onClick={() => { setConfirmConfirm(b); setSelectedBooking(null) }}>Confirm</button>
                 )}
                 {b.status !== 'cancelled' && (
+                  <button className="btn-secondary" onClick={() => { setRescheduleBooking(b); setSelectedBooking(null) }}>Reschedule</button>
+                )}
+                {b.status !== 'cancelled' && (
                   <button className="btn-danger" onClick={() => { setConfirmCancel(b); setSelectedBooking(null) }}>Cancel</button>
                 )}
                 <button className="btn-secondary" onClick={() => setSelectedBooking(null)}>Tutup</button>
@@ -365,6 +373,13 @@ export default function GymClassBookings() {
         )
       })()}
 
+      {rescheduleBooking && (
+        <RescheduleModal
+          booking={rescheduleBooking}
+          onClose={() => setRescheduleBooking(null)}
+          onRefresh={fetchData}
+        />
+      )}
       {confirmConfirm && (
         <ConfirmModal
           title="Konfirmasi Booking"
