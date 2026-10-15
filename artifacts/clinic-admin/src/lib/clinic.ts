@@ -1009,16 +1009,19 @@ export interface ClinicServiceFull {
   category: string | null
   service_group: string | null
   is_online_bookable: boolean
+  visible_app: boolean
+  visible_web: boolean
   is_active: boolean
   sort_order: number | null
   created_at: string
 }
 
-export type ServicePayload = Omit<ClinicServiceFull, 'id' | 'created_at'>
+// is_online_bookable is the legacy flag; it is derived from visible_app/visible_web on every write.
+export type ServicePayload = Omit<ClinicServiceFull, 'id' | 'created_at' | 'is_online_bookable'>
 
 const SERVICE_FULL_FIELDS =
   'id, code, name, description, price, duration_minutes, category, service_group, ' +
-  'is_online_bookable, is_active, sort_order, created_at'
+  'is_online_bookable, visible_app, visible_web, is_active, sort_order, created_at'
 
 export async function listServicesFull(activeOnly = false): Promise<ClinicServiceFull[]> {
   let q = supabase
@@ -1033,12 +1036,19 @@ export async function listServicesFull(activeOnly = false): Promise<ClinicServic
 }
 
 export async function createService(s: ServicePayload): Promise<void> {
-  const { error } = await supabase.from('clinic_services').insert({ ...s, created_at: new Date().toISOString() })
+  const { error } = await supabase.from('clinic_services').insert({
+    ...s,
+    is_online_bookable: s.visible_app || s.visible_web,
+    created_at: new Date().toISOString(),
+  })
   if (error) throw error
 }
 
-export async function updateService(id: string, s: Partial<ServicePayload>): Promise<void> {
-  const { error } = await supabase.from('clinic_services').update(s).eq('id', id)
+export async function updateService(id: string, s: ServicePayload): Promise<void> {
+  const { error } = await supabase.from('clinic_services').update({
+    ...s,
+    is_online_bookable: s.visible_app || s.visible_web,
+  }).eq('id', id)
   if (error) throw error
 }
 

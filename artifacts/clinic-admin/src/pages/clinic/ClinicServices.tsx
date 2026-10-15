@@ -7,7 +7,7 @@ import {
 
 const emptyForm = (): ServicePayload => ({
   code: '', name: '', description: '', price: 0, duration_minutes: null,
-  category: '', service_group: '', is_online_bookable: false, is_active: true, sort_order: null,
+  category: '', service_group: '', visible_app: true, visible_web: true, is_active: true, sort_order: null,
 })
 
 export default function ClinicServices() {
@@ -57,7 +57,7 @@ export default function ClinicServices() {
     setForm({
       code: s.code, name: s.name, description: s.description ?? '', price: s.price,
       duration_minutes: s.duration_minutes, category: s.category ?? '', service_group: s.service_group ?? '',
-      is_online_bookable: s.is_online_bookable, is_active: s.is_active, sort_order: s.sort_order,
+      visible_app: s.visible_app, visible_web: s.visible_web, is_active: s.is_active, sort_order: s.sort_order,
     })
     setEditId(s.id); setFormError(''); setShowModal(true)
   }
@@ -75,7 +75,8 @@ export default function ClinicServices() {
       duration_minutes: form.duration_minutes != null && String(form.duration_minutes) !== '' ? Number(form.duration_minutes) : null,
       category: form.category?.trim() || null,
       service_group: form.service_group?.trim() || null,
-      is_online_bookable: form.is_online_bookable,
+      visible_app: form.visible_app,
+      visible_web: form.visible_web,
       is_active: form.is_active,
       sort_order: form.sort_order != null && String(form.sort_order) !== '' ? Number(form.sort_order) : null,
     }
@@ -124,14 +125,14 @@ export default function ClinicServices() {
           <thead>
             <tr>
               <th>Kode</th><th>Nama</th><th>Kategori</th><th>Grup</th><th>Durasi</th>
-              <th>Harga</th><th>Online</th><th>Status</th><th>Aksi</th>
+              <th>Harga</th><th>App</th><th>Web</th><th>Status</th><th>Aksi</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr className="loading-row"><td colSpan={9}>Memuat data...</td></tr>
+              <tr className="loading-row"><td colSpan={10}>Memuat data...</td></tr>
             ) : filtered.length === 0 ? (
-              <tr><td colSpan={9} className="empty-state">Tidak ada layanan</td></tr>
+              <tr><td colSpan={10} className="empty-state">Tidak ada layanan</td></tr>
             ) : filtered.map(s => (
               <tr key={s.id}>
                 <td style={{ fontFamily: 'monospace', fontSize: 11 }}>{s.code}</td>
@@ -141,10 +142,17 @@ export default function ClinicServices() {
                 <td>{s.duration_minutes != null ? `${s.duration_minutes} mnt` : '-'}</td>
                 <td style={{ whiteSpace: 'nowrap' }}>{fmtRp(s.price)}</td>
                 <td>
-                  <span className="badge" style={s.is_online_bookable
+                  <span className="badge" style={s.visible_app
                     ? { background: '#EFF6FF', color: '#1D4ED8' }
                     : { background: '#F3F4F6', color: '#6B7280' }}>
-                    {s.is_online_bookable ? 'Ya' : 'Tidak'}
+                    {s.visible_app ? 'Ya' : 'Tidak'}
+                  </span>
+                </td>
+                <td>
+                  <span className="badge" style={s.visible_web
+                    ? { background: '#EFF6FF', color: '#1D4ED8' }
+                    : { background: '#F3F4F6', color: '#6B7280' }}>
+                    {s.visible_web ? 'Ya' : 'Tidak'}
                   </span>
                 </td>
                 <td>
@@ -180,7 +188,8 @@ export default function ClinicServices() {
               <div className="form-row">
                 <div className="form-group">
                   <label>Kode *</label>
-                  <input type="text" value={form.code} onChange={e => set('code', e.target.value)} required />
+                  <input type="text" value={form.code} onChange={e => set('code', e.target.value)} required disabled={!!editId} />
+                  {editId && <small style={{ color: 'var(--text-muted)', fontSize: 11 }}>Kode tidak bisa diubah (dipakai voucher & booking)</small>}
                 </div>
                 <div className="form-group">
                   <label>Nama *</label>
@@ -218,8 +227,14 @@ export default function ClinicServices() {
               <div className="form-row">
                 <div className="form-group">
                   <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-                    <input type="checkbox" checked={form.is_online_bookable} onChange={e => set('is_online_bookable', e.target.checked)} style={{ width: 'auto' }} />
-                    Bisa dibooking online
+                    <input type="checkbox" checked={form.visible_app} onChange={e => set('visible_app', e.target.checked)} style={{ width: 'auto' }} />
+                    Tampil di App
+                  </label>
+                </div>
+                <div className="form-group">
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                    <input type="checkbox" checked={form.visible_web} onChange={e => set('visible_web', e.target.checked)} style={{ width: 'auto' }} />
+                    Tampil di Web
                   </label>
                 </div>
                 <div className="form-group">
