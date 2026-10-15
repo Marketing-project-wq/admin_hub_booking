@@ -25,7 +25,8 @@ interface CatalogRow {
   promo_end_date: string | null
   price: number
   duration_min: number | null
-  is_online: boolean
+  visible_app: boolean
+  visible_web: boolean
   is_active: boolean
   sort_order: number
   description_id: string | null
@@ -45,7 +46,6 @@ interface FormState {
   duration_min: number | null
   sort_order: number | null
   description: string
-  is_online: boolean
   is_active: boolean
 }
 
@@ -54,7 +54,7 @@ const emptyForm = (): FormState => ({
   category: 'treatment', booking_model: 'appointment',
   base_price: 0, promo_price: null, promo_label: '', promo_end_date: '',
   duration_min: null, sort_order: null, description: '',
-  is_online: true, is_active: true,
+  is_active: true,
 })
 
 // slug otomatis dari nama: huruf kecil, spasi -> '-'
@@ -112,7 +112,7 @@ export default function RecoveryServices() {
       base_price: r.base_price ?? r.price, promo_price: r.promo_price,
       promo_label: r.promo_label ?? '', promo_end_date: r.promo_end_date ?? '',
       duration_min: r.duration_min, sort_order: r.sort_order, description: r.description_id ?? '',
-      is_online: r.is_online, is_active: r.is_active,
+      is_active: r.is_active,
     })
     setEditId(r.id); setFormError(''); setShowModal(true)
   }
@@ -143,7 +143,8 @@ export default function RecoveryServices() {
       p_promo_label: form.promo_price != null ? promoLabel : null,
       p_promo_end_date: form.promo_price != null ? (form.promo_end_date || null) : null,
       p_is_active: form.is_active,
-      p_is_online: form.is_online,
+      // null = jangan ubah is_online (diturunkan dari visible_app/visible_web lewat booking_product_set_visibility)
+      p_is_online: null,
       p_duration_min: form.duration_min != null && String(form.duration_min) !== '' ? Number(form.duration_min) : null,
       p_category: form.category,
       p_booking_model: form.booking_model,
@@ -161,6 +162,17 @@ export default function RecoveryServices() {
     if (err) setError(err.message); else fetchData()
   }
 
+  // Toggle App / Web per baris. Lewat RPC (booking_products tidak bisa ditulis langsung);
+  // RPC juga menjaga is_online dan baris mirror clinic_services.
+  const handleVisibility = async (r: CatalogRow, field: 'visible_app' | 'visible_web', value: boolean) => {
+    const { error: err } = await supabase.rpc('booking_product_set_visibility', {
+      p_id: r.id,
+      p_visible_app: field === 'visible_app' ? value : r.visible_app,
+      p_visible_web: field === 'visible_web' ? value : r.visible_web,
+    })
+    if (err) setError(err.message); else fetchData()
+  }
+
   // preview harga promo di form
   const previewPct = form.promo_price != null && form.base_price > 0
     ? Math.round((1 - form.promo_price / form.base_price) * 100) : 0
@@ -173,7 +185,7 @@ export default function RecoveryServices() {
       </div>
       <p style={{ color: 'var(--text-muted)', marginTop: -8, marginBottom: 20, fontSize: 13 }}>
         Produk &amp; harga yang tampil di <b>booking.20fit.id/recoverycenter</b>. Perubahan di sini langsung
-        terlihat di halaman booking. <b>Tampil Online</b> = muncul untuk dibeli; <b>Status</b> nonaktif =
+        terlihat di halaman booking. <b>App</b> / <b>Web</b> = tampil di masing-masing kanal; <b>Status</b> nonaktif =
         disembunyikan total.
       </p>
 
@@ -184,14 +196,14 @@ export default function RecoveryServices() {
           <thead>
             <tr>
               <th>Urutan</th><th>Nama</th><th>Durasi</th>
-              <th>Harga Normal</th><th>Harga Promo</th><th>Tampil Online</th><th>Status</th><th>Aksi</th>
+              <th>Harga Normal</th><th>Harga Promo</th><th>App</th><th>Web</th><th>Status</th><th>Aksi</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr className="loading-row"><td colSpan={8}>Memuat data...</td></tr>
+              <tr className="loading-row"><td colSpan={9}>Memuat data...</td></tr>
             ) : sorted.length === 0 ? (
-              <tr><td colSpan={8} className="empty-state">Belum ada layanan</td></tr>
+              <tr><td colSpan={9} className="empty-state">Belum ada layanan</td></tr>
             ) : sorted.map(r => {
               const eff = effective(r)
               return (
@@ -213,12 +225,13 @@ export default function RecoveryServices() {
                     </span>
                   ) : <span style={{ color: 'var(--text-muted)' }}>-</span>}
                 </td>
-                <td>
-                  <span className="badge" style={r.is_online
-                    ? { background: '#EFF6FF', color: '#1D4ED8' }
-                    : { background: '#F3F4F6', color: '#6B7280' }}>
-                    {r.is_online ? 'Ya' : 'Tidak'}
-                  </span>
+                <td style={{ textAlign: 'center' }}>
+                  <input type="checkbox" aria-label={`Tampil di App: ${r.name}`} checked={r.visible_app}
+                    onChange={e => handleVisibility(r, 'visible_app', e.target.checked)} style={{ width: 'auto' }} />
+                </td>
+                <td style={{ textAlign: 'center' }}>
+                  <input type="checkbox" aria-label={`Tampil di Web: ${r.name}`} checked={r.visible_web}
+                    onChange={e => handleVisibility(r, 'visible_web', e.target.checked)} style={{ width: 'auto' }} />
                 </td>
                 <td>
                   <span className={`badge ${r.is_active ? 'badge-confirmed' : 'badge-cancelled'}`}>
@@ -329,19 +342,11 @@ export default function RecoveryServices() {
                 </div>
               </div>
 
-              <div className="form-row">
-                <div className="form-group">
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-                    <input type="checkbox" checked={form.is_online} onChange={e => set('is_online', e.target.checked)} style={{ width: 'auto' }} />
-                    Tampil untuk dibeli online
-                  </label>
-                </div>
-                <div className="form-group">
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-                    <input type="checkbox" checked={form.is_active} onChange={e => set('is_active', e.target.checked)} style={{ width: 'auto' }} />
-                    Aktif
-                  </label>
-                </div>
+              <div className="form-group">
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                  <input type="checkbox" checked={form.is_active} onChange={e => set('is_active', e.target.checked)} style={{ width: 'auto' }} />
+                  Aktif
+                </label>
               </div>
 
               <div className="modal-footer">

@@ -19,7 +19,8 @@ interface Bundle {
   promo_end_date: string | null
   price: number
   is_active: boolean
-  is_online: boolean
+  visible_app: boolean
+  visible_web: boolean
   sort_order: number
   description_id: string | null
 }
@@ -44,7 +45,6 @@ interface FormState {
   promo_end_date: string
   description: string
   sort_order: number | null
-  is_online: boolean
   is_active: boolean
   items: ItemForm[]
 }
@@ -61,7 +61,7 @@ const emptyItem = (): ItemForm => ({ item_name: '', item_type: 'class_sessions',
 
 const emptyForm = (): FormState => ({
   name: '', slug: '', base_price: 0, promo_price: null, promo_label: '', promo_end_date: '',
-  description: '', sort_order: null, is_online: true, is_active: true, items: [emptyItem()],
+  description: '', sort_order: null, is_active: true, items: [emptyItem()],
 })
 
 const slugify = (s: string) =>
@@ -121,7 +121,7 @@ export default function ArenaBundles() {
       name: b.name, slug: b.slug,
       base_price: b.base_price ?? b.price, promo_price: b.promo_price,
       promo_label: b.promo_label ?? '', promo_end_date: b.promo_end_date ?? '',
-      description: b.description_id ?? '', sort_order: b.sort_order, is_online: b.is_online, is_active: b.is_active,
+      description: b.description_id ?? '', sort_order: b.sort_order, is_active: b.is_active,
       items: rows.length
         ? rows.map(r => ({ item_name: r.item_name, item_type: r.item_type, quantity: r.quantity ?? 1, source_slug: r.source_slug ?? '' }))
         : [emptyItem()],
@@ -162,7 +162,8 @@ export default function ArenaBundles() {
       p_promo_label: form.promo_price != null ? promoLabel : null,
       p_promo_end_date: form.promo_price != null ? (form.promo_end_date || null) : null,
       p_is_active: form.is_active,
-      p_is_online: form.is_online,
+      // null = jangan ubah is_online (diturunkan dari visible_app/visible_web lewat booking_product_set_visibility)
+      p_is_online: null,
       p_description: form.description.trim() || null,
       p_sort_order: form.sort_order != null && String(form.sort_order) !== '' ? Number(form.sort_order) : null,
       p_slug: editId ? null : (form.slug.trim() || slugify(form.name)),
@@ -192,6 +193,17 @@ export default function ArenaBundles() {
     if (err) setError(err.message); else fetchData()
   }
 
+  // Toggle App / Web per baris. Lewat RPC (booking_products tidak bisa ditulis langsung);
+  // RPC juga menjaga is_online dan baris mirror clinic_services.
+  const handleVisibility = async (b: Bundle, field: 'visible_app' | 'visible_web', value: boolean) => {
+    const { error: err } = await supabase.rpc('booking_product_set_visibility', {
+      p_id: b.id,
+      p_visible_app: field === 'visible_app' ? value : b.visible_app,
+      p_visible_web: field === 'visible_web' ? value : b.visible_web,
+    })
+    if (err) setError(err.message); else fetchData()
+  }
+
   const previewPct = form.promo_price != null && form.base_price > 0
     ? Math.round((1 - form.promo_price / form.base_price) * 100) : 0
 
@@ -213,14 +225,14 @@ export default function ArenaBundles() {
           <thead>
             <tr>
               <th>Urutan</th><th>Nama</th><th>Harga Normal</th><th>Harga Promo</th>
-              <th>Isi Paket</th><th>Tampil</th><th>Status</th><th>Aksi</th>
+              <th>Isi Paket</th><th>App</th><th>Web</th><th>Status</th><th>Aksi</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr className="loading-row"><td colSpan={8}>Memuat data...</td></tr>
+              <tr className="loading-row"><td colSpan={9}>Memuat data...</td></tr>
             ) : sorted.length === 0 ? (
-              <tr><td colSpan={8} className="empty-state">Belum ada bundle</td></tr>
+              <tr><td colSpan={9} className="empty-state">Belum ada bundle</td></tr>
             ) : sorted.map(b => {
               const eff = effective(b)
               const items = itemsBySlug[b.slug] ?? []
@@ -242,10 +254,13 @@ export default function ArenaBundles() {
                   ) : <span style={{ color: 'var(--text-muted)' }}>-</span>}
                 </td>
                 <td style={{ fontSize: 12, color: 'var(--text-muted)' }}>{items.length} item</td>
-                <td>
-                  <span className="badge" style={b.is_online ? { background: '#EFF6FF', color: '#1D4ED8' } : { background: '#F3F4F6', color: '#6B7280' }}>
-                    {b.is_online ? 'Ya' : 'Tidak'}
-                  </span>
+                <td style={{ textAlign: 'center' }}>
+                  <input type="checkbox" aria-label={`Tampil di App: ${b.name}`} checked={b.visible_app}
+                    onChange={e => handleVisibility(b, 'visible_app', e.target.checked)} style={{ width: 'auto' }} />
+                </td>
+                <td style={{ textAlign: 'center' }}>
+                  <input type="checkbox" aria-label={`Tampil di Web: ${b.name}`} checked={b.visible_web}
+                    onChange={e => handleVisibility(b, 'visible_web', e.target.checked)} style={{ width: 'auto' }} />
                 </td>
                 <td>
                   <span className={`badge ${b.is_active ? 'badge-confirmed' : 'badge-cancelled'}`}>
@@ -365,19 +380,11 @@ export default function ArenaBundles() {
                 </small>
               </div>
 
-              <div className="form-row">
-                <div className="form-group">
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-                    <input type="checkbox" checked={form.is_online} onChange={e => set('is_online', e.target.checked)} style={{ width: 'auto' }} />
-                    Tampil untuk dibeli online
-                  </label>
-                </div>
-                <div className="form-group">
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-                    <input type="checkbox" checked={form.is_active} onChange={e => set('is_active', e.target.checked)} style={{ width: 'auto' }} />
-                    Aktif
-                  </label>
-                </div>
+              <div className="form-group">
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                  <input type="checkbox" checked={form.is_active} onChange={e => set('is_active', e.target.checked)} style={{ width: 'auto' }} />
+                  Aktif
+                </label>
               </div>
 
               <div className="modal-footer">
