@@ -361,9 +361,6 @@ export default function GymClassBookings() {
                   <button className="btn-primary" onClick={() => { setConfirmConfirm(b); setSelectedBooking(null) }}>Confirm</button>
                 )}
                 {b.status !== 'cancelled' && (
-                  <button className="btn-secondary" onClick={() => { setRescheduleBooking(b); setSelectedBooking(null) }}>Reschedule</button>
-                )}
-                {b.status !== 'cancelled' && (
                   <button className="btn-danger" onClick={() => { setConfirmCancel(b); setSelectedBooking(null) }}>Cancel</button>
                 )}
                 <button className="btn-secondary" onClick={() => setSelectedBooking(null)}>Tutup</button>
