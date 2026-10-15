@@ -5,10 +5,12 @@ import { fmtRp } from '@workspace/admin-shared'
 interface Plan {
   id: string; name: string; duration_months: number; price: number;
   description: string | null; sort_order: number; is_active: boolean
+  visible_app: boolean; visible_web: boolean
 }
 
 const emptyForm = (): Partial<Plan> => ({
   name: '', duration_months: 1, price: 0, description: '', sort_order: 0, is_active: true,
+  visible_app: true, visible_web: true,
 })
 
 export default function GymMembershipPlans() {
@@ -25,7 +27,7 @@ export default function GymMembershipPlans() {
     setLoading(true)
     const { data: rows, error: err } = await supabase
       .from('gym_membership_plans')
-      .select('id, name, duration_months, price, description, sort_order, is_active')
+      .select('id, name, duration_months, price, description, sort_order, is_active, visible_app, visible_web')
       .order('sort_order', { ascending: true })
       .order('duration_months', { ascending: true })
     if (err) setError(err.message)
@@ -49,6 +51,8 @@ export default function GymMembershipPlans() {
       description: form.description || null,
       sort_order: Number(form.sort_order) || 0,
       is_active: form.is_active ?? true,
+      visible_app: form.visible_app ?? true,
+      visible_web: form.visible_web ?? true,
     }
     const { error: err } = editId
       ? await supabase.from('gym_membership_plans').update(payload).eq('id', editId)
@@ -125,9 +129,17 @@ export default function GymMembershipPlans() {
                   <input type="number" value={f.sort_order ?? 0} onChange={e => setForm(p => ({ ...p, sort_order: Number(e.target.value) }))} />
                 </div>
               </div>
-              <label style={{ display: 'flex', gap: 8, alignItems: 'center', cursor: 'pointer', fontSize: 14, marginBottom: 16 }}>
-                <input type="checkbox" checked={f.is_active ?? true} onChange={e => setForm(p => ({ ...p, is_active: e.target.checked }))} /> Active
-              </label>
+              <div style={{ display: 'flex', gap: 20, marginBottom: 16 }}>
+                <label style={{ display: 'flex', gap: 8, alignItems: 'center', cursor: 'pointer', fontSize: 14 }}>
+                  <input type="checkbox" checked={f.visible_app ?? true} onChange={e => setForm(p => ({ ...p, visible_app: e.target.checked }))} /> Tampil di App
+                </label>
+                <label style={{ display: 'flex', gap: 8, alignItems: 'center', cursor: 'pointer', fontSize: 14 }}>
+                  <input type="checkbox" checked={f.visible_web ?? true} onChange={e => setForm(p => ({ ...p, visible_web: e.target.checked }))} /> Tampil di Web
+                </label>
+                <label style={{ display: 'flex', gap: 8, alignItems: 'center', cursor: 'pointer', fontSize: 14 }}>
+                  <input type="checkbox" checked={f.is_active ?? true} onChange={e => setForm(p => ({ ...p, is_active: e.target.checked }))} /> Active
+                </label>
+              </div>
               <div className="modal-footer">
                 <button type="button" className="btn-secondary" onClick={() => setShowModal(false)}>Batal</button>
                 <button type="submit" className="btn-primary" disabled={saving}>{saving ? 'Menyimpan...' : 'Simpan'}</button>
